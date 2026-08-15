@@ -13,16 +13,18 @@ this file is where it meets reality and where it has been deviated from.
 | `ontology/symptoms.json` + `src/symptoms.js` | F8 built, 111 symptoms, 38 assertions. |
 | `eval/` | §6 harness built, 29 assertions. **Everything above is measurable now.** |
 | Numerics (F4, F5, F6) | F4 and F6 built, 39 assertions. **F5 measured and rejected** — below. |
+| `index.html` + `src/app.js` | Built. Query form, ranked results with reasons, statblock panel. |
+| Source filter (F16) | Built, tri-state include/exclude, 32 assertions. |
+| Session evidence (F15) | Built — observations persist across a reload. |
 | Appearance (F10–F12) | Not started. |
 | Discriminating tests (F13) | Not started. |
-| UI, session evidence (F15) | Not started. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
 ```
                           top-1    top-5   top-20   median rank
-handoff §6 corruption     39.6%    64.6%    82.4%       2
-+ misremembering          37.4%    62.6%    79.4%       2
+handoff §6 corruption     41.0%    65.8%    83.2%       2
++ misremembering          38.2%    62.6%    79.8%       3
 ```
 
 ## Decisions
@@ -49,6 +51,16 @@ and it's implemented as one, in `rank()`. Every other input is evidence.
 
 **`src/` never touches the filesystem, `eval/` does.** The scorer has to run in a browser, so
 anything that reads `data/` lives in `eval/corpus.js` and is required only by offline tools.
+
+**The UI follows pmcrwf: deliberately minimal, function over form.** Same custom-property theming,
+same square corners and hairline rules, same tri-state filter chips, no framework and no build step.
+This gets read at a table, mid-fight, probably on a phone — it should answer a question, not present
+an experience. The one piece of ornament is the score bar, and it earns its place: a ranked list
+without magnitudes hides the difference between "clearly this" and "the least bad of 4,528".
+
+**The form's order is the argument.** "What did it do?" is first because the symptom ontology is
+worth roughly four times what any other evidence is. Numbers are last because they are the thing DMs
+change. A player who fills in only the first box has already given the tool its best shot.
 
 ## What the harness changed
 
@@ -136,6 +148,30 @@ scratch. The absolute numbers are an upper bound. What is trustworthy is the *or
 tunings, which is all a tuning harness is really for. `eval/corrupt.js` keeps the unmodelled list
 next to the code that would have to model it.
 
+## Two fixes the UI forced
+
+Neither is cosmetic, and neither would have surfaced without running the thing.
+
+**Ties are the normal case, and the tiebreak was arbitrary.** Three or four observations routinely
+leave twenty candidates on identical scores. The old tiebreak was alphabetical, so a query that
+correctly identified a troll answered "Aquatic Troll, Blinded Troll, Dragonpriest…" with the actual
+Troll sixteenth — off the bottom of the list. Ties now break on SRD / Basic Rules membership, which
+is the best proxy in the data for "a monster a party is likely to have actually fought": ~1,200 of
+4,528, the ones that ship with the free rules and that adventures reprint. It is strictly a
+tiebreak, on exactly equal scores, so it can never reorder candidates the evidence has separated —
+which is also why it needs no harness support to be safe. Troll went from 16th to 3rd; top-1 recall
+went up too, as a side effect.
+
+The UI also *says* when results are tied, rather than presenting a confident-looking order it has
+not earned.
+
+**Symptom lookup ranked common words above distinctive ones.** Typing "it felt me through the floor"
+returned *it walked straight through a wall* first, because that symptom lists "it went through the
+floor" among its alternate phrasings and plain token overlap counts "through" for as much as "felt".
+Lookup now weights each word by how distinctive it is across the ontology's own phrasings (IDF), and
+searches the symptom's id as well — the ids are written as sentences precisely so they can be read
+aloud, and leaving them out lost matches where the id said it more plainly than the prose did.
+
 ## Open questions
 
 ### F5's residual — settled, and the answer is no
@@ -199,6 +235,9 @@ like", which is worth showing the user directly and is the natural input to F13'
 - Two monsters, one merged set of observations.
 - The `by name` / `by key` gap in the harness output is the reprint rate, and it is small. If it
   grows, duplicate consolidation becomes a real feature rather than a reporting detail.
+- Ties are frequent enough that F13 (suggest the test that best splits the leaders) is now the
+  obvious next feature rather than a nice-to-have: the UI can already tell you it is stuck, and the
+  ontology already marks which symptoms a party can provoke in one round (`testable`).
 
 ## What may be committed
 
@@ -216,3 +255,8 @@ the part that needs to be; display doesn't.
 
 `ontology/symptoms.json` is ours and is committed. It contains no WotC prose: the regexes describe
 *shapes* of rules text, and the player-facing phrasings are written from scratch.
+
+Book and adventure *titles* for F16's filter come from 5e.tools' `books.json` / `adventures.json`,
+read from the user's own `data/` at runtime and not committed. Both are optional: without them the
+filter shows source codes instead of titles, which is worse but not broken. That is the right
+failure — the tool should not refuse to rank monsters because it cannot pretty-print a book name.

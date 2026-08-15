@@ -174,7 +174,8 @@
       if (c.badPattern) problems.push(`${s.id}: candidate "${c.mechanic}" has a regex that won't compile`);
       else if (c.dead) problems.push(`${s.id}: candidate "${c.mechanic}" matches nothing`);
     }));
-    return { symptoms, byId, problems, version: (ontology && ontology.version) || 0 };
+    return { symptoms, byId, problems, idf: buildIdf(symptoms),
+             version: (ontology && ontology.version) || 0 };
   }
 
   /* ============================================================
@@ -278,21 +279,50 @@
     "had", "has", "have", "got", "get", "we", "us", "our", "they", "them", "he", "she", "him", "her"]);
   const tokens = s => norm(s).replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(t => t && !STOP.has(t));
 
+  /* Every phrasing a symptom can be found by: what a player would say, the alternates,
+     and the id itself. The id is written as a sentence for exactly this reason
+     (`it-felt-me-through-the-floor`), and leaving it out lost matches where the id said
+     the thing more plainly than the prose did. */
+  const phrasesOf = s => [s.player].concat(s.aka, [s.id.replace(/-/g, " ")]);
+
+  /* Token weights, by how distinctive each word is across the ontology's own phrasings.
+     Plain overlap counts "through" for as much as "burrowed", and since half the movement
+     symptoms say "through" and half the forced-movement ones say "away", the commonest
+     words decided the ranking. "It felt me through the floor" matched *walking through a
+     wall*, on the strength of "through the floor" alone.
+
+     Standard IDF, computed once at compile time over a few hundred short phrases. */
+  function buildIdf(symptoms) {
+    const df = Object.create(null);
+    let docs = 0;
+    symptoms.forEach(s => phrasesOf(s).forEach(p => {
+      docs++;
+      new Set(tokens(p)).forEach(t => { df[t] = (df[t] || 0) + 1; });
+    }));
+    const total = docs || 1;
+    return t => Math.log((total + 1) / ((df[t] || 0) + 1)) + 0.2;   // floor keeps unseen words usable
+  }
+
   function lookup(compiled, query, limit) {
     const q = tokens(query);
     if (!q.length) return [];
+    const idf = compiled.idf || (() => 1);
+    const qWeight = q.reduce((n, t) => n + idf(t), 0) || 1;
+
     const scored = compiled.symptoms.map(s => {
-      const phrases = [s.player].concat(s.aka);
       let best = 0;
-      phrases.forEach(p => {
+      phrasesOf(s).forEach(p => {
         const t = tokens(p);
         if (!t.length) return;
         const set = new Set(t);
-        const hit = q.filter(w => set.has(w)).length;
-        if (!hit) return;
-        // Balance recall against precision: a one-word overlap with a long phrase is weak
-        // evidence, and without the second term "it" alone would match half the ontology.
-        const score = hit / q.length * 0.6 + hit / t.length * 0.4;
+        const matched = q.filter(w => set.has(w));
+        if (!matched.length) return;
+        const hitWeight = matched.reduce((n, w) => n + idf(w), 0);
+        const phraseWeight = t.reduce((n, w) => n + idf(w), 0) || 1;
+        /* Balance recall against precision: how much of what the user said was explained,
+           and how much of the phrase was used. Without the second term a one-word hit on a
+           long phrase would rank as high as an exact match. */
+        const score = hitWeight / qWeight * 0.6 + hitWeight / phraseWeight * 0.4;
         if (score > best) best = score;
       });
       return { id: s.id, player: s.player, group: s.group, score: best };

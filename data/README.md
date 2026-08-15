@@ -15,7 +15,14 @@ data/
   fluff-bestiary/          (optional — appearance matching only)
     fluff-bestiary-mm.json
     ...
+  books.json               (optional — book titles in the source filter)
+  adventures.json          (optional — adventure titles, and the spoiler grouping)
 ```
+
+`books.json` and `adventures.json` sit at the top of 5e.tools' `data/` folder. They are only used to
+label F16's source filter: without them it still works and shows source codes (`MM`, `CoS`) instead
+of titles, and loses the Books / Adventures split that makes "hide the adventure I'm playing" one
+click.
 
 `bestiary/index.json` is 5e.tools' own manifest mapping source codes to filenames; the loader reads
 it to discover what you have rather than guessing at filenames.

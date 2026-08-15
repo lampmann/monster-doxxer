@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monster Doxxer</title>
+<link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+
+<div class="toolbar">
+  <strong>Monster Doxxer</strong>
+  <span class="hint" id="corpus-status">loading…</span>
+  <span style="float:right">
+    <button id="btn-clear" title="forget every observation in this session">Clear observations</button>
+  </span>
+</div>
+
+<div id="fatal" class="error" hidden></div>
+
+<div class="cols">
+
+  <!-- ============ the query ============ -->
+  <div class="col-query">
+
+    <div class="module">
+      <h2>What did it do?</h2>
+      <span class="hint block">Describe what you saw, in your own words. This is the strongest
+        evidence the tool has &mdash; far stronger than any stat.</span>
+      <input type="text" class="txt" id="sym-search" placeholder="it healed between rounds&hellip;" autocomplete="off">
+      <div class="sym-chosen" id="sym-chosen"></div>
+      <div id="sym-results"></div>
+    </div>
+
+    <div class="module">
+      <h2>What was it like?</h2>
+      <div class="chiprow"><span class="hint">Type</span><br><span id="pick-type"></span></div>
+      <div class="chiprow"><span class="hint">Size</span><br><span id="pick-size"></span></div>
+      <div class="chiprow"><span class="hint">How it moved</span><br><span id="pick-movement"></span></div>
+      <div class="chiprow"><span class="hint">How it sensed you</span><br><span id="pick-senses"></span></div>
+      <div class="chiprow"><span class="hint">Couldn't be&hellip;</span><br><span id="pick-condImmune"></span></div>
+    </div>
+
+    <div class="module">
+      <h2>What did you hit it with?</h2>
+      <span class="hint block">Only fill in what you actually tried. Leaving a row blank means
+        &ldquo;we never tested it&rdquo;, which costs nothing &mdash; saying &ldquo;normal&rdquo;
+        is a real observation and is treated as one.</span>
+      <table class="dmg-grid">
+        <thead><tr><th></th><th>no effect</th><th>halved</th><th>normal</th><th>extra</th><th></th></tr></thead>
+        <tbody id="dmg-body"></tbody>
+      </table>
+    </div>
+
+    <div class="module">
+      <h2>Numbers</h2>
+      <span class="hint block">Rough is fine. These are scored on a tolerance curve, never matched exactly.</span>
+      <label>Armour Class <input type="number" class="num" id="in-ac" min="1" max="40"></label>
+      <label style="margin-left:.5rem">Hit points <input type="number" class="num" id="in-hp" min="1"></label>
+      <div style="margin-top:.35rem">
+        <label><input type="checkbox" id="in-retuned"> Assume the DM rebuilt this statblock</label>
+        <span class="hint block">Drops the numbers to near-nothing and ranks on everything else.</span>
+      </div>
+      <div class="hint" id="cr-implied"></div>
+    </div>
+
+    <div class="module">
+      <h2>Books</h2>
+      <span class="hint block">Click once to <b style="color:var(--link)">include</b>, again to
+        <b style="color:var(--danger)">exclude</b>, again to clear. Include when you know which
+        books your DM owns; exclude to keep an adventure you're still playing from spoiling itself.</span>
+      <div id="src-filter"></div>
+    </div>
+
+  </div>
+
+  <!-- ============ the answer ============ -->
+  <div class="col-results">
+    <div class="module">
+      <h2>Best explanations</h2>
+      <div id="results"><span class="hint">Nothing observed yet.</span></div>
+    </div>
+    <div class="module" id="detail-module" hidden>
+      <h2 id="detail-title"></h2>
+      <div id="detail"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="src/normalize.js"></script>
+<script src="src/symptoms.js"></script>
+<script src="src/score.js"></script>
+<script src="src/sources.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

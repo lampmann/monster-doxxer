@@ -6,11 +6,11 @@ bounced off it, how it moved, and that it did *something* the DM described but w
 Monster Doxxer takes those observations and ranks the D&D 5e (2014) bestiary by how well each
 monster explains them.
 
-**Status: early, but it works and the numbers are measured.** The normalisation pipeline, the
-evidence scorer and the symptom ontology exist and are tested, and there is an evaluation harness
-that picks the scoring constants instead of leaving them to taste. There is no UI yet, no
-appearance matching, and no numeric scoring. See [DESIGN.md](DESIGN.md) for what's built and what
-isn't.
+**Status: early, but usable, and the numbers are measured.** The normalisation pipeline, the
+evidence scorer, the symptom ontology and the browser UI all exist and are tested, and an
+evaluation harness picks the scoring constants instead of leaving them to taste. There is no
+appearance matching yet and no discriminating-test suggestions. See [DESIGN.md](DESIGN.md) for what's
+built and what isn't.
 
 Against the full 4,528-monster corpus, given the observations a party would plausibly have after
 one fight: **the right monster is in the top 5 about 65% of the time**, with a median rank of 2.
@@ -35,6 +35,32 @@ one cause.
 
 That file is the single most valuable thing in the project, and it is not a close call. Ablation
 says removing it costs 24 points of top-5 recall; the next facet down costs 6.
+
+## Using it
+
+The page has to be *served*, not opened as a file — it reads the bestiary out of `data/`, and
+browsers block that over `file://`. The launcher does it in one word:
+
+```sh
+./doxx          # start the server (or reuse one) and open the tool
+./doxx stop     # stop it
+./doxx test     # run the tests
+```
+
+On Windows without Git Bash, any static server over this folder does the same job —
+`python -m http.server 8932`, then open <http://localhost:8932/index.html>.
+
+Then describe what you saw. The form is ordered by how much each kind of evidence is actually
+worth, so the first box — *what did it do?* — is the one that matters. Type what you'd say at the
+table (&ldquo;it healed between rounds&rdquo;, &ldquo;my sword bounced off&rdquo;) and pick the
+match. Every result shows what argued for it and what argued against.
+
+**Books.** Click a source once to **include** it, again to **exclude** it, again to clear. Include
+when you know which books your DM owns. Exclude to stop an adventure you're halfway through from
+spoiling itself — which is why exclude exists separately rather than being &ldquo;include
+everything else&rdquo;: nobody should have to click 106 books to hide one.
+
+Observations persist across a reload, so you can keep adding to them as the fight goes on.
 
 ## Running the tests
 

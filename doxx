@@ -1,0 +1,108 @@
+#!/bin/sh
+# ============================================================
+#  Monster Doxxer launcher (macOS / Linux / Git Bash)
+#
+#      doxx          start (or reuse) the server, then open the tool
+#      doxx stop     stop the server on the port
+#      doxx test     run the test suite
+#      doxx help     usage
+#
+#  Same shape as pmcrwf's launcher, for the same reason: the page has to be
+#  SERVED, not opened as a file, because it fetches the bestiary out of data/
+#  and browsers block that over file://.
+#
+#  Env overrides: DOXX_PORT (default 8932), DOXX_NO_OPEN=1 to skip the browser.
+# ============================================================
+set -eu
+
+# Follow symlinks so this still works when put on PATH as a link.
+SELF=$0
+while [ -L "$SELF" ]; do
+  link=$(readlink -- "$SELF")
+  case "$link" in
+    /*) SELF=$link ;;
+    *) SELF=$(dirname -- "$SELF")/$link ;;
+  esac
+done
+ROOT=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
+PORT=${DOXX_PORT:-8932}
+URL="http://localhost:$PORT/index.html"
+
+say() { printf '[doxx] %s\n' "$*"; }
+
+port_up() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -o /dev/null --max-time 1 "http://localhost:$PORT/" && return 0 || return 1
+  fi
+  return 1
+}
+
+open_browser() {
+  [ "${DOXX_NO_OPEN:-0}" = "1" ] && return 0
+  if command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" >/dev/null 2>&1 &
+  elif command -v open >/dev/null 2>&1; then open "$URL" >/dev/null 2>&1 &
+  fi
+  return 0
+}
+
+case "${1:-start}" in
+  help|-h|--help)
+    cat <<EOF
+doxx — Monster Doxxer launcher
+
+  doxx          start the server (or reuse a running one) and open the tool
+  doxx stop     stop the server on port $PORT
+  doxx test     run the test suite (no server needed)
+  doxx help     this
+
+  folder: $ROOT
+  port:   $PORT   (override with DOXX_PORT)
+  url:    $URL
+
+Put 5e.tools' data in $ROOT/data — see data/README.md. Nothing from the
+books is bundled with this tool, on purpose.
+EOF
+    ;;
+
+  stop)
+    if command -v lsof >/dev/null 2>&1; then
+      pids=$(lsof -ti tcp:"$PORT" 2>/dev/null || true)
+      if [ -n "$pids" ]; then kill $pids && say "stopped (port $PORT)"; else say "nothing listening on $PORT"; fi
+    else
+      say "lsof not available — stop the server yourself (port $PORT)"
+    fi
+    ;;
+
+  test)
+    cd "$ROOT" && exec node tests/run.js
+    ;;
+
+  start)
+    if port_up; then
+      say "reusing the server already on $PORT"
+      open_browser
+      exit 0
+    fi
+    [ -d "$ROOT/data/bestiary" ] || say "warning: no data/bestiary — the tool will load but rank nothing. See data/README.md"
+    cd "$ROOT"
+    if command -v python3 >/dev/null 2>&1; then python3 -m http.server "$PORT" >/dev/null 2>&1 &
+    elif command -v python >/dev/null 2>&1; then python -m SimpleHTTPServer "$PORT" >/dev/null 2>&1 &
+    elif command -v npx >/dev/null 2>&1; then npx --yes http-server -p "$PORT" >/dev/null 2>&1 &
+    else say "no python3/python/npx found — serve $ROOT yourself on port $PORT"; exit 1
+    fi
+    n=0
+    while [ $n -lt 40 ]; do
+      port_up && break
+      n=$((n + 1))
+      sleep 0.25
+    done
+    if port_up; then say "serving $ROOT on $URL"; open_browser
+    else say "server did not come up on $PORT"; exit 1
+    fi
+    ;;
+
+  *)
+    say "unknown command: $1 (try: doxx help)"
+    exit 1
+    ;;
+esac

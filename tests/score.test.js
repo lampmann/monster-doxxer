@@ -145,4 +145,49 @@ section("robustness");
   assertEqual("an unrecognised damage state is skipped, not guessed at", bogus.for.length + bogus.against.length, 0);
 }
 
+/* ---------- F16 ---------- */
+section("F16 — source filtering, the one legitimate filter");
+{
+  const withOther = MONS.concat([
+    Object.assign({}, MONS[MONS.length - 1], { key: "Delver|OTHER", name: "Delver", source: "OTHER" }),
+    Object.assign({}, MONS[0], { key: "Spoiler|ADV", name: "Spoiler", source: "ADV" }),
+  ]);
+  const obs = { movement: ["burrow"] };
+  const sources = r => new Set(r.map(x => x.source));
+
+  const all = S.rank(withOther, obs, R);
+  assertEqual("with no filter every source is ranked", sources(all).size, 3);
+
+  const inc = S.rank(withOther, obs, R, { sources: { include: ["T"] } });
+  assertEqual("include keeps only the named sources", [...sources(inc)], ["T"]);
+  assert("...and still ranks everything within them", inc.length === MONS.length);
+
+  const exc = S.rank(withOther, obs, R, { sources: { exclude: ["ADV"] } });
+  assert("exclude drops the named source", !sources(exc).has("ADV"));
+  assert("...and leaves every other source alone — the spoiler case must not need you to list 106 books",
+    sources(exc).has("T") && sources(exc).has("OTHER"));
+
+  const both = S.rank(withOther, obs, R, { sources: { include: ["T", "ADV"], exclude: ["ADV"] } });
+  assert("exclude beats include, because wrongly showing a monster spoils and wrongly hiding one doesn't",
+    !sources(both).has("ADV") && sources(both).has("T"));
+
+  assertEqual("a bare array still means include, as it did before",
+    [...sources(S.rank(withOther, obs, R, { sources: ["T"] }))], ["T"]);
+  assertEqual("an empty filter is no filter rather than an empty result",
+    S.rank(withOther, obs, R, { sources: { include: [], exclude: [] } }).length, withOther.length);
+  assertEqual("...and so is a missing one", S.rank(withOther, obs, R, {}).length, withOther.length);
+
+  assert("source matching ignores case, since the user types these",
+    S.rank(withOther, obs, R, { sources: { include: ["  t  "] } }).length === MONS.length);
+
+  // Filtering must not change what the evidence is worth: two players who saw the same
+  // monster should read the same score, whichever books they happen to own.
+  const unfiltered = S.rank(withOther, obs, R, { limit: 1 })[0];
+  const filtered = S.rank(withOther, obs, R, { sources: { include: ["T"] }, limit: 1 })[0];
+  assertEqual("filtering the corpus does not re-price the evidence", unfiltered.score, filtered.score);
+
+  assertEqual("a filter naming only unknown sources yields nothing, rather than silently ignoring itself",
+    S.rank(withOther, obs, R, { sources: { include: ["NOPE"] } }).length, 0);
+}
+
 report("score");

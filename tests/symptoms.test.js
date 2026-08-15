@@ -155,6 +155,25 @@ section("F8 — lookup, for a player typing what they saw");
 
   assert("results are ordered by how well they match",
     SY.lookup(C, "it turned invisible", 5).every((x, i, a) => i === 0 || a[i - 1].score >= x.score));
+
+  /* Distinctive words must outweigh common ones. Plain token overlap ranked "it felt me
+     through the floor" as WALKING THROUGH A WALL, because one of that symptom's alternate
+     phrasings is "it went through the floor" and "through"/"floor" are common across the
+     movement symptoms while "felt" is not. */
+  const top = q => (SY.lookup(C, q, 1)[0] || {}).id;
+  assertEqual("a distinctive word beats two common ones", top("it felt me through the floor"),
+    "it-felt-me-through-the-floor");
+  assertEqual("...and 'away' doesn't drag in everything that pushes you away",
+    top("it burrowed away"), "it-burrowed-away");
+
+  // The id is written as a sentence precisely so it can be searched.
+  assertEqual("a symptom is findable by its id read aloud, not only by its prose",
+    top("it came back later"), "it-came-back-later");
+
+  const plain = ["it healed between rounds", "it vanished", "it turned invisible",
+    "it exploded when it died", "it split when i hit it", "it teleported"];
+  assert("the obvious phrasing finds the obvious symptom",
+    plain.every(q => top(q) === q.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, "-")));
 }
 
 section("robustness");

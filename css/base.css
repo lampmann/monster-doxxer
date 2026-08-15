@@ -1,0 +1,139 @@
+/* ============================================================
+   Monster Doxxer — deliberately minimal. Function over form.
+
+   Same house style as pmcrwf, and the same reason for it: this gets read at a
+   table, in a hurry, probably on a phone, by someone who is mid-fight and wants
+   an answer rather than an experience. Serif body text, square corners, hairline
+   rules, no shadows, no animation beyond the press feedback that tells you a tap
+   landed.
+
+   Themeable the same way pmcrwf is: everything colour-ish is a custom property
+   on :root, so a theme file loaded afterwards only has to redefine these.
+   ============================================================ */
+:root {
+  --font-body: "Times New Roman", Times, serif;
+  --font-mono: monospace;
+  --bg: #fff;
+  --fg: #000;
+  --muted-fg: #444;
+  --border: #000;
+  --border-soft: #666;
+  --border-hair: #eee;
+  --code-bg: #eee;
+  --link: #1a56c4;
+  --link-border: #1a56c4;
+  --danger: #b32318;
+  --danger-border: #b32318;
+  --btn-bg: #fff;
+  --btn-fg: #000;
+  --btn-border: #999;
+  --good: #1a7f37;
+  --radius: 0px;
+  --hover-bg: #ececec;
+  --active-bg: #d6d6d6;
+  --focus-ring: #1a56c4;
+}
+
+* { box-sizing: border-box; }
+body { font-family: var(--font-body); margin: 1rem; line-height: 1.35; background: var(--bg); color: var(--fg); }
+h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
+h2 { font-size: 1rem; margin: 0 0 .5rem; }
+a { color: var(--link); }
+
+.toolbar { margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 2px solid var(--border); }
+.toolbar button { margin-right: .5rem; }
+.hint { font-size: .75rem; color: var(--muted-fg); }
+.hint.block { display: block; margin: .15rem 0 .35rem; }
+code { background: var(--code-bg); color: inherit; padding: 0 2px; font-family: var(--font-mono); }
+
+/* Two columns: the query on the left, results on the right. Collapses to one
+   column on a narrow screen, which is the phone-at-the-table case. */
+.cols { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.col-query { flex: 1 1 22rem; min-width: 18rem; }
+.col-results { flex: 2 1 26rem; min-width: 18rem; }
+
+.module { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .75rem; margin-bottom: .75rem; background: var(--bg); }
+.module > h2 { border-bottom: 1px solid var(--border-hair); padding-bottom: .2rem; }
+
+button { font: inherit; background: var(--btn-bg); color: var(--btn-fg); border: 1px solid var(--btn-border); border-radius: var(--radius); }
+input, select { font: inherit; background: var(--bg); color: var(--fg); border: 1px solid var(--btn-border); border-radius: var(--radius); }
+input.num { width: 4.5rem; text-align: right; }
+input.txt { width: 100%; }
+label { font-size: .85rem; }
+
+/* Interaction feedback, applied once for every clickable thing — same two
+   questions as pmcrwf: "is this clickable?" and "did my click land?" */
+button, .chip, .fbtn, .fctrl-btn { cursor: pointer; transition: background-color .08s ease, transform .04s ease; }
+button:hover:not(:disabled), .chip:hover, .fbtn:hover, .fctrl-btn:hover { background-color: var(--hover-bg); }
+button:active:not(:disabled), .chip:active, .fbtn:active, .fctrl-btn:active { background-color: var(--active-bg); transform: translateY(1px); }
+/* A chip that is already "on" carries a strong background; tinting it grey would wash it
+   out, so those darken with an overlay instead of a background swap. */
+.fbtn.inc:hover, .fbtn.exc:hover, .chip.on:hover { box-shadow: inset 0 0 0 999px rgba(0,0,0,.12); }
+.fbtn.inc:active, .fbtn.exc:active, .chip.on:active { box-shadow: inset 0 0 0 999px rgba(0,0,0,.25); }
+button:disabled { cursor: not-allowed; opacity: .5; }
+button:focus-visible, .chip:focus-visible, .fbtn:focus-visible, .fctrl-btn:focus-visible,
+input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+/* ----- chips: the general on/off control ----- */
+.chip { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);
+        padding: 0 5px; margin: 1px; font: inherit; font-size: .8rem; border-radius: var(--radius); }
+.chip.on { background: var(--link); color: #fff; border-color: var(--link-border); }
+.chiprow { margin: .15rem 0; }
+
+/* ----- the symptom picker (F8) ----- */
+#sym-results { max-height: 14rem; overflow-y: auto; margin-top: .25rem; }
+#sym-results .sym-hit { display: block; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--border-hair);
+                        background: none; padding: .15rem .2rem; font-size: .85rem; }
+#sym-results .sym-hit:hover { background: var(--hover-bg); }
+.sym-chosen { margin-bottom: .3rem; }
+.sym-chosen .chip { display: inline-block; }
+.sym-chosen .chip::after { content: " \00d7"; color: var(--muted-fg); }
+.sym-chosen .chip.on::after { color: #fff; }
+
+/* ----- tri-state source filter (F16), lifted from pmcrwf's filter idiom ----- */
+.fgroup { display: grid; grid-template-columns: 5.5rem 1fr; gap: .3rem; align-items: start;
+          padding: 2px 0; border-top: 1px solid var(--border-hair); }
+.flabel { font-weight: bold; font-size: .8rem; padding-top: 3px; }
+.fbody { max-height: 12rem; overflow-y: auto; }
+.fctrl { display: block; margin-bottom: .2rem; }
+.fctrl-btn { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);
+             padding: 0 3px; margin-right: 2px; font-size: .72rem; border-radius: var(--radius); }
+.fbtn { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);
+        padding: 0 5px; margin: 1px; font: inherit; font-size: .78rem; border-radius: var(--radius); }
+.fbtn.inc { background: var(--link); color: #fff; border-color: var(--link-border); }
+.fbtn.exc { background: var(--danger); color: #fff; border-color: var(--danger-border); }
+
+/* ----- damage grid ----- */
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: 1px 4px; }
+.dmg-grid th { font-size: .72rem; font-weight: normal; color: var(--muted-fg); text-align: center; }
+.dmg-grid td.dt { font-size: .82rem; }
+.dmg-grid td.opt { text-align: center; }
+.dmg-grid tr { border-top: 1px solid var(--border-hair); }
+
+/* ----- results ----- */
+.result { border-top: 1px solid var(--border-hair); padding: .3rem 0; }
+.result:first-child { border-top: 0; }
+.result-head { display: flex; gap: .4rem; align-items: baseline; }
+.result-rank { color: var(--muted-fg); font-size: .8rem; min-width: 1.6rem; }
+.result-name { font-weight: bold; }
+.result-name button { border: 0; background: none; font: inherit; font-weight: bold; padding: 0; color: var(--link); }
+.result-name button:hover { text-decoration: underline; background: none; }
+.result-meta { font-size: .78rem; color: var(--muted-fg); }
+/* The score bar is the one piece of ornament, and it earns it: a ranked list without
+   magnitudes hides the difference between "clearly this" and "the least bad of 4,500". */
+.bar { display: inline-block; height: .55rem; background: var(--link); vertical-align: middle; }
+.bar-track { display: inline-block; width: 4rem; height: .55rem; border: 1px solid var(--border-soft); vertical-align: middle; margin-right: .3rem; }
+.why { font-size: .78rem; margin: .15rem 0 0 2rem; }
+.why .for { color: var(--good); }
+.why .against { color: var(--danger); }
+.why ul { margin: .1rem 0; padding-left: 1.1rem; }
+
+/* ----- statblock panel ----- */
+#detail { font-size: .85rem; }
+#detail .sb-line { margin: .15rem 0; }
+#detail .sb-trait { margin: .25rem 0; }
+#detail .sb-trait b { font-style: italic; }
+
+.loading { font-size: .85rem; color: var(--muted-fg); }
+.error { border: 1px solid var(--danger-border); color: var(--danger); padding: .4rem .6rem; margin-bottom: .75rem; }

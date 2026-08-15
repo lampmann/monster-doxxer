@@ -536,19 +536,80 @@
     // F7 — normalise by the evidence actually supplied, so queries of different sizes compare.
     const score = supplied > 0 ? raw / supplied : 0;
     return {
-      key: m.key, name: m.name, source: m.source, monster: o.keepMonster ? m : undefined,
+      key: m.key, name: m.name, source: m.source, srd: !!m.srd, cr: m.cr,
+      monster: o.keepMonster ? m : undefined,
       score, raw, supplied,
       for: forEvidence.sort((a, b) => b.weight - a.weight),
       against: against.sort((a, b) => a.weight - b.weight),
     };
   }
 
+  /* ============================================================
+     F16 — source filtering. The one legitimate filter in the whole tool.
+
+     It is legitimate because, unlike every other input, it is not a claim about the
+     monster — it is a claim about the world. "My DM doesn't own that book" and "don't
+     spoil the adventure I'm halfway through" are facts the user knows and the corpus
+     cannot. Ranking a monster the user has told you is impossible is not humility, it
+     is noise.
+
+     Tri-state, one source at a time, matching the include/exclude filters in pmcrwf:
+
+       neutral   no opinion. Most sources, most of the time.
+       include   only these. "We're running Curse of Strahd, it'll be from CoS or MM."
+       exclude   never these. The spoiler case, and the reason exclude has to exist
+                 separately rather than being expressible as "include everything else":
+                 a player who wants to avoid one adventure they are midway through
+                 should not have to enumerate the other 106 sources to say so.
+
+     Exclude wins over include when a source is somehow in both, because the cost of
+     the two mistakes is not symmetric — wrongly showing a monster spoils an adventure,
+     wrongly hiding one costs a place in a list.
+
+     The rarity table is NOT rebuilt over the filtered set, deliberately. How surprising
+     tremorsense is, is a fact about the game rather than about which books you own, and
+     recomputing it per filter would make the same evidence worth different amounts to
+     two people who saw the same monster.
+     ============================================================ */
+  function sourceFilter(spec) {
+    if (!spec) return null;
+    // A bare array is the older include-only form, and still means include.
+    const s = Array.isArray(spec) ? { include: spec } : spec;
+    const inc = asList(s.include).map(norm).filter(Boolean);
+    const exc = asList(s.exclude).map(norm).filter(Boolean);
+    if (!inc.length && !exc.length) return null;
+    const incSet = new Set(inc), excSet = new Set(exc);
+    return src => {
+      const v = norm(src);
+      if (excSet.has(v)) return false;
+      return incSet.size ? incSet.has(v) : true;
+    };
+  }
+
   function rank(monsters, obs, rarity, opts) {
     const o = opts || {};
-    const out = monsters
-      .filter(m => !o.sources || !o.sources.length || o.sources.includes(m.source))   // F16, the one legitimate filter
+    const allowed = sourceFilter(o.sources);
+    const out = (allowed ? monsters.filter(m => allowed(m.source)) : monsters)
       .map(m => scoreMonster(m, obs, rarity, o));
-    out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+
+    /* Ties are common and they matter. Three or four observations routinely leave
+       twenty candidates on identical scores, and whatever comes first is what the
+       user reads — so "alphabetical" meant a query that correctly identified a troll
+       answered "Aquatic Troll, Blinded Troll, Dragonpriest…" with the actual Troll
+       sixteenth, off the bottom of the list.
+
+       The evidence genuinely cannot separate these, so the tiebreak is a prior on
+       which monster a party is likelier to have fought, and SRD / Basic Rules
+       membership is the best proxy in the data: those are the ~1,200 monsters that
+       ship with the free rules, that every DM owns, and that adventures reprint.
+
+       Strictly a tiebreak, on exactly equal scores. It can never reorder candidates
+       the evidence has already separated, so it cannot launder a prior into a
+       finding — which is also why it needs no harness support to be safe. */
+    out.sort((a, b) => b.score - a.score
+      || (b.srd ? 1 : 0) - (a.srd ? 1 : 0)
+      || a.name.length - b.name.length
+      || a.name.localeCompare(b.name));
     return o.limit ? out.slice(0, o.limit) : out;
   }
 
@@ -563,6 +624,6 @@
   }
 
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
-           buildRarity, buildNumerics, scoreNumerics, gaussian,
+           buildRarity, buildNumerics, scoreNumerics, gaussian, sourceFilter,
            candidateFeatureSet, scoreMonster, rank, hasEvidence };
 });
