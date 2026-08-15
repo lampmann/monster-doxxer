@@ -19,6 +19,7 @@ this file is where it meets reality and where it has been deviated from.
 | Session evidence (F15) | Built — observations persist across a reload. |
 | Discriminating tests (F13) | Built, 41 assertions, and measured. |
 | `src/appearance.js` | F10 (lexical half), F11, F12 built, 45 assertions. **Embeddings not built** — below. |
+| `src/names.js` | Matching a name the party heard. Not in the handoff; 38 assertions. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
@@ -104,6 +105,50 @@ corpus through: `type` can nest a `{choose: [...]}` (the Empyrean is "celestial 
 crashed every facet that lowercased it; `damageTags` were passed through as 5e.tools' raw single
 letters, so an observation of `fire` could never match `"F"`; and a symptom candidate whose regex
 failed to compile matched *every* monster rather than none.
+
+## A name the party heard
+
+Not in the handoff, and it should have been. The whole premise is that players do not know
+what they fought — but a DM narrates, and narration contains nouns. *"The barghest lunges at
+you"* hands a table the word **barghest** without telling them it names a creature with a
+statblock and a poison immunity. Plenty of players will have a name and no idea it is one.
+
+**It is not appearance, and folding it into F10 would have been wrong twice over.** A
+description is tier 3: capped, never subtracting, because the DM reflavours. A name the DM
+said out loud is close to conclusive.
+
+Matching is deliberately forgiving, because names arrive through the air, once. Exact forms
+first (including 5e.tools' `alias` and `shortName`), then whole-string fuzzy matching sized by
+length — "barghast" finds the Barghest, "owl bear" finds the Owlbear — then per-token scoring
+weighted by how distinctive each word is across the corpus of names, because "giant" appears
+in dozens of names and "barghest" in one.
+
+**The first implementation was wrong and the UI caught it.** A name started as a flat bonus
+added after F7 normalisation, like appearance. Then typing "barghest" *and* guessing the
+creature type wrong dropped the Barghest out of the top three — because one contradicted field
+costs the whole [-1,1] range of the normalised score, while a capped bonus could only add 0.8
+back. A name is now an ordinary weighted feature at 9 nats, weighed against the other evidence
+rather than added to the result, and "the DM called it a barghest, and I think it was a dragon"
+resolves the way a person would resolve it.
+
+It earns **credit only**. A candidate that is not the named creature is never docked; it simply
+fails to earn the largest thing on offer, which under F7 is a strong demotion without ever
+becoming a filter. That matters because the name may be wrong.
+
+```
+                              top-1    top-5
+no name heard                 41.0%    64.3%
+a name 30% of the time        57.0%    73.0%
+always a name, 10% wrong      94.0%    97.3%
+always a name, 50% WRONG      72.3%    82.0%
+```
+
+The last row is the one that justifies the design. Even when **half the names are completely
+wrong**, the tool is well above the no-name baseline; a filter would have collapsed to around
+50%. And `nameWeight` is the one constant where the principled derivation and the measurement
+agree without argument: an exact name is the rarest possible observation, one in 4,528, about
+8.4 nats — and 9 is what the sweep picks, under both the usually-right and the half-wrong
+conditions.
 
 ## Appearance, and the half of F10 that is missing
 
@@ -192,6 +237,7 @@ all equally well founded.
 | `acWeight` / `hpWeight` | 3.2 | Swept. Minimax, not best-case — see below. |
 | `NUMERIC.mode` | `raw` | Measured against three alternatives; see F5 above. |
 | `appearanceCap` | 0.25 | Swept — and overruled, see below. |
+| `nameWeight` | 9 | Swept, and agrees with the derivation. The best-founded constant here. |
 
 Two of these deserve their caveats stated rather than buried.
 

@@ -81,7 +81,22 @@ const DEFAULTS = {
   describeWords: 6,       // how many words they remember
   recolourRate: 0.5,      // probability the DM had reflavoured the colour — see below
   synonymRate: 0,         // probability a book word is said in the player's words instead
+  heardRate: 0,           // probability the DM said a name the party caught
+  garbleRate: 0.4,        // ...and wrote down wrong, having heard it rather than read it
+  mishearRate: 0.1,       // ...or got completely wrong. See below.
 };
+
+/* ON heardRate — a name the party heard.
+
+   DMs narrate, and narration contains nouns. "The barghest lunges at you" hands a table
+   the word without telling them it names a creature with a statblock. So some fraction of
+   queries carry a name, and the model has to be unkind about it in two ways:
+
+   garbleRate   the name arrived through the air, once. People write "barghast".
+   mishearRate  the name is simply WRONG — the DM renamed the thing, or the party latched
+                onto a different word entirely. This is the one that matters: a scorer
+                that treats a name as conclusive will be destroyed here, and one that
+                treats it as strong-but-not-binding will lose a little and recover. */
 
 /* ON synonymRate — the vocabulary gap, and the whole case for embeddings.
 
@@ -243,6 +258,19 @@ function corrupt(m, r, opts) {
     if (obs.hp !== full.hp) notes.push(`hp ${full.hp} -> ${obs.hp}`);
   }
 
+  /* 6. Somebody caught a name. */
+  if (o.heardRate > 0 && r() < o.heardRate) {
+    let heard = m.name;
+    if (o.allNames && o.allNames.length && r() < o.mishearRate) {
+      heard = pick(r, o.allNames);                       // wrong creature entirely
+      notes.push(`misheard the name as "${heard}"`);
+    } else if (r() < o.garbleRate) {
+      heard = garble(heard, r);
+      notes.push(`heard the name as "${heard}"`);
+    }
+    obs.heardName = heard;
+  }
+
   /* 5. Describe it. Only sometimes: plenty of parties never volunteer a description,
      and the ones who do give a few words rather than a paragraph. */
   if (o.describeRate > 0 && o.documents && r() < o.describeRate) {
@@ -279,6 +307,22 @@ function corruptViable(m, r, opts, hasEvidence, tries) {
     if (hasEvidence(c.obs)) return c;
   }
   return null;
+}
+
+/* One or two character edits, the way a name sounds different from how it is spelled.
+   Deliberately small: "barghast" for "barghest", not an anagram. */
+function garble(name, r) {
+  const chars = name.split("");
+  const edits = 1 + (r() < 0.3 ? 1 : 0);
+  for (let i = 0; i < edits && chars.length > 3; i++) {
+    const at = 1 + Math.floor(r() * (chars.length - 2));   // never the first letter
+    if (!/[a-z]/i.test(chars[at])) continue;
+    const roll = r();
+    if (roll < 0.5) chars[at] = "aeiou"[Math.floor(r() * 5)];   // vowel confusion, the commonest
+    else if (roll < 0.8) chars.splice(at, 1);
+    else chars.splice(at, 0, chars[at]);
+  }
+  return chars.join("");
 }
 
 /* The vocabulary of each set field across the corpus, for strayRate to draw false
@@ -344,4 +388,4 @@ function paraphrase(text, r, o) {
 }
 
 module.exports = { rng, pick, shuffled, corrupt, corruptViable, fullObservation, buildVocab,
-                   paraphrase, PALETTE, SYNONYMS, DEFAULTS, DAMAGE_TYPES, SET_FIELDS, UNMODELLED };
+                   paraphrase, garble, PALETTE, SYNONYMS, DEFAULTS, DAMAGE_TYPES, SET_FIELDS, UNMODELLED };

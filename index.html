@@ -24,6 +24,15 @@
   <div class="col-query">
 
     <div class="module">
+      <h2>Did anyone call it something?</h2>
+      <span class="hint block">If your DM used a name &mdash; even one you didn't recognise as a
+        creature &mdash; put it here. Spelling doesn't matter; you heard it, you didn't read it.
+        This is the strongest single thing you can tell the tool.</span>
+      <input type="text" class="txt" id="in-name" placeholder="barghest, owl bear, some kind of giant&hellip;" autocomplete="off">
+      <div class="hint" id="name-read"></div>
+    </div>
+
+    <div class="module">
       <h2>What did it do?</h2>
       <span class="hint block">Describe what you saw, in your own words. This is the strongest
         evidence the tool has &mdash; far stronger than any stat.</span>
@@ -106,6 +115,7 @@
 <script src="src/normalize.js"></script>
 <script src="src/symptoms.js"></script>
 <script src="src/appearance.js"></script>
+<script src="src/names.js"></script>
 <script src="src/score.js"></script>
 <script src="src/discriminate.js"></script>
 <script src="src/sources.js"></script>

@@ -32,8 +32,8 @@
   /* ---------- state ---------- */
   const S = {
     monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
-    appearanceIndex: null, sizeFromProse: "",
-    obs: { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "" },
+    appearanceIndex: null, nameIndex: null, sizeFromProse: "",
+    obs: { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "", heardName: "" },
     ac: null, hp: null, retuned: false,
     sources: {},              // { CODE: "ignore" | "include" | "exclude" }
     ranked: [], selected: null,
@@ -131,6 +131,7 @@
       }));
     }
     S.appearanceIndex = window.buildAppearanceIndex(S.monsters, window.fluffMap(fluffLists));
+    S.nameIndex = window.buildNameIndex(S.monsters);
 
     status.textContent = `${S.monsters.length} monsters, ${S.ontology.symptoms.length} symptoms` +
       (books || adventures ? "" : " (add data/books.json for book titles)");
@@ -163,14 +164,16 @@
     $("in-hp").value = S.hp == null ? "" : S.hp;
     $("in-retuned").checked = S.retuned;
     $("in-appearance").value = S.obs.appearance || "";
+    $("in-name").value = S.obs.heardName || "";
   }
   function clearSession() {
-    S.obs = { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "" };
+    S.obs = { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "", heardName: "" };
     S.sizeFromProse = "";
     S.ac = S.hp = null; S.retuned = false; S.sources = {}; S.selected = null;
     $("in-ac").value = ""; $("in-hp").value = ""; $("in-retuned").checked = false;
     $("sym-search").value = "";
     $("in-appearance").value = "";
+    $("in-name").value = "";
     persist(); renderAll();
   }
 
@@ -251,6 +254,7 @@
     if (S.obs.type) obs.type = S.obs.type;
     if (S.obs.size) obs.size = S.obs.size;
     if (S.obs.appearance) obs.appearance = S.obs.appearance;
+    if (S.obs.heardName) obs.heardName = S.obs.heardName;
     if (typeof S.ac === "number") obs.ac = S.ac;
     if (typeof S.hp === "number") obs.hp = S.hp;
     return obs;
@@ -308,9 +312,11 @@
        so it is computed here and handed in, rather than recomputed per candidate. */
     const appearanceScores = obs.appearance && S.appearanceIndex
       ? window.appearanceScore(obs.appearance, S.appearanceIndex) : null;
+    const nameScores = obs.heardName && S.nameIndex
+      ? window.nameScore(obs.heardName, S.nameIndex) : null;
     const ranked = window.rank(S.monsters, obs, S.rarity, {
       sources: spec, numerics: S.numerics, retuned: S.retuned, legacy: S.legacy,
-      appearanceScores, collapseByName: true, limit: WINDOW, keepMonster: true,
+      appearanceScores, nameScores, collapseByName: true, limit: WINDOW, keepMonster: true,
     });
     S.ranked = ranked;
 
@@ -318,6 +324,15 @@
       box.innerHTML = `<span class="error">Every book is excluded, so there is nothing left to rank.</span>`;
       return;
     }
+
+    /* Drop candidates that explain nothing. With F7 normalisation a monster that matches
+       no part of the query scores exactly 0, so under a single strong observation the list
+       filled up with whatever the tie-break happened to surface — "barghast" answered
+       Barghest, Ghast, and then ten zero-scoring creatures under a heading that says "best
+       explanations". They are not explanations. Kept only when nothing at all scores, so
+       the list is never mysteriously empty. */
+    const explains = ranked.filter(r => r.score > 1e-9);
+    const shown = explains.length ? explains : ranked;
 
     const notes = [];
     if (window.isActive(S.sources)) {
@@ -330,8 +345,15 @@
     /* Ties are the normal case with three or four observations, and saying so is more
        useful than pretending to an order. The tiebreak below the score is a prior, not
        evidence, so a silent list would imply a confidence the ranking doesn't have. */
-    const top = ranked[0].score;
-    const tied = ranked.filter(r => Math.abs(r.score - top) < 1e-9).length;
+    if (!explains.length) {
+      notes.push("Nothing in your books explains this. These are the least bad matches, not answers.");
+    } else if (explains.length <= 3 && ranked.length > explains.length) {
+      notes.push(`Only ${explains.length} monster${explains.length === 1 ? "" : "s"} explain${
+        explains.length === 1 ? "s" : ""} any of this; the rest are not shown.`);
+    }
+
+    const top = shown[0].score;
+    const tied = shown.filter(r => Math.abs(r.score - top) < 1e-9).length;
     if (tied > 1) {
       // Counted over the wider window, so "12" never means "12, and we stopped looking".
       const n = tied >= WINDOW ? `${WINDOW}+` : String(tied);
@@ -340,7 +362,7 @@
     }
     const noteHtml = notes.length ? `<div class="hint block">${notes.map(esc).join(" ")}</div>` : "";
 
-    box.innerHTML = noteHtml + ranked.slice(0, SHOWN).map((r, i) => {
+    box.innerHTML = noteHtml + shown.slice(0, SHOWN).map((r, i) => {
       /* The bar is the ABSOLUTE score, not a share of the leader: F7 already normalises
          it to "how much of the evidence you gave does this monster explain", which is
          the number a reader actually wants. Relative bars made every tied result full
@@ -425,7 +447,7 @@
   }
 
   function renderAll() {
-    applyProseSize();
+    applyProseSize(); renderNameRead();
     renderPickers(); renderDamage(); renderSymptoms(); renderSources();
     renderCrHint(); renderResults(); renderSuggestions(); renderDetail();
   }
@@ -558,8 +580,31 @@
     }
   }
 
+  /* Say what the name matched, rather than silently reweighting the whole list. A nudge
+     this strong has to be visible — and if it matched the wrong thing, the user needs to
+     see that it did before they trust the ranking underneath it. */
+  function renderNameRead() {
+    const el = $("name-read");
+    const q = (S.obs.heardName || "").trim();
+    if (!q || !S.nameIndex) { el.textContent = ""; return; }
+    const hit = window.looksLikeName(q, S.nameIndex, 0.5);
+    if (!hit) {
+      el.textContent = "No creature in your books goes by that. Left as a hint rather than an answer.";
+      return;
+    }
+    el.textContent = hit.exact
+      ? `Matched “${hit.name}” exactly.`
+      : `Closest name is “${hit.name}”. Ranked accordingly, not filtered to it.`;
+  }
+
   document.addEventListener("input", e => {
     if (e.target.id === "sym-search") { renderSymptoms(); return; }
+    if (e.target.id === "in-name") {
+      S.obs.heardName = e.target.value;
+      renderNameRead();
+      persist(); renderResults(); renderSuggestions();
+      return;
+    }
     if (e.target.id === "in-appearance") {
       S.obs.appearance = e.target.value;
       applyProseSize();

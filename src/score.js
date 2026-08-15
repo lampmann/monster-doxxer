@@ -91,6 +91,23 @@
        list, never enough to outrank a monster that matches the mechanics. Swept — see
        DESIGN.md's appearance section. */
     appearanceCap: 0.25,
+    /* What a name the party heard is worth, in nats, as an ordinary weighted feature.
+
+       NOT a flat bonus bolted on after normalisation, which is how this was first built
+       and which failed the obvious case: typing "barghest" and also guessing the creature
+       type wrong dropped the Barghest out of the top three, because one contradicted
+       field costs the whole [-1,1] range of the normalised score while a capped bonus
+       could only ever add 0.8 back. Weighing the name against the other evidence, rather
+       than adding to the result, is what makes "the DM called it a barghest, and I think
+       it was a dragon" resolve the way a person would resolve it.
+
+       Sized above the rarest ordinary feature (maxWeight is 8) because an exact name IS
+       the rarest possible observation — one monster in 4,528, about 8.4 nats — but it
+       earns CREDIT ONLY. A candidate that isn't the named creature is never docked; it
+       simply fails to earn the largest thing on offer, which under F7 normalisation is
+       a strong demotion without ever becoming the filter that "rank, never filter"
+       forbids. The DM may have renamed it, invented it, or been misheard. */
+    nameWeight: 9,
   };
 
   /* Damage-interaction cost matrix (F2). Never compare these as booleans: "resistant" when the
@@ -526,6 +543,20 @@
       });
     }
 
+    /* A name the party heard, weighed against everything else rather than added to the
+       result. Credit only: not being the named creature costs nothing directly, it just
+       forfeits the largest single thing on offer. See TUNING.nameWeight. */
+    if (o.nameScores) {
+      supplied += TUNING.nameWeight;
+      const fit = o.nameScores.get(m.key) || 0;
+      if (fit > 0) {
+        const credit = fit * TUNING.nameWeight;
+        raw += credit;
+        forEvidence.push({ facet: "name", value: fit >= 1 ? "called by this name" : "the name is close",
+                           weight: +credit.toFixed(3) });
+      }
+    }
+
     /* F4/F5/F6 — numbers, on tolerance curves. Added after the categorical evidence so
        the numeric weight sits in the same units (nats) as everything else, and normalised
        through the same F7 denominator. */
@@ -566,6 +597,8 @@
         forEvidence.push({ facet: "appearance", value: "looked the part", weight: +bonus.toFixed(3) });
       }
     }
+
+
     return {
       key: m.key, name: m.name, source: m.source, srd: !!m.srd, cr: m.cr,
       monster: o.keepMonster ? m : undefined,
@@ -742,8 +775,10 @@
     if (obs.damage && Object.keys(obs.damage).length) return true;
     if (typeof obs.ac === "number" || typeof obs.hp === "number") return true;
     // Appearance alone is thin evidence, but it is evidence — and it is what someone
-    // with nothing but "it was a big hairy ape thing" has to offer.
-    return !!(obs.appearance && String(obs.appearance).trim());
+    // with nothing but "it was a big hairy ape thing" has to offer. A heard name is
+    // better evidence than that and often all a player has.
+    if (obs.appearance && String(obs.appearance).trim()) return true;
+    return !!(obs.heardName && String(obs.heardName).trim());
   }
 
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,

@@ -63,6 +63,16 @@ everything else&rdquo;: nobody should have to click 106 books to hide one.
 
 Observations persist across a reload, so you can keep adding to them as the fight goes on.
 
+## If you caught a name
+
+DMs narrate, and narration has nouns. If yours said "the barghest lunges at you", you have the
+answer and may not know it. Put the name in the first box — spelling doesn't matter, you heard
+it rather than read it, and *barghast* finds the Barghest just as well.
+
+A name is treated as the strongest single thing you can say, but it is still evidence and not a
+filter: your DM may have renamed the thing, or you may have caught the wrong word. Even when
+half the names given are outright wrong, the tool still does better than with no name at all.
+
 ## Describing it
 
 Type what it looked like in your own words. Two things happen:
@@ -111,6 +121,7 @@ node eval/run.js --sweep missFactor  # re-derive a scoring constant
 node eval/run.js --show 10           # the worst failures, with reasons
 node eval/run.js --cr-shift 4        # what if the DM rebuilt it four CRs up?
 node eval/run.js --suggest           # does F13's advice actually beat guessing?
+node eval/run.js --heard 1           # what a name the party caught is worth
 node eval/appearance.js              # 16 hand-written descriptions, known answers
 node eval/coverage.js                # how the symptom ontology lands on real prose
 ```
