@@ -40,6 +40,13 @@
   };
   const SENSE_TAGS = { B: "Blindsight", D: "Darkvision", SD: "Superior Darkvision", T: "Tremorsense", U: "Truesight" };
   const CR_NUM = { "0": 0, "1/8": 0.125, "1/4": 0.25, "1/2": 0.5 };
+  /* damageTags ship as single letters. Expanded here rather than at the point of use: the
+     scorer matches a user's observation ("it hit me with fire") against these values, and a
+     facet value of "f" can never match the word the user actually types. */
+  const DMG_TAG = {
+    A: "acid", B: "bludgeoning", C: "cold", F: "fire", O: "force", L: "lightning",
+    N: "necrotic", P: "piercing", I: "poison", S: "slashing", Y: "psychic", R: "radiant", T: "thunder",
+  };
   const SPEED_KINDS = ["walk", "burrow", "climb", "fly", "swim"];
   const ABIL_KEYS = ["str", "dex", "con", "int", "wis", "cha"];
   const ATK_KIND = {
@@ -320,7 +327,7 @@
       // "Regeneration", "Pack Tactics", "Undead Fortitude" are already named here, so a symptom can
       // map to a tag set first and only fall back to scanning trait prose for the tail.
       traitTags: raw.traitTags || [], actionTags: raw.actionTags || [],
-      damageTags: raw.damageTags || [],
+      damageTags: asArray(raw.damageTags).map(t => DMG_TAG[t] || String(t).toLowerCase()),
       srd: !!raw.srd || !!raw.basicRules,
       partial: !!raw._partialCopy, copiedFrom: raw._copiedFrom || "",
       hasAttacks: actions.some(a => a.isAttack),
@@ -346,7 +353,7 @@
   }
 
   return {
-    SIZES, SENSE_TAGS, SPEED_KINDS, ABIL_KEYS,
+    SIZES, SENSE_TAGS, SPEED_KINDS, ABIL_KEYS, DMG_TAG,
     flattenEntries, stripTags,
     replaceTxtDeep, applyMod, resolveCopy,
     acInfo, hpInfo, speedInfo, typeInfo, alignText, dmgTypes, crToNum,

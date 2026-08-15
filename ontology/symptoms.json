@@ -1,0 +1,1177 @@
+{
+  "version": 1,
+  "about": [
+    "F8. What a player would say they saw, mapped to the mechanics that could produce it.",
+    "",
+    "Read `player` as the sentence someone says at the table. Read `candidates` as every",
+    "mechanic that could have caused it, each with p = how strongly that mechanic implies",
+    "this observation. A symptom with one candidate is usually a symptom written lazily:",
+    "the whole point is that observations are ambiguous and the ontology should say so.",
+    "",
+    "Matchers, all optional and ANDed within a candidate:",
+    "  traitTag / actionTag  5e.tools' own curated label. Exact, near-certain, ~50 exist.",
+    "  text                  regex over an entry's name + body. Case-insensitive, dotAll.",
+    "  name                  regex over an entry's name only.",
+    "  unless                regex that vetoes a text/name hit on the same entry.",
+    "  where                 restrict to entry kinds: trait, action, bonus, reaction,",
+    "                        legendary, spellcasting, defence. Default is all of them.",
+    "                        `mechanics` is every kind EXCEPT defence, and any symptom about",
+    "                        an effect the monster INFLICTS wants it: 'inflicts frightened'",
+    "                        and 'cannot be frightened' share a word, so scanning the defence",
+    "                        block for one matches every creature with the other.",
+    "  field                 structural predicate on the statblock, e.g. speed.burrow,",
+    "                        sense.tremorsense, condimmune.charmed, immune.fire,",
+    "                        dealsdamage.psychic, type.undead, size.huge, lair, legendary,",
+    "                        spellcasting, language.common, reach.15",
+    "",
+    "`testable` marks a symptom the party can deliberately provoke in about one round.",
+    "F13 prefers those when it suggests a discriminating test — 'hit it with radiant' is",
+    "advice; 'wait to see if it rejuvenates in a few days' is not.",
+    "",
+    "This file is expected to grow forever. Adding a symptom is a data edit, never a code",
+    "edit — that is the whole reason it lives out here."
+  ],
+
+  "symptoms": [
+    {
+      "id": "it-healed-between-rounds",
+      "player": "It healed between rounds",
+      "aka": ["it regenerated", "its wounds closed up", "the damage we did came back", "it got health back"],
+      "group": "durability",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Regeneration", "p": 1.0, "traitTag": "Regeneration" },
+        { "mechanic": "healing at the start of its turn", "p": 0.95, "text": "regains \\d+ hit points? at the (?:start|end) of" },
+        { "mechanic": "self-healing trait", "p": 0.7, "text": "regains \\d+ hit points?" },
+        { "mechanic": "healing spell", "p": 0.4, "where": ["spellcasting"], "text": "cure wounds|healing word|heal\\b" }
+      ]
+    },
+    {
+      "id": "it-healed-when-it-hit-me",
+      "player": "It healed itself by hurting me",
+      "aka": ["it drained my life", "it fed on me", "it got stronger as I got weaker", "vampiric"],
+      "group": "durability",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "life drain", "p": 0.95, "text": "regains hit points equal to" },
+        { "mechanic": "leeching attack", "p": 0.85, "text": "(?:regains|heals).{0,60}(?:damage (?:dealt|taken)|half the damage)" },
+        { "mechanic": "hit point maximum reduction with healing", "p": 0.6, "text": "hit point maximum is reduced.{0,120}regains" }
+      ]
+    },
+    {
+      "id": "it-got-back-up",
+      "player": "We dropped it and it got straight back up",
+      "aka": ["it wouldn't stay down", "it stood up again", "it kept fighting at zero"],
+      "group": "durability",
+      "candidates": [
+        { "mechanic": "Undead Fortitude", "p": 1.0, "traitTag": "Undead Fortitude" },
+        { "mechanic": "drops to 1 hit point instead", "p": 0.9, "text": "drops to 1 hit point instead" },
+        { "mechanic": "Rejuvenation", "p": 0.5, "traitTag": "Rejuvenation" }
+      ]
+    },
+    {
+      "id": "it-came-back-later",
+      "player": "We killed it and it came back later",
+      "aka": ["it reformed", "it wasn't dead", "it returned days later"],
+      "group": "durability",
+      "candidates": [
+        { "mechanic": "Rejuvenation", "p": 1.0, "traitTag": "Rejuvenation" },
+        { "mechanic": "reforms after being destroyed", "p": 0.9, "text": "(?:reforms|re-forms|returns to life|body reforms)" }
+      ]
+    },
+    {
+      "id": "it-shrugged-off-a-spell",
+      "player": "It shrugged off a spell that should have worked",
+      "aka": ["it made the save no matter what", "my spell just failed", "it resisted magic"],
+      "group": "durability",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Legendary Resistance", "p": 1.0, "traitTag": "Legendary Resistances" },
+        { "mechanic": "chooses to succeed on a save", "p": 0.95, "text": "succeeds? on the saving throw instead" },
+        { "mechanic": "Magic Resistance", "p": 0.8, "traitTag": "Magic Resistance" },
+        { "mechanic": "advantage on saves against magic", "p": 0.75, "text": "advantage on saving throws against spells" }
+      ]
+    },
+    {
+      "id": "my-spell-did-nothing-at-all",
+      "player": "One specific spell had no effect whatsoever",
+      "aka": ["it was immune to that spell", "the spell fizzled entirely"],
+      "group": "durability",
+      "candidates": [
+        { "mechanic": "Spell Immunity", "p": 1.0, "traitTag": "Spell Immunity" },
+        { "mechanic": "immune to a named spell", "p": 0.9, "text": "immune to the .{0,30}spell" },
+        { "mechanic": "Antimagic Susceptibility", "p": 0.4, "traitTag": "Antimagic Susceptibility" }
+      ]
+    },
+    {
+      "id": "small-hits-bounced-off",
+      "player": "Small hits did nothing but big ones landed",
+      "aka": ["there was a minimum damage", "chip damage didn't work", "it ignored weak attacks"],
+      "group": "durability",
+      "candidates": [
+        { "mechanic": "damage threshold", "p": 1.0, "text": "damage threshold" },
+        { "mechanic": "Damage Absorption", "p": 0.5, "traitTag": "Damage Absorption" }
+      ]
+    },
+    {
+      "id": "only-magic-weapons-hurt-it",
+      "player": "Ordinary weapons bounced off, magic ones worked",
+      "aka": ["mundane weapons did nothing", "we needed a magic sword", "silvered weapons worked"],
+      "group": "durability",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Magic Weapons", "p": 0.9, "traitTag": "Magic Weapons" },
+        { "mechanic": "resistance or immunity to nonmagical attacks", "p": 0.9, "where": ["defence"], "text": "nonmagical" },
+        { "mechanic": "attacks count as magical", "p": 0.3, "text": "attacks are magical" }
+      ]
+    },
+    {
+      "id": "it-absorbed-the-damage",
+      "player": "A damage type seemed to feed it rather than hurt it",
+      "aka": ["it healed from the fire", "the lightning made it stronger"],
+      "group": "durability",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Damage Absorption", "p": 1.0, "traitTag": "Damage Absorption" },
+        { "mechanic": "heals from a damage type", "p": 0.95, "text": "regains hit points equal to.{0,60}damage(?: dealt)?" }
+      ]
+    },
+    {
+      "id": "it-was-very-hard-to-hit",
+      "player": "It was very hard to hit",
+      "aka": ["we kept missing", "our attacks couldn't land", "high AC"],
+      "group": "durability",
+      "candidates": [
+        { "mechanic": "Parry", "p": 0.6, "actionTag": "Parry" },
+        { "mechanic": "shield or deflection reaction", "p": 0.55, "where": ["reaction"], "text": "adds? \\d+ to its AC|increases its AC" },
+        { "mechanic": "imposes disadvantage on attacks", "p": 0.5, "text": "disadvantage on attack rolls against" }
+      ]
+    },
+
+    {
+      "id": "it-vanished",
+      "player": "It vanished",
+      "aka": ["it disappeared", "it was just gone", "we lost it completely"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "invisibility", "p": 0.85, "text": "\\binvisible\\b", "unless": "invisible creatures|see invisible|sees invisible" },
+        { "mechanic": "teleport", "p": 0.85, "text": "teleports?\\b" },
+        { "mechanic": "Incorporeal Movement", "p": 0.7, "traitTag": "Incorporeal Movement" },
+        { "mechanic": "shifts to the Ethereal Plane", "p": 0.8, "text": "ethereal plane" },
+        { "mechanic": "burrow speed", "p": 0.5, "field": "speed.burrow" },
+        { "mechanic": "Camouflage", "p": 0.4, "traitTag": "Camouflage" }
+      ]
+    },
+    {
+      "id": "it-turned-invisible",
+      "player": "It turned invisible",
+      "aka": ["we couldn't see it any more", "it went invisible"],
+      "group": "movement",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "invisibility trait or action", "p": 0.95, "text": "(?:turns|becomes|is) invisible", "unless": "see(?:s)? invisible" },
+        { "mechanic": "invisibility spell", "p": 0.7, "where": ["spellcasting"], "text": "invisibility|greater invisibility" },
+        { "mechanic": "naturally invisible", "p": 0.9, "text": "naturally invisible" }
+      ]
+    },
+    {
+      "id": "it-teleported",
+      "player": "It blinked across the room",
+      "aka": ["it teleported", "it reappeared somewhere else", "it just moved instantly"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "Teleport", "p": 1.0, "actionTag": "Teleport" },
+        { "mechanic": "teleport trait or action", "p": 0.9, "text": "magically teleports?|teleports? up to \\d+ feet" },
+        { "mechanic": "teleport spell", "p": 0.6, "where": ["spellcasting"], "text": "misty step|dimension door|teleport" }
+      ]
+    },
+    {
+      "id": "it-walked-through-a-wall",
+      "player": "It walked straight through a wall",
+      "aka": ["it passed through solid stone", "it went through the floor", "it was incorporeal"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "Incorporeal Movement", "p": 1.0, "traitTag": "Incorporeal Movement" },
+        { "mechanic": "moves through creatures and objects", "p": 0.95, "text": "move through other creatures and objects" },
+        { "mechanic": "Ethereal Sight or ethereal travel", "p": 0.6, "text": "ethereal plane" },
+        { "mechanic": "Amorphous — squeezes through gaps", "p": 0.35, "traitTag": "Amorphous" }
+      ]
+    },
+    {
+      "id": "it-squeezed-through-a-gap",
+      "player": "It poured through a gap far too small for it",
+      "aka": ["it squeezed under the door", "it flowed through the crack"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "Amorphous", "p": 1.0, "traitTag": "Amorphous" },
+        { "mechanic": "moves through a narrow space", "p": 0.9, "text": "space as narrow as" }
+      ]
+    },
+    {
+      "id": "it-burrowed-away",
+      "player": "It dug into the ground and was gone",
+      "aka": ["it burrowed", "it tunnelled away", "it went under the earth"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "burrow speed", "p": 0.95, "field": "speed.burrow" },
+        { "mechanic": "Tunneler", "p": 0.8, "traitTag": "Tunneler" }
+      ]
+    },
+    {
+      "id": "it-erupted-from-the-ground",
+      "player": "It came up out of the ground underneath us",
+      "aka": ["it burst from the earth", "it ambushed us from below", "it was buried waiting"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "burrow speed", "p": 0.8, "field": "speed.burrow" },
+        { "mechanic": "Tremorsense", "p": 0.5, "field": "sense.tremorsense" },
+        { "mechanic": "Ambusher", "p": 0.4, "traitTag": "Ambusher" }
+      ]
+    },
+    {
+      "id": "it-flew",
+      "player": "It flew",
+      "aka": ["it was airborne", "it took off", "it attacked from the air"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "fly speed", "p": 0.95, "field": "speed.fly" },
+        { "mechanic": "flight spell", "p": 0.3, "where": ["spellcasting"], "text": "\\bfly\\b|levitate" }
+      ]
+    },
+    {
+      "id": "it-hovered",
+      "player": "It hung in the air without moving",
+      "aka": ["it hovered", "it floated in place", "it drifted without wings"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "hover", "p": 1.0, "field": "hover" }
+      ]
+    },
+    {
+      "id": "it-flew-past-without-being-hit",
+      "player": "It swooped past and we couldn't get a swing in",
+      "aka": ["it flew away without provoking", "we never got an opportunity attack"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "Flyby", "p": 1.0, "traitTag": "Flyby" },
+        { "mechanic": "provokes no opportunity attacks", "p": 0.9, "text": "doesn't provoke opportunity attacks" }
+      ]
+    },
+    {
+      "id": "it-climbed-a-sheer-wall",
+      "player": "It ran up a sheer wall",
+      "aka": ["it climbed the ceiling", "it walked on the walls", "it stuck to surfaces"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "Spider Climb", "p": 1.0, "traitTag": "Spider Climb" },
+        { "mechanic": "climb speed", "p": 0.6, "field": "speed.climb" }
+      ]
+    },
+    {
+      "id": "it-was-at-home-in-water",
+      "player": "It was completely at home in the water",
+      "aka": ["it swam fast", "it fought us underwater", "it dragged us under"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "swim speed", "p": 0.85, "field": "speed.swim" },
+        { "mechanic": "Amphibious", "p": 0.8, "traitTag": "Amphibious" },
+        { "mechanic": "Water Breathing", "p": 0.7, "traitTag": "Water Breathing" }
+      ]
+    },
+    {
+      "id": "it-stepped-into-a-tree",
+      "player": "It stepped into a tree and came out of another one",
+      "aka": ["it used the trees to move", "it vanished into the wood"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "Tree Stride", "p": 1.0, "traitTag": "Tree Stride" },
+        { "mechanic": "moves through trees", "p": 0.9, "text": "tree stride|steps into (?:a|one) (?:living )?tree" }
+      ]
+    },
+    {
+      "id": "it-was-much-faster-than-us",
+      "player": "It was much faster than any of us",
+      "aka": ["it outran us", "we could never catch it", "it kept the distance it wanted"],
+      "group": "movement",
+      "candidates": [
+        { "mechanic": "Sure-Footed or difficult terrain immunity", "p": 0.5, "traitTag": "Sure-Footed" },
+        { "mechanic": "extra movement action", "p": 0.6, "text": "takes the Dash action|Dash action as a bonus" },
+        { "mechanic": "ignores difficult terrain", "p": 0.5, "text": "difficult terrain doesn't cost it extra" }
+      ]
+    },
+
+    {
+      "id": "i-felt-weaker-after-it-touched-me",
+      "player": "I felt weaker after it touched me",
+      "aka": ["my strength drained away", "an ability score dropped", "it sapped me"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "ability score reduction", "p": 0.95, "text": "(?:strength|dexterity|constitution|intelligence|wisdom|charisma) score is reduced" },
+        { "mechanic": "ability drain on hit", "p": 0.9, "text": "reduces? (?:the target's|its) (?:strength|dexterity|constitution|intelligence|wisdom|charisma)" },
+        { "mechanic": "exhaustion", "p": 0.6, "text": "level of exhaustion" }
+      ]
+    },
+    {
+      "id": "my-hit-point-maximum-dropped",
+      "player": "My maximum hit points dropped and healing wouldn't fix it",
+      "aka": ["I lost max HP", "the damage stuck", "I couldn't heal it back"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "hit point maximum reduction", "p": 1.0, "text": "hit point maximum is reduced" },
+        { "mechanic": "life drain", "p": 0.8, "name": "life drain" }
+      ]
+    },
+    {
+      "id": "i-got-more-and-more-tired",
+      "player": "I kept getting more exhausted",
+      "aka": ["I gained exhaustion", "I was worn down", "levels of exhaustion"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "inflicts exhaustion", "p": 1.0, "where": ["mechanics"], "text": "level of exhaustion" }
+      ]
+    },
+    {
+      "id": "i-was-terrified-and-couldnt-approach",
+      "player": "I was too frightened to go near it",
+      "aka": ["it terrified us", "I ran away and couldn't stop", "we were all scared"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Frightful Presence", "p": 1.0, "actionTag": "Frightful Presence" },
+        { "mechanic": "inflicts frightened", "p": 0.9, "where": ["mechanics"], "text": "\\bfrightened\\b" },
+        { "mechanic": "fear aura", "p": 0.85, "text": "aura of (?:fear|dread)" }
+      ]
+    },
+    {
+      "id": "one-of-us-turned-on-the-party",
+      "player": "It took control of one of us",
+      "aka": ["my friend attacked me", "it charmed him", "it dominated her", "we were turned against each other"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "charm", "p": 0.85, "where": ["mechanics"], "text": "\\bcharmed\\b" },
+        { "mechanic": "domination", "p": 0.95, "text": "dominate|under (?:its|the) control|controlled by" },
+        { "mechanic": "possession", "p": 0.9, "text": "possess(?:es|ion)" }
+      ]
+    },
+    {
+      "id": "i-couldnt-move-at-all",
+      "player": "I couldn't move or act at all",
+      "aka": ["I was paralysed", "I was frozen in place", "I lost my turns"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "paralysis", "p": 0.95, "where": ["mechanics"], "text": "\\bparalyzed\\b" },
+        { "mechanic": "stunning effect", "p": 0.8, "where": ["mechanics"], "text": "\\bstunned\\b" },
+        { "mechanic": "hold person or similar", "p": 0.6, "where": ["spellcasting"], "text": "hold person|hold monster" }
+      ]
+    },
+    {
+      "id": "i-was-held-in-place",
+      "player": "Something held me in place",
+      "aka": ["I was restrained", "I was stuck", "I couldn't get free", "it pinned me"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "restrains a target", "p": 0.9, "where": ["mechanics"], "text": "\\brestrained\\b" },
+        { "mechanic": "grapple", "p": 0.7, "where": ["mechanics"], "text": "\\bgrappled\\b" },
+        { "mechanic": "web", "p": 0.8, "where": ["mechanics"], "text": "\\bweb\\b" }
+      ]
+    },
+    {
+      "id": "it-grabbed-me-and-wouldnt-let-go",
+      "player": "It grabbed me and wouldn't let go",
+      "aka": ["it grappled me", "it held on", "it had me in its jaws", "it constricted me"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "grapple on hit", "p": 0.9, "text": "grappled \\(escape dc" },
+        { "mechanic": "constriction", "p": 0.9, "name": "constrict" },
+        { "mechanic": "Tentacles", "p": 0.6, "actionTag": "Tentacles" }
+      ]
+    },
+    {
+      "id": "it-swallowed-someone",
+      "player": "It swallowed one of us whole",
+      "aka": ["I was inside it", "it ate him", "we had to cut our way out"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "Swallow", "p": 1.0, "actionTag": "Swallow" },
+        { "mechanic": "swallows a creature", "p": 0.95, "text": "\\bswallow(?:s|ed)\\b" }
+      ]
+    },
+    {
+      "id": "it-dragged-me-towards-it",
+      "player": "It pulled me towards it",
+      "aka": ["it yanked me in", "it reeled me in", "I was dragged closer"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "pulls a target", "p": 0.9, "text": "pulled up to \\d+ feet|pull(?:s|ed) the target" }
+      ]
+    },
+    {
+      "id": "it-threw-me-across-the-room",
+      "player": "It knocked me flying",
+      "aka": ["I was pushed back", "it hurled me", "I was shoved away", "it threw me"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "pushes a target", "p": 0.9, "text": "pushed up to \\d+ feet" },
+        { "mechanic": "knocks prone", "p": 0.6, "text": "knocked prone" }
+      ]
+    },
+    {
+      "id": "it-knocked-me-down",
+      "player": "It knocked me flat on my back",
+      "aka": ["I was knocked prone", "it bowled me over", "it flattened me"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "knocks prone", "p": 0.9, "text": "knocked prone" },
+        { "mechanic": "Pounce", "p": 0.85, "traitTag": "Pounce" },
+        { "mechanic": "Charge", "p": 0.6, "traitTag": "Charge" }
+      ]
+    },
+    {
+      "id": "i-started-turning-to-stone",
+      "player": "I started turning to stone",
+      "aka": ["I was petrified", "my skin went grey and hard", "I froze solid as rock"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "petrification", "p": 1.0, "where": ["mechanics"], "text": "\\bpetrif(?:ied|ication|ying)\\b" }
+      ]
+    },
+    {
+      "id": "i-was-poisoned",
+      "player": "I was poisoned",
+      "aka": ["its venom got me", "I was sick after the bite", "poison damage"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "inflicts poisoned", "p": 0.85, "where": ["mechanics"], "text": "\\bpoisoned\\b" },
+        { "mechanic": "deals poison damage", "p": 0.6, "field": "dealsdamage.poison" }
+      ]
+    },
+    {
+      "id": "i-caught-something-from-it",
+      "player": "I caught something from it that didn't go away",
+      "aka": ["I got a disease", "it infected me", "the wound went bad"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "inflicts disease", "p": 0.95, "where": ["mechanics"], "text": "\\bdisease(?:d)?\\b" },
+        { "mechanic": "infection or rot", "p": 0.8, "text": "\\binfect(?:s|ed|ion)\\b|\\brot\\b" }
+      ]
+    },
+    {
+      "id": "i-went-blind",
+      "player": "I couldn't see afterwards",
+      "aka": ["I was blinded", "it burned my eyes", "everything went dark"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "inflicts blinded", "p": 0.9, "where": ["mechanics"], "text": "\\bblinded\\b" }
+      ]
+    },
+    {
+      "id": "i-couldnt-hear",
+      "player": "I was deafened",
+      "aka": ["my ears rang", "I couldn't hear anything after"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "inflicts deafened", "p": 0.9, "where": ["mechanics"], "text": "\\bdeafened\\b" }
+      ]
+    },
+    {
+      "id": "i-fell-asleep",
+      "player": "I fell asleep in the middle of the fight",
+      "aka": ["it put us to sleep", "I passed out", "I was knocked unconscious by magic"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "magical sleep", "p": 0.95, "text": "falls? asleep|magically (?:sleep|slumber)" },
+        { "mechanic": "sleep spell", "p": 0.6, "where": ["spellcasting"], "text": "\\bsleep\\b" }
+      ]
+    },
+    {
+      "id": "i-couldnt-think-straight",
+      "player": "I couldn't think straight afterwards",
+      "aka": ["I was confused", "it drove me mad", "I lost control of myself", "madness"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "confusion", "p": 0.9, "text": "\\bconfus(?:ed|ion)\\b" },
+        { "mechanic": "madness", "p": 0.95, "text": "\\bmadness\\b|short-term madness" },
+        { "mechanic": "psychic damage", "p": 0.4, "field": "dealsdamage.psychic" }
+      ]
+    },
+    {
+      "id": "it-read-my-mind",
+      "player": "It knew what I was thinking",
+      "aka": ["it read my thoughts", "it spoke in my head", "telepathy"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "telepathy", "p": 0.9, "field": "language.telepathy" },
+        { "mechanic": "detects or reads thoughts", "p": 0.95, "text": "read (?:its|the target's|their) thoughts|detect thoughts" }
+      ]
+    },
+    {
+      "id": "i-forgot-what-happened",
+      "player": "I don't remember part of the fight",
+      "aka": ["it wiped my memory", "there's a gap in what I recall"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "memory modification", "p": 0.95, "text": "modify memor|no memory of|forget(?:s)? " }
+      ]
+    },
+    {
+      "id": "i-aged-years-in-seconds",
+      "player": "I aged years in a moment",
+      "aka": ["my hair went white", "it stole years from me"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "ageing effect", "p": 1.0, "text": "ages? \\d+ years|grows? \\d+ years older" }
+      ]
+    },
+    {
+      "id": "my-gear-corroded",
+      "player": "My weapon corroded when I hit it",
+      "aka": ["my sword rusted", "the acid ate my armour", "my shield fell apart"],
+      "group": "condition",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "corrodes metal", "p": 1.0, "where": ["mechanics"], "text": "\\bcorrode|\\brust(?:s|ed|ing)?\\b" },
+        { "mechanic": "destroys nonmagical weapons or armour", "p": 0.9, "text": "nonmagical (?:weapon|armor|armour).{0,60}destroyed" }
+      ]
+    },
+    {
+      "id": "it-engulfed-me",
+      "player": "It absorbed me into its body",
+      "aka": ["it engulfed me", "I was inside it", "it flowed over me", "it enveloped him"],
+      "group": "condition",
+      "candidates": [
+        { "mechanic": "engulfs a creature", "p": 0.95, "text": "\\bengulf(?:s|ed|ing)?\\b" },
+        { "mechanic": "envelops a creature", "p": 0.85, "text": "\\benvelop(?:s|ed|ing)?\\b" }
+      ]
+    },
+
+    {
+      "id": "it-hurt-me-when-i-hit-it",
+      "player": "I took damage just for hitting it",
+      "aka": ["it had spikes", "touching it burned me", "it retaliated automatically"],
+      "group": "reaction",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "damage on being hit in melee", "p": 0.95, "text": "hits? (?:it|the .{0,20}) with a melee attack.{0,120}takes? \\d+" },
+        { "mechanic": "damaging body or aura", "p": 0.85, "text": "touches? it or hits it with a melee" },
+        { "mechanic": "retaliatory reaction", "p": 0.7, "where": ["reaction"], "text": "takes? \\d+ \\(\\d+d\\d+\\)" }
+      ]
+    },
+    {
+      "id": "it-blocked-my-attack",
+      "player": "It knocked my attack aside after I'd already rolled",
+      "aka": ["it parried", "it deflected my blow", "it blocked at the last moment"],
+      "group": "reaction",
+      "candidates": [
+        { "mechanic": "Parry", "p": 1.0, "actionTag": "Parry" },
+        { "mechanic": "adds to AC as a reaction", "p": 0.9, "where": ["reaction"], "text": "adds? \\d+ to its ac" },
+        { "mechanic": "deflects missiles", "p": 0.85, "where": ["reaction"], "text": "deflect|catch(?:es)? the missile" }
+      ]
+    },
+    {
+      "id": "it-exploded-when-it-died",
+      "player": "It exploded when it died",
+      "aka": ["it burst on death", "it took us with it", "there was a death blast"],
+      "group": "reaction",
+      "candidates": [
+        { "mechanic": "Death Burst", "p": 1.0, "traitTag": "Death Burst" },
+        { "mechanic": "explodes at 0 hit points", "p": 0.95, "text": "when (?:it|the .{0,25}) dies.{0,120}explodes?" }
+      ]
+    },
+    {
+      "id": "it-split-when-i-hit-it",
+      "player": "It split into two smaller ones when we hit it",
+      "aka": ["it divided", "there were suddenly two of them", "cutting it made more"],
+      "group": "multiply",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "split", "p": 1.0, "name": "split" },
+        { "mechanic": "divides when damaged", "p": 0.95, "text": "splits? into two" }
+      ]
+    },
+    {
+      "id": "it-countered-my-spell",
+      "player": "It stopped my spell as I was casting it",
+      "aka": ["it counterspelled me", "my casting was interrupted"],
+      "group": "reaction",
+      "candidates": [
+        { "mechanic": "counterspell", "p": 1.0, "text": "counterspell" },
+        { "mechanic": "spell-disrupting reaction", "p": 0.7, "where": ["reaction"], "text": "casts? a spell.{0,80}(?:fails|disrupt)" }
+      ]
+    },
+    {
+      "id": "it-took-half-from-a-clean-hit",
+      "player": "A hit that clearly landed did about half what it should have",
+      "aka": ["it rolled with the blow", "it halved the damage somehow", "uncanny dodge"],
+      "group": "reaction",
+      "candidates": [
+        { "mechanic": "Uncanny Dodge", "p": 1.0, "name": "uncanny dodge" },
+        { "mechanic": "halves damage as a reaction", "p": 0.9, "where": ["reaction"], "text": "halve(?:s)? the damage|takes? half (?:the )?damage" }
+      ]
+    },
+    {
+      "id": "it-turned-my-attack-onto-someone-else",
+      "player": "My attack ended up hitting my own ally",
+      "aka": ["it redirected my blow", "it used one of us as a shield", "it made me hit my friend"],
+      "group": "reaction",
+      "candidates": [
+        { "mechanic": "Redirect Attack", "p": 1.0, "name": "redirect attack" },
+        { "mechanic": "swaps the attack's target", "p": 0.9, "where": ["reaction"], "text": "instead of (?:itself|it)|targets? .{0,40}instead" }
+      ]
+    },
+    {
+      "id": "it-couldnt-be-moved",
+      "player": "Nothing we did could move it or knock it down",
+      "aka": ["it was immovable", "we couldn't shove it", "it wouldn't go prone"],
+      "group": "reaction",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Unyielding", "p": 1.0, "name": "unyielding" },
+        { "mechanic": "resists forced movement", "p": 0.9, "text": "would move it, knock it prone" },
+        { "mechanic": "immune to being grappled or knocked prone", "p": 0.6, "field": "condimmune.prone" }
+      ]
+    },
+    {
+      "id": "it-avoided-the-area-spell-entirely",
+      "player": "It took nothing at all from an area spell that should have caught it",
+      "aka": ["it dodged the fireball completely", "it evaded the blast"],
+      "group": "reaction",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Evasion", "p": 1.0, "text": "\\bevasion\\b" },
+        { "mechanic": "takes no damage on a successful save", "p": 0.9, "text": "no damage if it succeeds" }
+      ]
+    },
+
+    {
+      "id": "something-happened-at-the-start-of-its-turn",
+      "player": "Something happened at the start of its turn that wasn't an attack",
+      "aka": ["the room did something on its initiative", "an effect triggered on its turn"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "lair actions", "p": 0.9, "field": "lair" },
+        { "mechanic": "aura or start-of-turn trait", "p": 0.85, "text": "at the start of (?:its|each) turn" },
+        { "mechanic": "legendary actions", "p": 0.4, "field": "legendary" }
+      ]
+    },
+    {
+      "id": "the-room-itself-attacked-us",
+      "player": "The room itself attacked us",
+      "aka": ["the walls moved", "the environment fought us", "the lair was hostile"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "lair actions", "p": 1.0, "field": "lair" }
+      ]
+    },
+    {
+      "id": "it-acted-out-of-turn",
+      "player": "It acted between our turns",
+      "aka": ["it moved on someone else's turn", "it got extra actions", "legendary actions"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "legendary actions", "p": 0.95, "field": "legendary" },
+        { "mechanic": "reaction", "p": 0.3, "where": ["reaction"], "text": "." }
+      ]
+    },
+    {
+      "id": "it-attacked-several-times-a-round",
+      "player": "It attacked several times in one round",
+      "aka": ["it got multiple attacks", "claw claw bite", "it hit us three times"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "Multiattack", "p": 0.95, "actionTag": "Multiattack" }
+      ]
+    },
+    {
+      "id": "it-breathed-something-at-us",
+      "player": "It breathed something over all of us at once",
+      "aka": ["breath weapon", "it spat a cone", "a line of energy came out of its mouth"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "Breath Weapon", "p": 1.0, "actionTag": "Breath Weapon" },
+        { "mechanic": "breath attack", "p": 0.9, "name": "breath" }
+      ]
+    },
+    {
+      "id": "its-big-attack-had-a-cooldown",
+      "player": "Its big attack only came back every few rounds",
+      "aka": ["it recharged", "the breath came back later", "it used it again after a while"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "recharge ability", "p": 1.0, "name": "recharge" }
+      ]
+    },
+    {
+      "id": "i-took-damage-just-standing-near-it",
+      "player": "I took damage just for standing next to it",
+      "aka": ["it had an aura", "being close hurt", "the air around it burned"],
+      "group": "turn",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "damaging aura", "p": 0.95, "text": "within \\d+ feet of (?:it|the).{0,120}takes? \\d+ \\(\\d+d\\d+\\)" },
+        { "mechanic": "named aura trait", "p": 0.9, "name": "aura" }
+      ]
+    },
+    {
+      "id": "our-magic-stopped-working-near-it",
+      "player": "Our magic stopped working near it",
+      "aka": ["there was an antimagic field", "spells failed around it", "it nullified magic"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "antimagic field", "p": 1.0, "text": "antimagic" },
+        { "mechanic": "Antimagic Susceptibility", "p": 0.5, "traitTag": "Antimagic Susceptibility" }
+      ]
+    },
+    {
+      "id": "it-glowed",
+      "player": "It gave off light",
+      "aka": ["it was glowing", "it lit the room", "it was surrounded by light"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "Illumination", "p": 1.0, "traitTag": "Illumination" },
+        { "mechanic": "sheds light", "p": 0.9, "text": "sheds? bright light" }
+      ]
+    },
+    {
+      "id": "it-put-out-the-lights",
+      "player": "It made the light go out",
+      "aka": ["it created darkness", "our torches did nothing", "it brought the dark with it"],
+      "group": "turn",
+      "candidates": [
+        { "mechanic": "magical darkness", "p": 0.95, "text": "magical darkness|darkness spell" },
+        { "mechanic": "Devil's Sight", "p": 0.4, "traitTag": "Devil's Sight" }
+      ]
+    },
+
+    {
+      "id": "it-saw-me-while-i-was-invisible",
+      "player": "It saw me while I was invisible",
+      "aka": ["invisibility didn't help", "it looked straight at me", "it wasn't fooled"],
+      "group": "senses",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "truesight", "p": 0.95, "field": "sense.truesight" },
+        { "mechanic": "blindsight", "p": 0.8, "field": "sense.blindsight" },
+        { "mechanic": "tremorsense", "p": 0.6, "field": "sense.tremorsense" },
+        { "mechanic": "sees invisible creatures", "p": 0.9, "text": "sees? invisible creatures|see invisibility" }
+      ]
+    },
+    {
+      "id": "it-found-me-in-total-darkness",
+      "player": "It found me in complete darkness",
+      "aka": ["the dark didn't slow it", "it fought fine with no light"],
+      "group": "senses",
+      "candidates": [
+        { "mechanic": "blindsight", "p": 0.85, "field": "sense.blindsight" },
+        { "mechanic": "darkvision", "p": 0.5, "field": "sense.darkvision" },
+        { "mechanic": "Devil's Sight", "p": 0.9, "traitTag": "Devil's Sight" },
+        { "mechanic": "tremorsense", "p": 0.6, "field": "sense.tremorsense" }
+      ]
+    },
+    {
+      "id": "it-felt-me-through-the-floor",
+      "player": "It tracked us through the ground",
+      "aka": ["it felt our footsteps", "it knew where we were by vibration", "standing still helped"],
+      "group": "senses",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "tremorsense", "p": 1.0, "field": "sense.tremorsense" }
+      ]
+    },
+    {
+      "id": "it-smelled-us-coming",
+      "player": "It smelled us before it could see us",
+      "aka": ["it sniffed us out", "it tracked us by scent", "keen smell"],
+      "group": "senses",
+      "candidates": [
+        { "mechanic": "Keen Senses", "p": 0.9, "traitTag": "Keen Senses" },
+        { "mechanic": "keen smell", "p": 0.95, "text": "keen smell|advantage on.{0,40}perception.{0,30}smell" }
+      ]
+    },
+    {
+      "id": "it-shied-away-from-sunlight",
+      "player": "It avoided the daylight",
+      "aka": ["sunlight hurt it", "it was worse in the light", "it hid from the sun"],
+      "group": "senses",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Sunlight Sensitivity", "p": 1.0, "traitTag": "Sunlight Sensitivity" },
+        { "mechanic": "Light Sensitivity", "p": 0.8, "traitTag": "Light Sensitivity" },
+        { "mechanic": "damaged by sunlight", "p": 0.9, "text": "sunlight.{0,60}takes? \\d+|radiant damage.{0,40}sunlight" }
+      ]
+    },
+    {
+      "id": "we-walked-past-it-without-noticing",
+      "player": "We walked right past it without noticing",
+      "aka": ["it was hidden in plain sight", "it looked like part of the scenery", "we thought it was a statue"],
+      "group": "disguise",
+      "candidates": [
+        { "mechanic": "False Appearance", "p": 1.0, "traitTag": "False Appearance" },
+        { "mechanic": "Camouflage", "p": 0.85, "traitTag": "Camouflage" },
+        { "mechanic": "indistinguishable from an object", "p": 0.9, "text": "indistinguishable from (?:an?|a normal)" }
+      ]
+    },
+    {
+      "id": "it-was-pretending-to-be-a-person",
+      "player": "It was disguised as a person",
+      "aka": ["it looked human until it didn't", "it wore someone's face", "it was one of us"],
+      "group": "disguise",
+      "candidates": [
+        { "mechanic": "Shapechanger", "p": 0.9, "traitTag": "Shapechanger" },
+        { "mechanic": "disguises itself as a humanoid", "p": 0.9, "text": "disguise|assumes? the (?:form|appearance) of a humanoid" }
+      ]
+    },
+    {
+      "id": "it-changed-shape",
+      "player": "It changed shape in front of us",
+      "aka": ["it transformed", "it became something else", "it turned into an animal"],
+      "group": "disguise",
+      "candidates": [
+        { "mechanic": "Shapechanger", "p": 1.0, "traitTag": "Shapechanger" },
+        { "mechanic": "Shapechanger action", "p": 0.95, "actionTag": "Shapechanger" },
+        { "mechanic": "polymorphs itself", "p": 0.8, "text": "polymorphs? into" }
+      ]
+    },
+    {
+      "id": "it-turned-into-mist",
+      "player": "It turned into mist or smoke",
+      "aka": ["it became a cloud", "it went gaseous", "it dissolved into fog"],
+      "group": "disguise",
+      "candidates": [
+        { "mechanic": "gaseous or misty form", "p": 0.95, "text": "(?:mist|gaseous|vapor|vapour) form|transforms? into a cloud" }
+      ]
+    },
+    {
+      "id": "it-imitated-a-voice",
+      "player": "It copied a voice to lure us in",
+      "aka": ["it mimicked someone", "we heard a cry for help that wasn't real"],
+      "group": "disguise",
+      "candidates": [
+        { "mechanic": "Mimicry", "p": 1.0, "traitTag": "Mimicry" },
+        { "mechanic": "imitates sounds or speech", "p": 0.9, "text": "mimic(?:s|ry)|imitates? (?:the )?(?:sounds|voices)" }
+      ]
+    },
+    {
+      "id": "there-was-an-illusion",
+      "player": "Some of what we saw wasn't really there",
+      "aka": ["it was an illusion", "we attacked a duplicate", "there were copies of it"],
+      "group": "disguise",
+      "candidates": [
+        { "mechanic": "illusory duplicates", "p": 0.95, "text": "illusory duplicate|mirror image" },
+        { "mechanic": "illusion magic", "p": 0.7, "where": ["spellcasting"], "text": "illusion|major image|phantasmal" }
+      ]
+    },
+
+    {
+      "id": "it-called-for-reinforcements",
+      "player": "It called more creatures to help it",
+      "aka": ["it summoned allies", "more of them showed up", "it whistled and things came"],
+      "group": "multiply",
+      "candidates": [
+        { "mechanic": "summons allies", "p": 0.95, "text": "summons?\\b" },
+        { "mechanic": "conjuration magic", "p": 0.6, "where": ["spellcasting"], "text": "conjure|summon" }
+      ]
+    },
+    {
+      "id": "the-people-it-killed-got-back-up",
+      "player": "The people it killed rose again on its side",
+      "aka": ["our dead turned against us", "it made more of itself from the fallen", "it created spawn"],
+      "group": "multiply",
+      "candidates": [
+        { "mechanic": "creates spawn", "p": 1.0, "text": "\\bspawn\\b|rises? as a" },
+        { "mechanic": "raises the dead", "p": 0.9, "text": "animate dead|raises? .{0,30}corpse" }
+      ]
+    },
+    {
+      "id": "it-fought-better-with-friends",
+      "player": "It was much more dangerous when its friends were nearby",
+      "aka": ["they ganged up on us", "pack tactics", "it got advantage when flanking"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "Pack Tactics", "p": 1.0, "traitTag": "Pack Tactics" }
+      ]
+    },
+
+    {
+      "id": "it-burned-me",
+      "player": "It burned me",
+      "aka": ["fire damage", "it set me alight", "flames"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals fire damage", "p": 0.9, "field": "dealsdamage.fire" }]
+    },
+    {
+      "id": "it-froze-me",
+      "player": "It hit me with cold",
+      "aka": ["cold damage", "it was freezing", "frost"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals cold damage", "p": 0.9, "field": "dealsdamage.cold" }]
+    },
+    {
+      "id": "it-shocked-me",
+      "player": "It hit me with lightning",
+      "aka": ["lightning damage", "electricity", "a shock"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals lightning damage", "p": 0.9, "field": "dealsdamage.lightning" }]
+    },
+    {
+      "id": "it-burned-me-with-acid",
+      "player": "It sprayed something that burned like acid",
+      "aka": ["acid damage", "it dissolved things", "corrosive"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals acid damage", "p": 0.9, "field": "dealsdamage.acid" }]
+    },
+    {
+      "id": "it-withered-me",
+      "player": "The wound went black and cold",
+      "aka": ["necrotic damage", "it withered me", "the flesh died around it"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals necrotic damage", "p": 0.9, "field": "dealsdamage.necrotic" }]
+    },
+    {
+      "id": "it-hurt-my-mind",
+      "player": "It hurt without touching me",
+      "aka": ["psychic damage", "it attacked my mind", "my head split open"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals psychic damage", "p": 0.9, "field": "dealsdamage.psychic" }]
+    },
+    {
+      "id": "it-seared-me-with-light",
+      "player": "It burned me with light",
+      "aka": ["radiant damage", "holy fire", "a searing brightness"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals radiant damage", "p": 0.9, "field": "dealsdamage.radiant" }]
+    },
+    {
+      "id": "it-hit-me-with-invisible-force",
+      "player": "Something invisible slammed into me",
+      "aka": ["force damage", "an unseen impact", "pure force"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals force damage", "p": 0.9, "field": "dealsdamage.force" }]
+    },
+    {
+      "id": "there-was-a-thunderclap",
+      "player": "There was a deafening boom",
+      "aka": ["thunder damage", "a concussive blast", "the sound hurt"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals thunder damage", "p": 0.9, "field": "dealsdamage.thunder" }]
+    },
+    {
+      "id": "its-poison-hurt-on-its-own",
+      "player": "The poison itself did damage",
+      "aka": ["poison damage", "venom"],
+      "group": "damage",
+      "candidates": [{ "mechanic": "deals poison damage", "p": 0.9, "field": "dealsdamage.poison" }]
+    },
+
+    {
+      "id": "it-cast-spells",
+      "player": "It cast spells",
+      "aka": ["it was a caster", "it used magic", "it had spell slots"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "spellcasting", "p": 0.95, "field": "spellcasting" },
+        { "mechanic": "innate spellcasting", "p": 0.9, "name": "innate spellcasting" }
+      ]
+    },
+    {
+      "id": "it-attacked-us-from-a-distance",
+      "player": "It attacked us from a long way off",
+      "aka": ["it had a ranged attack", "it shot at us", "we couldn't close the gap"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "ranged attack", "p": 0.85, "where": ["action"], "text": "ranged weapon attack|range \\d+/\\d+" }
+      ]
+    },
+    {
+      "id": "it-hit-me-from-further-than-it-should-have",
+      "player": "It hit me from further away than its arms could reach",
+      "aka": ["it had long reach", "tentacles got me at range", "it struck from 15 feet"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "reach of 10 feet or more", "p": 0.8, "field": "reach.10" },
+        { "mechanic": "reach of 15 feet or more", "p": 0.95, "field": "reach.15" },
+        { "mechanic": "Tentacles", "p": 0.6, "actionTag": "Tentacles" }
+      ]
+    },
+    {
+      "id": "it-hit-far-harder-when-it-was-hidden",
+      "player": "It hit far harder when we couldn't see it coming",
+      "aka": ["sneak attack", "it ambushed us for huge damage", "the first hit was the worst"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "Sneak Attack", "p": 1.0, "traitTag": "Sneak Attack" },
+        { "mechanic": "Ambusher", "p": 0.8, "traitTag": "Ambusher" },
+        { "mechanic": "Surprise Attack", "p": 0.9, "name": "surprise attack" }
+      ]
+    },
+    {
+      "id": "it-charged-across-the-room",
+      "player": "It charged us from across the room",
+      "aka": ["it ran at us and hit much harder", "it built up speed", "it barrelled into me"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "Charge", "p": 1.0, "traitTag": "Charge" },
+        { "mechanic": "Pounce", "p": 0.8, "traitTag": "Pounce" }
+      ]
+    },
+    {
+      "id": "it-kept-attacking-after-it-killed-someone",
+      "player": "It got another attack the moment something dropped",
+      "aka": ["it went berserk after a kill", "it kept going", "rampage"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "Rampage", "p": 1.0, "traitTag": "Rampage" }
+      ]
+    },
+    {
+      "id": "it-fought-recklessly",
+      "player": "It attacked wildly with no regard for its own safety",
+      "aka": ["it was reckless", "it left itself open", "it traded hits happily"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "Reckless", "p": 1.0, "traitTag": "Reckless" },
+        { "mechanic": "Aggressive", "p": 0.7, "traitTag": "Aggressive" }
+      ]
+    },
+    {
+      "id": "it-smashed-through-the-building",
+      "player": "It tore through the wall like it wasn't there",
+      "aka": ["it destroyed the building", "it wrecked the structure", "siege monster"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "Siege Monster", "p": 1.0, "traitTag": "Siege Monster" }
+      ]
+    },
+    {
+      "id": "it-hit-much-harder-than-its-size-suggested",
+      "player": "It hit far harder than something that size should",
+      "aka": ["brute", "the damage was enormous", "it hit like a truck"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "Brute", "p": 1.0, "traitTag": "Brute" }
+      ]
+    },
+    {
+      "id": "it-caught-us-in-a-web",
+      "player": "It caught us in webbing",
+      "aka": ["there were webs everywhere", "we were stuck in silk", "it shot web at us"],
+      "group": "offence",
+      "candidates": [
+        { "mechanic": "web attack", "p": 0.95, "name": "web" },
+        { "mechanic": "Web Walker", "p": 0.7, "traitTag": "Web Walker" },
+        { "mechanic": "Web Sense", "p": 0.8, "traitTag": "Web Sense" }
+      ]
+    },
+
+    {
+      "id": "it-couldnt-be-turned",
+      "player": "Turning undead didn't work on it",
+      "aka": ["the cleric's channel divinity failed", "it resisted turning"],
+      "group": "meta",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Turn Immunity", "p": 1.0, "traitTag": "Turn Immunity" },
+        { "mechanic": "Turn Resistance", "p": 0.9, "traitTag": "Turn Resistance" }
+      ]
+    },
+    {
+      "id": "it-was-undead",
+      "player": "It was clearly undead",
+      "aka": ["it was a corpse", "it was rotting", "our cleric could turn it"],
+      "group": "meta",
+      "candidates": [
+        { "mechanic": "undead", "p": 0.95, "field": "type.undead" }
+      ]
+    },
+    {
+      "id": "it-didnt-seem-alive",
+      "player": "It didn't behave like a living thing at all",
+      "aka": ["it was a construct", "it was a machine", "it showed no pain"],
+      "group": "meta",
+      "candidates": [
+        { "mechanic": "construct", "p": 0.9, "field": "type.construct" },
+        { "mechanic": "Immutable Form", "p": 0.85, "traitTag": "Immutable Form" },
+        { "mechanic": "Unusual Nature", "p": 0.5, "traitTag": "Unusual Nature" }
+      ]
+    },
+    {
+      "id": "it-couldnt-be-transformed",
+      "player": "Polymorph and shape-changing magic wouldn't take",
+      "aka": ["we tried to polymorph it and nothing happened", "its form couldn't be altered"],
+      "group": "meta",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "Immutable Form", "p": 1.0, "traitTag": "Immutable Form" }
+      ]
+    },
+    {
+      "id": "it-spoke-to-us",
+      "player": "It spoke to us",
+      "aka": ["it talked", "it was intelligent", "it negotiated"],
+      "group": "meta",
+      "candidates": [
+        { "mechanic": "speaks Common", "p": 0.7, "field": "language.common" },
+        { "mechanic": "telepathy", "p": 0.6, "field": "language.telepathy" }
+      ]
+    },
+    {
+      "id": "it-held-its-breath-underwater",
+      "player": "It stayed under water indefinitely",
+      "aka": ["it didn't need to breathe", "it held its breath a long time"],
+      "group": "meta",
+      "candidates": [
+        { "mechanic": "Hold Breath", "p": 0.9, "traitTag": "Hold Breath" },
+        { "mechanic": "Water Breathing", "p": 0.85, "traitTag": "Water Breathing" },
+        { "mechanic": "Amphibious", "p": 0.8, "traitTag": "Amphibious" }
+      ]
+    },
+    {
+      "id": "it-walked-on-its-own-webs",
+      "player": "It moved through the webs as if they weren't there",
+      "aka": ["the webbing didn't slow it", "it ran along the strands"],
+      "group": "meta",
+      "candidates": [
+        { "mechanic": "Web Walker", "p": 1.0, "traitTag": "Web Walker" }
+      ]
+    },
+    {
+      "id": "it-was-immune-to-almost-everything-we-tried",
+      "player": "Nearly everything we tried it was immune to",
+      "aka": ["it had a huge immunity list", "almost nothing hurt it"],
+      "group": "durability",
+      "candidates": [
+        { "mechanic": "immune to all nonmagical physical damage", "p": 0.85, "where": ["defence"], "text": "immune to .{0,120}bludgeoning, piercing, and slashing" },
+        { "mechanic": "many condition immunities", "p": 0.6, "where": ["defence"], "text": "cannot be .{0,40},.{0,40},.{0,40}," }
+      ]
+    },
+    {
+      "id": "it-was-unaffected-by-poison",
+      "player": "Poison did nothing to it at all",
+      "aka": ["our poison was useless", "it couldn't be poisoned"],
+      "group": "durability",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "poison immunity", "p": 0.95, "field": "immune.poison" },
+        { "mechanic": "immune to the poisoned condition", "p": 0.85, "field": "condimmune.poisoned" }
+      ]
+    },
+    {
+      "id": "fear-and-charm-didnt-work-on-it",
+      "player": "Fear and charm effects slid straight off it",
+      "aka": ["we couldn't frighten it", "charm person failed", "it was mindless"],
+      "group": "durability",
+      "testable": true,
+      "candidates": [
+        { "mechanic": "immune to charmed", "p": 0.9, "field": "condimmune.charmed" },
+        { "mechanic": "immune to frightened", "p": 0.9, "field": "condimmune.frightened" },
+        { "mechanic": "Fey Ancestry", "p": 0.6, "traitTag": "Fey Ancestry" }
+      ]
+    }
+  ]
+}

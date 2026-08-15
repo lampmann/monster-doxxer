@@ -55,6 +55,11 @@
     // Records whose _copy only partially resolved are missing features they really have,
     // which would otherwise make them look like clean non-matches. Damp them slightly.
     partialPenalty: 0.9,
+    // Floor on a symptom's confidence multiplier (F8). A symptom attached by a loose prose
+    // regex is a weaker claim than one attached by a curated trait tag, and the credit
+    // should say so — but never all the way to zero, or a correct-but-uncertain match
+    // scores the same as no match at all.
+    minSymptomConfidence: 0.25,
   };
 
   /* Damage-interaction cost matrix (F2). Never compare these as booleans: "resistant" when the
@@ -158,13 +163,29 @@
     const forEvidence = [], against = [];
     let raw = 0, supplied = 0;
 
+    /* How much of a feature's rarity weight this candidate actually earns for having it.
+       Everything scores 1 except symptoms, which scale by how confidently the ontology
+       attached them — a curated trait tag is near-certain, a prose regex is a guess, and
+       collapsing the two would let a loose keyword hit outrank the real mechanic. */
+    const confidenceOf = (facet, value) => {
+      if (facet !== "symptom") return 1;
+      const c = (m.symptomConf || {})[value];
+      return c == null ? 1 : Math.max(TUNING.minSymptomConfidence, c);
+    };
+
     const creditSet = (values, facet) => {
       asList(values).map(norm).filter(Boolean).forEach(v => {
         const key = featureKey(facet, v);
         const w = rarity.weight(key);
         supplied += w;
-        if (have.has(key)) { raw += w; forEvidence.push({ facet, value: v, weight: +w.toFixed(3) }); }
-        else {
+        if (have.has(key)) {
+          const conf = confidenceOf(facet, v);
+          const credit = w * conf;
+          raw += credit;
+          const hit = { facet, value: v, weight: +credit.toFixed(3) };
+          if (conf < 1) hit.confidence = +conf.toFixed(2);
+          forEvidence.push(hit);
+        } else {
           const cost = w * TUNING.missFactor;
           raw -= cost;
           against.push({ facet, value: v, weight: -(+cost.toFixed(3)), why: "the statblock doesn't have this" });
