@@ -126,12 +126,24 @@ section("cr");
 /* ---------- 4. type with tags ---------- */
 section("type");
 {
-  assertEqual("a string type has no tags", N.typeInfo("dragon"), { type: "dragon", tags: [] });
+  assertEqual("a string type has no tags", N.typeInfo("dragon"), { type: "dragon", alt: [], tags: [] });
   assertEqual("an object type splits into type and tags",
-    N.typeInfo({ type: "humanoid", tags: ["elf"] }), { type: "humanoid", tags: ["elf"] });
+    N.typeInfo({ type: "humanoid", tags: ["elf"] }), { type: "humanoid", alt: [], tags: ["elf"] });
   assertEqual("...including the {tag, prefix} object form",
-    N.typeInfo({ type: "humanoid", tags: [{ tag: "goblinoid", prefix: "any" }] }), { type: "humanoid", tags: ["goblinoid"] });
-  assertEqual("a missing type yields empty rather than undefined", N.typeInfo(undefined), { type: "", tags: [] });
+    N.typeInfo({ type: "humanoid", tags: [{ tag: "goblinoid", prefix: "any" }] }), { type: "humanoid", alt: [], tags: ["goblinoid"] });
+  assertEqual("a missing type yields empty rather than undefined", N.typeInfo(undefined), { type: "", alt: [], tags: [] });
+
+  /* The Empyrean is "celestial or fiend" and the book does not choose. Nesting a
+     {choose} inside `type` is rare enough to look like a data error and common enough
+     to crash the ranker: before this was handled, `type` came back as an object and
+     every facet that lowercased it threw. */
+  assertEqual("a type the book leaves undecided keeps its first option as the type",
+    N.typeInfo({ type: { choose: ["celestial", "fiend"] } }), { type: "celestial", alt: ["fiend"], tags: [] });
+  assertEqual("...and an undecided type still carries its tags",
+    N.typeInfo({ type: { choose: ["celestial", "fiend"] }, tags: ["titan"] }).tags, ["titan"]);
+  assert("...and the type is always a string, whatever shape it arrived in",
+    ["dragon", { type: "humanoid" }, { type: { choose: ["fey"] } }, undefined, 7]
+      .every(t => typeof N.typeInfo(t).type === "string"));
 }
 
 /* ---------- 5. hp.special ---------- */

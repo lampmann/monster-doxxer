@@ -196,11 +196,24 @@
     if (sp.canHover) parts.push("(hover)");
     return { speeds, text: parts.join(", "), hover: !!sp.canHover };
   }
+  /* type is a string, or an object with tags, or — for a handful of planar things —
+     an object whose `type` is itself a {choose:[...]} of several creature types. The
+     Empyrean is celestial OR fiend and the book does not say which.
+
+     Both are kept. Under "rank, never filter" a monster that could be either should
+     be credited for either: a player who reports fighting a fiend has not ruled the
+     Empyrean out. `type` stays a string so every existing reader keeps working; the
+     alternates ride alongside in `alt`. */
   function typeInfo(t) {
-    if (typeof t === "string") return { type: t, tags: [] };
-    if (!t || typeof t !== "object") return { type: "", tags: [] };
+    if (typeof t === "string") return { type: t, alt: [], tags: [] };
+    if (!t || typeof t !== "object") return { type: "", alt: [], tags: [] };
     const tags = (t.tags || []).map(x => (typeof x === "string" ? x : (x && x.tag) || "")).filter(Boolean);
-    return { type: t.type || "", tags };
+    const inner = t.type;
+    if (inner && typeof inner === "object") {
+      const choices = asArray(inner.choose).filter(x => typeof x === "string");
+      return { type: choices[0] || "", alt: choices.slice(1), tags };
+    }
+    return { type: typeof inner === "string" ? inner : "", alt: [], tags };
   }
   function alignText(al) {
     const list = asArray(al);
@@ -296,7 +309,7 @@
       name: raw.name, source: raw.source || "", page: raw.page || null,
       key: raw.name + "|" + (raw.source || ""),
       size: asArray(raw.size).map(c => SIZES[c] || c),
-      type: ty.type, typeTags: ty.tags,
+      type: ty.type, typeAlt: ty.alt, typeTags: ty.tags,
       alignment: alignText(raw.alignment),
       ac, acText,
       hpAvg: hp.avg, hpFormula: hp.formula, hpSpecial: hp.special,

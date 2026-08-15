@@ -43,10 +43,17 @@
   "use strict";
 
   const TUNING = {
-    // What it costs when the player reported a feature and the candidate lacks it, as a
-    // fraction of that feature's rarity weight. Below 1 because the player may have
-    // misread what they saw; above 0 because they did, after all, see something.
-    missFactor: 0.6,
+    /* What it costs when the player reported a feature and the candidate lacks it, as a
+       fraction of that feature's rarity weight.
+
+       Guessed at 0.6 on the theory that the player may have misread what they saw. The
+       harness disagrees and the harness wins: recall climbs monotonically to ~1.3, and
+       1.0 is within noise of the best. The reasoning behind the guess was double-counting
+       — dropout already models the player failing to notice things, and it costs nothing
+       by design (F2). A feature they positively DID report and the candidate lacks is a
+       different and much stronger signal, and 1.0 says so: a miss costs exactly what a
+       match earns. (n=400, stray 0.3, swap 0.5: 53.5% at 0.6 -> 55.0% at 1.0.) */
+    missFactor: 1.0,
     // What a feature costs when the candidate has it and the player never mentioned it.
     // Deliberately zero: this is F2's whole point.
     unmentionedFactor: 0,
@@ -55,11 +62,30 @@
     // Records whose _copy only partially resolved are missing features they really have,
     // which would otherwise make them look like clean non-matches. Damp them slightly.
     partialPenalty: 0.9,
-    // Floor on a symptom's confidence multiplier (F8). A symptom attached by a loose prose
-    // regex is a weaker claim than one attached by a curated trait tag, and the credit
-    // should say so — but never all the way to zero, or a correct-but-uncertain match
-    // scores the same as no match at all.
-    minSymptomConfidence: 0.25,
+    /* Floor on a symptom's confidence multiplier (F8). A symptom attached by a loose prose
+       regex is a weaker claim than one attached by a curated trait tag, and the credit
+       should say so — but never all the way to zero.
+
+       THE HARNESS CANNOT SETTLE THIS ONE, and the number is a judgement call as a result.
+       It reports that discounting only hurts (55.0% at a floor of 1, i.e. no discount at
+       all, against 53.5% at 0.25) — but its symptom observations are drawn from each
+       monster's own tags, so every symptom it reports is true by construction. The case
+       discounting exists for, where a loose regex attached a symptom the monster cannot
+       actually produce, is precisely the case the harness never generates. 0.5 keeps the
+       discount at half strength for ~0.7 points of measured cost. Revisit when there is a
+       test set of real reports rather than synthesised ones. */
+    minSymptomConfidence: 0.5,
+    /* How hard a wrong damage interaction bites, scaling the DMG_COST matrix. Separate from
+       missFactor because a contradiction ("I saw it shrug off fire, this thing burns") is a
+       different claim from a plain absence.
+
+       The harness says 0 — never penalise a contradiction — at every lie rate tested. That
+       is a stronger claim than it can support: with only one true answer in 4,500, a
+       penalty mostly lands on the true monster (which carries the one planted lie) rather
+       than spreading over the wrong ones. 0.1 keeps F2's direction at a measured cost of
+       ~0.5 points. If a later harness still says 0, delete the penalty rather than keeping
+       a constant nothing supports. */
+    damageCostFactor: 0.1,
   };
 
   /* Damage-interaction cost matrix (F2). Never compare these as booleans: "resistant" when the
@@ -79,18 +105,32 @@
      Used both to build the rarity table and to score a query, so the two can
      never drift apart and start counting different things.
      ============================================================ */
+  /* Values are coerced with String() rather than assumed to be strings. The corpus is
+     whatever the user dropped in data/, 5e.tools' shapes drift between releases, and a
+     facet that throws takes down the whole ranking — a bad value should cost one
+     feature, not the run. */
+  const str = v => String(v == null ? "" : v).toLowerCase();
   const FACETS = {
-    type:        m => (m.type ? [m.type.toLowerCase()] : []),
-    typeTag:     m => (m.typeTags || []).map(t => t.toLowerCase()),
-    size:        m => (m.size || []).map(s => s.toLowerCase()),
+    // An Empyrean is "celestial or fiend"; reporting either should credit it (see typeInfo).
+    type:        m => [m.type].concat(m.typeAlt || []).filter(Boolean).map(str),
+    typeTag:     m => (m.typeTags || []).map(str),
+    size:        m => (m.size || []).map(str),
     movement:    m => Object.keys(m.speeds || {}).filter(k => k !== "walk" && m.speeds[k] > 0),
     hover:       m => (m.hover ? ["hover"] : []),
-    sense:       m => (m.senseTags || []).map(s => s.toLowerCase()),
-    condImmune:  m => (m.conditionImmune || []).map(c => c.toLowerCase()),
-    traitTag:    m => (m.traitTags || []).map(t => t.toLowerCase()),
-    actionTag:   m => (m.actionTags || []).map(t => t.toLowerCase()),
-    damageDealt: m => (m.damageTags || []).map(t => String(t).toLowerCase()),
+    sense:       m => (m.senseTags || []).map(str),
+    condImmune:  m => (m.conditionImmune || []).map(str),
+    traitTag:    m => (m.traitTags || []).map(str),
+    actionTag:   m => (m.actionTags || []).map(str),
+    damageDealt: m => (m.damageTags || []).map(str),
     symptom:     m => (m.symptoms || []),          // attached at index time by symptoms.js (F8)
+    /* Damage interactions are facets so that the rarity table COUNTS them. They are
+       scored through the cost matrix below rather than by set membership, but a weight
+       is only meaningful if something counted the feature: an uncounted key falls to the
+       floor and comes back worth maxWeight, i.e. rarer than anything real. Fire immunity
+       is 7% of the corpus and must be priced like it. */
+    immune:      m => (m.immune || []).map(str),
+    resist:      m => (m.resist || []).map(str),
+    vuln:        m => (m.vulnerable || []).map(str),
   };
   const FACET_KEYS = Object.keys(FACETS);
 
@@ -147,6 +187,23 @@
 
   const asList = v => (v == null ? [] : Array.isArray(v) ? v : [v]);
   const norm = v => String(v).trim().toLowerCase();
+
+  const DMG_FACET = { immune: "immune", resistant: "resist", vulnerable: "vuln" };
+
+  /* What a reported damage interaction is worth, from the same rarity table as everything
+     else (F1). "Immune to fire" is rare and therefore strong; "it took normal damage from
+     fire" is what almost every monster does and is therefore nearly worthless — but not
+     worthless, since it does rule out three states.
+
+     `normal` has no facet of its own because it is the absence of the other three, so its
+     count is derived: total minus everything that interacts with that type. */
+  function damageWeight(rarity, state, type) {
+    if (state !== "normal") return rarity.weight(featureKey(DMG_FACET[state], type));
+    const interacting = ["immune", "resist", "vuln"]
+      .reduce((n, f) => n + (rarity.counts[featureKey(f, type)] || 0), 0);
+    const plain = Math.max(0.5, rarity.total - interacting);
+    return Math.min(TUNING.maxWeight, -Math.log(plain / rarity.total));
+  }
 
   function candidateFeatureSet(m) {
     const set = new Set();
@@ -207,12 +264,12 @@
         /* Weight by the rarity of the state the PLAYER reported, not of the one the statblock
            has: "immune to fire" is a much stronger clue than "took normal damage from fire",
            and it stays the strong clue whether or not this candidate happens to match it. */
-        const w = r === "normal" ? 0.5 : rarity.weight(featureKey(r === "resistant" ? "resist" : r === "immune" ? "immune" : "vuln", t)) || 1;
+        const w = damageWeight(rarity, r, t);
         const cost = DMG_COST[r][actual];
         supplied += w;
         if (cost === 0) { raw += w; forEvidence.push({ facet: "damage", value: `${t}: ${r}`, weight: +w.toFixed(3) }); }
         else {
-          const penalty = w * cost * 0.5;
+          const penalty = w * cost * TUNING.damageCostFactor;
           raw -= penalty;
           against.push({ facet: "damage", value: `${t}: ${r}`, weight: -(+penalty.toFixed(3)),
                          why: `the statblock says ${actual}` });
