@@ -32,7 +32,8 @@
   /* ---------- state ---------- */
   const S = {
     monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
-    obs: { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {} },
+    appearanceIndex: null, sizeFromProse: "",
+    obs: { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "" },
     ac: null, hp: null, retuned: false,
     sources: {},              // { CODE: "ignore" | "include" | "exclude" }
     ranked: [], selected: null,
@@ -119,6 +120,18 @@
     // Release order, for the tie-break. Optional data, so this degrades rather than fails.
     S.legacy = window.buildLegacy(S.monsters, window.sourceDates(catalogue));
 
+    /* F10's index. Fluff is optional too: without it the description documents still carry
+       name, size, type and trait names, which is thin but not nothing. */
+    const fidx = await getJsonOptional("data/bestiary/fluff-index.json");
+    const fluffLists = [];
+    if (fidx) {
+      await Promise.all(Object.values(fidx).map(async f => {
+        const j = await getJsonOptional("data/fluff-bestiary/" + f);
+        if (j && Array.isArray(j.monsterFluff)) fluffLists.push(j.monsterFluff);
+      }));
+    }
+    S.appearanceIndex = window.buildAppearanceIndex(S.monsters, window.fluffMap(fluffLists));
+
     status.textContent = `${S.monsters.length} monsters, ${S.ontology.symptoms.length} symptoms` +
       (books || adventures ? "" : " (add data/books.json for book titles)");
 
@@ -149,12 +162,15 @@
     $("in-ac").value = S.ac == null ? "" : S.ac;
     $("in-hp").value = S.hp == null ? "" : S.hp;
     $("in-retuned").checked = S.retuned;
+    $("in-appearance").value = S.obs.appearance || "";
   }
   function clearSession() {
-    S.obs = { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {} };
+    S.obs = { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "" };
+    S.sizeFromProse = "";
     S.ac = S.hp = null; S.retuned = false; S.sources = {}; S.selected = null;
     $("in-ac").value = ""; $("in-hp").value = ""; $("in-retuned").checked = false;
     $("sym-search").value = "";
+    $("in-appearance").value = "";
     persist(); renderAll();
   }
 
@@ -234,6 +250,7 @@
     };
     if (S.obs.type) obs.type = S.obs.type;
     if (S.obs.size) obs.size = S.obs.size;
+    if (S.obs.appearance) obs.appearance = S.obs.appearance;
     if (typeof S.ac === "number") obs.ac = S.ac;
     if (typeof S.hp === "number") obs.hp = S.hp;
     return obs;
@@ -287,9 +304,13 @@
     }
 
     const spec = window.toSpec(S.sources);
+    /* F10 is scored against the whole collection at once — BM25 needs the collection —
+       so it is computed here and handed in, rather than recomputed per candidate. */
+    const appearanceScores = obs.appearance && S.appearanceIndex
+      ? window.appearanceScore(obs.appearance, S.appearanceIndex) : null;
     const ranked = window.rank(S.monsters, obs, S.rarity, {
       sources: spec, numerics: S.numerics, retuned: S.retuned, legacy: S.legacy,
-      collapseByName: true, limit: WINDOW, keepMonster: true,
+      appearanceScores, collapseByName: true, limit: WINDOW, keepMonster: true,
     });
     S.ranked = ranked;
 
@@ -404,6 +425,7 @@
   }
 
   function renderAll() {
+    applyProseSize();
     renderPickers(); renderDamage(); renderSymptoms(); renderSources();
     renderCrHint(); renderResults(); renderSuggestions(); renderDetail();
   }
@@ -424,6 +446,8 @@
       const field = pick.dataset.pick, val = pick.dataset.val;
       if (PICKERS[field].multi) toggleIn(S.obs[field], val);
       else S.obs[field] = S.obs[field] === val ? "" : val;      // clicking the chosen one clears it
+      // A size the user clicked is theirs; stop F11 overwriting it on the next keystroke.
+      if (field === "size") { S.sizeFromProse = ""; applyProseSize(); }
       persist(); renderPickers(); renderResults(); renderSuggestions();
       return;
     }
@@ -507,8 +531,41 @@
     }
   });
 
+  /* F11 — size out of the description.
+
+     Size is a tier 1 structural fact, so a size read out of prose earns FULL weight
+     through the ordinary size facet, while the rest of the sentence stays a capped
+     bonus. It is applied rather than merely offered, because a player who wrote "about
+     horse-sized" has told us the size and should not have to say it twice — but it is
+     shown, with the words that produced it, and a manual pick always wins. Silently
+     inferring a tier 1 fact and never mentioning it would be the wrong trade. */
+  function applyProseSize() {
+    const el = $("size-read");
+    const read = window.extractSize(S.obs.appearance);
+    if (!read) {
+      if (S.sizeFromProse && S.obs.size === S.sizeFromProse) S.obs.size = "";
+      S.sizeFromProse = "";
+      el.textContent = "";
+      return;
+    }
+    // Only ever overwrite a size this same mechanism set; never a chip the user clicked.
+    if (!S.obs.size || S.obs.size === S.sizeFromProse) {
+      S.obs.size = read.size;
+      S.sizeFromProse = read.size;
+      el.textContent = `Read as ${read.size} — from ${read.via}. Click a size to override.`;
+    } else {
+      el.textContent = `That sounds ${read.size} (${read.via}), but you chose ${S.obs.size}.`;
+    }
+  }
+
   document.addEventListener("input", e => {
     if (e.target.id === "sym-search") { renderSymptoms(); return; }
+    if (e.target.id === "in-appearance") {
+      S.obs.appearance = e.target.value;
+      applyProseSize();
+      persist(); renderPickers(); renderResults(); renderSuggestions();
+      return;
+    }
     if (e.target.id === "in-ac" || e.target.id === "in-hp") {
       const v = e.target.value === "" ? null : Number(e.target.value);
       const ok = v == null || (Number.isFinite(v) && v > 0);

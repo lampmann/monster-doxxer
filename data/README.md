@@ -12,6 +12,8 @@ data/
     bestiary-mm.json
     bestiary-vgm.json
     ...
+  bestiary/
+    fluff-index.json       (optional — the manifest for the fluff files below)
   fluff-bestiary/          (optional — appearance matching only)
     fluff-bestiary-mm.json
     ...

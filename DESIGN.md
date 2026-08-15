@@ -18,14 +18,14 @@ this file is where it meets reality and where it has been deviated from.
 | Source filter (F16) | Built, tri-state include/exclude, 32 assertions. |
 | Session evidence (F15) | Built — observations persist across a reload. |
 | Discriminating tests (F13) | Built, 41 assertions, and measured. |
-| Appearance (F10–F12) | Not started. The last unbuilt feature. |
+| `src/appearance.js` | F10 (lexical half), F11, F12 built, 45 assertions. **Embeddings not built** — below. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
 ```
                           top-1    top-5   top-20   median rank
-handoff §6 corruption     41.0%    65.8%    83.2%       2
-+ misremembering          38.2%    62.6%    79.8%       3
+handoff §6 corruption     41.2%    67.4%    82.2%       2
++ a description (F10)     49.4%    73.0%    86.4%       2
 ```
 
 ## Decisions
@@ -105,6 +105,53 @@ crashed every facet that lowercased it; `damageTags` were passed through as 5e.t
 letters, so an observation of `fire` could never match `"F"`; and a symptom candidate whose regex
 failed to compile matched *every* monster rather than none.
 
+## Appearance, and the half of F10 that is missing
+
+`src/appearance.js` builds a BM25 index over a synthesised description document per
+monster — name, size, type, tags, the opening fluff, and the names of its traits and
+actions. Trait names matter more than they look: "Web", "Pounce", "Death Burst" are things
+a player *saw*, and they exist for every monster including the quarter with no fluff prose.
+
+**F11 pulls size out of the prose before anything else is scored,** which is the highest-value
+line in the feature. "About horse-sized" becomes Large and earns full tier 1 weight through
+the ordinary size facet, while the rest of the sentence stays a capped bonus. The handoff says
+"before you score it" and it is right for a reason that only shows up when you run it: leave
+the phrase in and BM25 obligingly returns **Draft Horse and Riding Horse**, because the word
+was doing duty as a unit of measurement rather than describing a horse. Stripping it moved
+Yeti from 5th to 3rd on that query.
+
+**F12 downweights colour to a fifth and upweights morphology and texture.** IDF already
+handles "rare words matter"; what it cannot know is that some words are rare *and*
+unreliable. Colour is the first thing a DM changes.
+
+**The bonus is applied after F7 normalisation and never enters the denominator.** That is what
+makes tier 3 actually safe: a description can only ever add. If it fed the denominator, every
+monster that failed to match would be diluted by it — a penalty wearing a bonus's clothes, and
+precisely the thing that would punish a correctly-identified but reflavoured monster.
+
+### What it is worth, and two measurements that disagree for a good reason
+
+The harness paraphrases a monster by sampling visual words out of its own fluff:
+**64.3% → 74.3% top-5** on the same sample. That is a real gain and it is also an upper bound,
+because the query uses the book's vocabulary.
+
+`node eval/appearance.js` is the other measurement: sixteen hand-written queries in the words
+somebody would actually use. **8/16 in the top 5, median rank 6, one never found.** Gelatinous
+Cube, Manticore, Shambling Mound, Rust Monster and Death Dog land in the top three. Beholder
+does not — the player says a floating *orb*, the Monster Manual says the body is *spheroid*,
+and no amount of lexical matching bridges that.
+
+That gap is the embedding half of F10, and it is **not built**. It needs a model, a Python
+build step and a shipped vector index, and the honest position is that the lexical half was
+worth building first and measuring before taking that on. `eval/appearance.js` exists so that
+if embeddings are ever built, there is a number that has to move.
+
+Two things were tried and reported rather than quietly dropped. Varying how much fluff to index
+(1 to 10 paragraphs) changes almost nothing. And a `--synonyms` knob that swaps the book's word
+for the player's ("spheroid" → "orb") fires in a third of queries and moves recall by nothing at
+all: losing *one* word out of six barely dents BM25. The catastrophic case is a description
+where *every* word is the player's own, which is exactly what the hand-written benchmark is.
+
 ## The legacy prior, and a bug it uncovered
 
 Ties are settled by a prior on which monster a party is likelier to have fought, approximated from
@@ -144,6 +191,7 @@ all equally well founded.
 | `partialPenalty` | 0.9 | Not yet swept; affects 202 records. |
 | `acWeight` / `hpWeight` | 3.2 | Swept. Minimax, not best-case — see below. |
 | `NUMERIC.mode` | `raw` | Measured against three alternatives; see F5 above. |
+| `appearanceCap` | 0.25 | Swept — and overruled, see below. |
 
 Two of these deserve their caveats stated rather than buried.
 
@@ -160,6 +208,13 @@ tags, so every symptom it generates is true by construction — and the case the
 where a loose regex attached a symptom the monster cannot actually produce, is exactly the case the
 harness never generates. Set to 0.5, half strength, for ~0.7 points. This needs a test set of real
 player reports, which does not exist yet.
+
+**`appearanceCap` — the harness says 0.6 and it is being overruled to 0.25.** Recall climbs
+as the appearance bonus is allowed to grow, but the harness's descriptions are drawn from the
+book's own vocabulary, so appearance is unusually *reliable* there. On real paraphrase it hits
+8 of 16, and a cap of 0.6 would let a bad prose match outrank a monster whose mechanics fit —
+exactly what F3's tier 3 exists to prevent, and worst precisely when the DM has reflavoured.
+0.25 keeps 74.0% of the available 75.3%.
 
 **`acWeight` / `hpWeight` — chosen to be never much worse, not to win.** Recall keeps climbing as
 the numbers are trusted more, up to about 6 nats, *provided the monster is at its book numbers*.

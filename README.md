@@ -8,11 +8,13 @@ monster explains them.
 
 **Status: early, but usable, and the numbers are measured.** The normalisation pipeline, the
 evidence scorer, the symptom ontology and the browser UI all exist and are tested, and an
-evaluation harness picks the scoring constants instead of leaving them to taste. Appearance
-matching is the one feature still unbuilt. See [DESIGN.md](DESIGN.md) for what's built and what isn't.
+evaluation harness picks the scoring constants instead of leaving them to taste. Every feature in
+the original design is built except the embedding half of appearance matching. See
+[DESIGN.md](DESIGN.md) for what's built, what isn't, and what the numbers rest on.
 
 Against the full 4,528-monster corpus, given the observations a party would plausibly have after
-one fight: **the right monster is in the top 5 about 67% of the time**, with a median rank of 2.
+one fight: **the right monster is in the top 5 about 67% of the time**, and 73% if they can also
+say what it looked like. Median rank 2.
 
 ## The one idea
 
@@ -61,6 +63,21 @@ everything else&rdquo;: nobody should have to click 106 books to hide one.
 
 Observations persist across a reload, so you can keep adding to them as the fight goes on.
 
+## Describing it
+
+Type what it looked like in your own words. Two things happen:
+
+- Size gets pulled out and used properly — "about horse-sized" becomes Large, which is a
+  structural fact and counts for full weight. The tool tells you it did that, and you can
+  override it.
+- The rest is matched against the books' descriptions as a **capped bonus that can never
+  count against a monster**. If your DM repainted the thing purple, saying so must not push
+  the real answer down the list.
+
+Distinctive nouns work best — *carapace*, *tentacles*, *eyestalks*. Paraphrase is weaker: the
+tool matches words, and the Monster Manual says a beholder is "spheroid" where you'd say "a
+floating orb". `node eval/appearance.js` measures exactly that gap.
+
 ## What to try next
 
 Three or four observations usually leave a dozen monsters that explain them equally well. When that
@@ -94,6 +111,7 @@ node eval/run.js --sweep missFactor  # re-derive a scoring constant
 node eval/run.js --show 10           # the worst failures, with reasons
 node eval/run.js --cr-shift 4        # what if the DM rebuilt it four CRs up?
 node eval/run.js --suggest           # does F13's advice actually beat guessing?
+node eval/appearance.js              # 16 hand-written descriptions, known answers
 node eval/coverage.js                # how the symptom ontology lands on real prose
 ```
 

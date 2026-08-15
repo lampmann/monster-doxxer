@@ -15,6 +15,7 @@ const path = require("path");
 const N = require("../src/normalize.js");
 const SY = require("../src/symptoms.js");
 const SRC = require("../src/sources.js");
+const APP = require("../src/appearance.js");
 
 const ROOT = path.join(__dirname, "..");
 const BESTIARY = path.join(ROOT, "data", "bestiary");
@@ -85,12 +86,48 @@ function load(opts) {
   const catalogue = SRC.buildCatalogue(readOptional("books.json"), readOptional("adventures.json"));
   const sourceDates = SRC.sourceDates(catalogue);
 
+  /* Fluff, for F10's appearance index. Also optional: without it the description
+     documents still exist (name, size, type, trait names) and simply carry no prose. */
+  const fluffDir = path.join(ROOT, "data", "fluff-bestiary");
+  const fluffLists = [];
+  if (fs.existsSync(fluffDir)) {
+    fs.readdirSync(fluffDir).filter(f => /\.json$/.test(f)).forEach(f => {
+      try {
+        const j = readJson(path.join(fluffDir, f));
+        if (Array.isArray(j.monsterFluff)) fluffLists.push(j.monsterFluff);
+      } catch (e) { badFiles.push(f + ": " + e.message); }
+    });
+  }
+  const fluff = APP.fluffMap(fluffLists);
+  const appearanceIndex = APP.buildAppearanceIndex(monsters, fluff);
+  /* What a party could say about how it LOOKED, for the harness to paraphrase back.
+
+     Deliberately NOT the description document the scorer indexes. That document leads with
+     the monster's name and its trait names, and paraphrasing it produced queries containing
+     the word "beholder" — which took top-5 recall to 89.5% by handing the answer over. A
+     player who knew the name would not be using this tool.
+
+     So: the fluff prose only, with any word from the creature's own name stripped out. What
+     is left is what somebody actually saw. */
+  const documents = Object.create(null);
+  monsters.forEach(m => {
+    const f = fluff[String(m.name).toLowerCase() + "|" + String(m.source || "").toLowerCase()];
+    if (!f || !f.entries) return;                       // nothing to describe it from
+    // Stems, not exact words: "beholders" was surviving a filter that only removed "beholder".
+    const nameStems = new Set(String(m.name).toLowerCase().split(/[^a-z]+/).filter(Boolean).map(APP.stem));
+    const prose = APP.fluffProse(f.entries, 4)
+      .split(/\s+/)
+      .filter(w => !nameStems.has(APP.stem(w.toLowerCase().replace(/[^a-z]/g, ""))))
+      .join(" ");
+    if (prose.trim()) documents[m.key] = prose;
+  });
+
   cached = { monsters, skipped, badFiles, ontology: compiled, files: files.length,
-             catalogue, sourceDates };
+             catalogue, sourceDates, fluff, appearanceIndex, documents };
   if (!o.quiet) {
     process.stdout.write(
       `corpus: ${monsters.length} monsters from ${files.length} files, ` +
-      `${compiled.symptoms.length} symptoms` +
+      `${compiled.symptoms.length} symptoms, ${appearanceIndex.withProse} described` +
       (skipped.length ? `, ${skipped.length} skipped` : "") +
       (badFiles.length ? `, ${badFiles.length} unreadable files` : "") + "\n");
   }

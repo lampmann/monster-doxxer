@@ -33,6 +33,15 @@
     </div>
 
     <div class="module">
+      <h2>What did it look like?</h2>
+      <span class="hint block">Your words, not the book's. This can only ever help a monster's
+        score &mdash; it never counts against one, because reflavouring is exactly the case
+        where the description is wrong and the monster is right.</span>
+      <input type="text" class="txt" id="in-appearance" placeholder="big hairy ape thing, white fur&hellip;" autocomplete="off">
+      <div class="hint" id="size-read"></div>
+    </div>
+
+    <div class="module">
       <h2>What was it like?</h2>
       <div class="chiprow"><span class="hint">Type</span><br><span id="pick-type"></span></div>
       <div class="chiprow"><span class="hint">Size</span><br><span id="pick-size"></span></div>
@@ -96,6 +105,7 @@
 
 <script src="src/normalize.js"></script>
 <script src="src/symptoms.js"></script>
+<script src="src/appearance.js"></script>
 <script src="src/score.js"></script>
 <script src="src/discriminate.js"></script>
 <script src="src/sources.js"></script>

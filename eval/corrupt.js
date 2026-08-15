@@ -22,18 +22,18 @@
      4. Swap one damage resistance.  A wrong observation, not a missing one —
         this is the step that tests F2's asymmetry, and the only step that can
         make the true answer score BELOW a wrong one.
-     5. Paraphrase the appearance.  Not yet: there is no appearance scorer
-        (F10–F12), so generating the text would measure nothing. Named in
-        `unmodelled` below rather than silently skipped.
+     5. Paraphrase the appearance.  Not a paraphrase of the book's prose — the
+        eight words a player would offer from memory, weighted towards the shape
+        of the thing, and half the time repainted a different colour. See the
+        long note on it below; it is the only place reflavouring is modelled.
 
    WHAT THIS MODEL DOES NOT CAPTURE, and why the numbers it produces are an upper
    bound rather than a prediction:
 
      - Every observation here is drawn from the statblock, so it is at worst
-       incomplete or perturbed. A real player misremembers, conflates two
-       creatures, and reports things that were never true.
-     - Reflavouring is not modelled at all, because the fields it would corrupt
-       (appearance) are not yet scored.
+       incomplete or perturbed. `strayRate` and the recolouring make some of it
+       false, but a real player also conflates two creatures and reports things
+       that were never true of either.
      - The corrupted monster is still IN the corpus being searched. A homebrew
        monster that simply is not in any book is the case the confidence floor
        has to handle, and this harness says nothing about it.
@@ -41,8 +41,6 @@
 "use strict";
 
 const UNMODELLED = [
-  "appearance paraphrase (F10-F12 not built)",
-  "reflavouring",
   "two monsters merged into one set of observations",
   "a homebrew monster that is not in the corpus at all",
 ];
@@ -79,7 +77,49 @@ const DEFAULTS = {
   damageTestRate: 0.35,   // chance a given damage interaction was tested at all
   strayRate: 0,           // probability each surviving set field gains a false observation
   crShift: 0,             // CR steps the DM rebuilt the monster by, +/- — see below
+  describeRate: 0,        // probability the party describes what it looked like at all
+  describeWords: 6,       // how many words they remember
+  recolourRate: 0.5,      // probability the DM had reflavoured the colour — see below
+  synonymRate: 0,         // probability a book word is said in the player's words instead
 };
+
+/* ON synonymRate — the vocabulary gap, and the whole case for embeddings.
+
+   Sampling words out of the book's own prose measures BM25 at its best: the query is
+   literally drawn from the document it has to match. Real players do not talk like the
+   Monster Manual. The book says a beholder's body is SPHEROID; the player says it was a
+   floating ORB. The book says INSECTILE and FERROUS; the player says bug and metal.
+
+   Every substitution below is a word the books actually use paired with what somebody
+   would say instead. Turning this up is the experiment that says how much of F10 the
+   lexical half can carry, and therefore whether the embedding half is worth a model, a
+   Python build step and a shipped vector index. */
+const SYNONYMS = {
+  spheroid: "orb", spherical: "ball", globular: "round",
+  insectile: "insect", insectoid: "bug", chitinous: "shell", carapace: "shell",
+  mandible: "jaw", proboscis: "snout", ferrous: "metal",
+  serpentine: "snakelike", sinuous: "snaky", undulating: "rippling", writhing: "squirming",
+  avian: "bird", ursine: "bear", feline: "cat", lupine: "wolf", equine: "horse",
+  gelatinous: "jelly", translucent: "see-through", iridescent: "shimmering",
+  luminous: "glowing", phosphorescent: "glowing", incandescent: "burning",
+  emaciated: "skinny", corpulent: "fat", bulbous: "bulging", diminutive: "tiny",
+  vestigial: "useless", prehensile: "gripping", appendage: "limb",
+  visage: "face", maw: "mouth", talon: "claw", tendril: "tentacle",
+  putrid: "rotting", fetid: "stinking", desiccated: "dried",
+  humanoid: "person-shaped", quadruped: "four-legged", plumage: "feathers",
+};
+
+/* ON THE APPEARANCE PARAPHRASE (§6 step 5, and F10-F12).
+
+   A player does not paraphrase the Monster Manual. They describe a thing they saw once,
+   from memory, in about eight words, and they remember its SHAPE far better than its
+   colour. So the model is: take the monster's description document, keep a handful of
+   content words biased towards morphology, and — half the time — repaint it, because
+   the DM who wants to preserve a surprise changes the colour and nothing else.
+
+   That last step is the only place reflavouring is modelled anywhere in this harness,
+   and it is the exact thing F12's colour downweighting exists to survive. A scorer that
+   trusts colour will be punished here, which is the point. */
 
 /* ON strayRate. The handoff corrupts damage and nothing else, which makes damage the only
    witness in the model that ever lies. Any constant chosen against that model will say to
@@ -203,6 +243,16 @@ function corrupt(m, r, opts) {
     if (obs.hp !== full.hp) notes.push(`hp ${full.hp} -> ${obs.hp}`);
   }
 
+  /* 5. Describe it. Only sometimes: plenty of parties never volunteer a description,
+     and the ones who do give a few words rather than a paragraph. */
+  if (o.describeRate > 0 && o.documents && r() < o.describeRate) {
+    const text = o.documents[m.key];
+    if (text) {
+      const said = paraphrase(text, r, o);
+      if (said) { obs.appearance = said; notes.push(`described as "${said}"`); }
+    }
+  }
+
   /* 4. Swap one damage interaction to something untrue. The single step that can push
      the correct answer below a wrong one, so it is what actually tests F2. */
   if (o.swapResistance && obs.damage && r() < o.swapRate) {
@@ -244,5 +294,54 @@ function buildVocab(monsters) {
   return vocab;
 }
 
+/* Words the paraphrase can repaint with. Deliberately the same list the scorer
+   downweights, so a recoloured description is one the scorer could be fooled by. */
+const PALETTE = ["red", "green", "blue", "black", "white", "grey", "brown", "purple",
+  "golden", "pale", "crimson", "ashen"];
+
+/* Turn a monster's description document into the eight words a player would offer.
+   `describe` and `isMorphology` come from src/appearance.js, passed in rather than
+   imported so this file keeps no opinion about how documents are built. */
+function paraphrase(text, r, o) {
+  const words = String(text || "").toLowerCase().replace(/[^a-z\s-]/g, " ").split(/[\s-]+/)
+    .filter(w => w.length > 3);
+  if (!words.length) return "";
+
+  const isColour = o.isColour || (() => false);
+  const isMorph = o.isMorphology || (() => false);
+  /* A word counts as sayable if it is plain visual vocabulary OR one of the book's fancier
+     description words. The fancy ones have to be in the pool for synonymRate to have
+     anything to substitute — that is the whole vocabulary-gap experiment. */
+  const plainVisual = o.isVisual || (() => true);
+  const isVisual = w => plainVisual(w) || Object.prototype.hasOwnProperty.call(SYNONYMS, w);
+
+  /* Draw from the words a player could plausibly have SAID, not from the book's prose at
+     large. Without this the sample was 96% lore vocabulary — "windborne family nature
+     civilized" for a yeti — and BM25 scored 84% because a bag of seven words lifted
+     verbatim out of a document is very nearly a fingerprint for it. That measured
+     document retrieval, not monster identification. */
+  const visual = words.filter(isVisual);
+  if (visual.length < 3) return "";        // nothing visual on record: the party says nothing
+  const pool = visual.map(w => ({ w, weight: isMorph(w) ? 3 : isColour(w) ? 1.5 : 1 }));
+  const kept = [];
+  const want = Math.min(o.describeWords || 6, pool.length);
+  while (kept.length < want && pool.length) {
+    let total = pool.reduce((n, x) => n + x.weight, 0);
+    let roll = r() * total, i = 0;
+    while (i < pool.length - 1 && (roll -= pool[i].weight) > 0) i++;
+    const [taken] = pool.splice(i, 1);
+    if (!kept.includes(taken.w)) kept.push(taken.w);
+  }
+
+  const recolour = o.recolourRate == null ? 0.5 : o.recolourRate;
+  return kept.map(w => {
+    // The DM repainted it. Everything else about the description stays true.
+    if (isColour(w) && r() < recolour) return pick(r, PALETTE);
+    // The player says it in their own words rather than the book's.
+    if (SYNONYMS[w] && r() < (o.synonymRate || 0)) return SYNONYMS[w];
+    return w;
+  }).join(" ");
+}
+
 module.exports = { rng, pick, shuffled, corrupt, corruptViable, fullObservation, buildVocab,
-                   DEFAULTS, DAMAGE_TYPES, SET_FIELDS, UNMODELLED };
+                   paraphrase, PALETTE, SYNONYMS, DEFAULTS, DAMAGE_TYPES, SET_FIELDS, UNMODELLED };

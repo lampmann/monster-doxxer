@@ -30,10 +30,11 @@ const { load } = require("./corpus.js");
 const CORRUPT = require("./corrupt.js");
 const S = require("../src/score.js");
 const D = require("../src/discriminate.js");
+const APP = require("../src/appearance.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "" };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0 };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -47,6 +48,8 @@ function parseArgs(argv) {
     else if (a === "--swap") out.swap = Number(next());
     else if (a === "--cr-shift") out.crShift = Number(next());
     else if (a === "--numeric") out.mode = next();
+    else if (a === "--describe") out.describe = Number(next());
+    else if (a === "--synonyms") out.synonyms = Number(next());
     else if (a === "--quiet") out.quiet = true;
     else if (a === "--help" || a === "-h") { console.log(HELP); process.exit(0); }
   }
@@ -64,6 +67,8 @@ const HELP = `eval/run.js — corrupt real statblocks, measure top-5 recall
   --swap <0..1>     rate at which a query carries a wrong damage interaction
   --cr-shift <n>    CR steps the DM rebuilt the monster by (tests F5)
   --numeric <mode>  hybrid | raw | residual | off
+  --describe <0..1> rate at which the party describes what it looked like (F10-F12)
+  --synonyms <0..1> rate at which they use their own words, not the book's
   --quiet           results only`;
 
 /* ---------- one measurement ----------
@@ -94,7 +99,12 @@ function measure(monsters, rarity, opts) {
     if (o.drop) delete c.obs[o.drop];
     if (!S.hasEvidence(c.obs)) { unusable++; continue; }
 
-    const ranked = S.rank(monsters, c.obs, rarity, o.score);
+    /* F10 is scored against the whole collection at once, so it is computed here and
+       handed to rank() rather than recomputed per candidate. */
+    const scoreOpts = c.obs.appearance && o.appearanceIndex
+      ? Object.assign({}, o.score, { appearanceScores: APP.appearanceScore(c.obs.appearance, o.appearanceIndex) })
+      : o.score;
+    const ranked = S.rank(monsters, c.obs, rarity, scoreOpts);
     const nameWanted = m.name.toLowerCase();
     let rankName = -1, rankKey = -1;
     for (let j = 0; j < ranked.length; j++) {
@@ -146,9 +156,15 @@ function opts(args, extra) {
   return Object.assign({
     n: args.n, seed: args.seed, vocab: args.vocab,
     corrupt: { strayRate: args.stray, swapRate: args.swap,
-               crShift: args.crShift, numerics: args.numerics },
+               crShift: args.crShift, numerics: args.numerics,
+               describeRate: args.describe, documents: args.documents,
+               synonymRate: args.synonyms,
+               isColour: w => APP.COLOURS.has(APP.stem(w)),
+               isMorphology: w => APP.MORPHOLOGY.has(APP.stem(w)),
+               isVisual: APP.isVisual },
     numerics: args.numerics,
     score: { numerics: args.numerics, numericMode: args.mode || undefined, legacy: args.legacy },
+    appearanceIndex: args.appearanceIndex,
   }, extra || {});
 }
 
@@ -302,12 +318,14 @@ function suggestion(monsters, rarity, args) {
 /* ---------- main ---------- */
 function main() {
   const args = parseArgs(process.argv);
-  const { monsters, sourceDates, ontology } = load({ quiet: args.quiet });
+  const { monsters, sourceDates, ontology, appearanceIndex, documents } = load({ quiet: args.quiet });
   const rarity = S.buildRarity(monsters);
   args.vocab = CORRUPT.buildVocab(monsters);
   args.numerics = S.buildNumerics(monsters);
   args.legacy = S.buildLegacy(monsters, sourceDates);
   args.ontology = ontology;
+  args.appearanceIndex = appearanceIndex;
+  args.documents = documents;
 
   if (args.sweep) return sweep(monsters, rarity, args, args.sweep);
   if (args.ablate) return ablate(monsters, rarity, args);

@@ -86,6 +86,11 @@
        ~0.5 points. If a later harness still says 0, delete the penalty rather than keeping
        a constant nothing supports. */
     damageCostFactor: 0.1,
+    /* The ceiling on F10's appearance bonus, on the same 0..1 scale as the score itself.
+       A cap is what makes tier 3 safe: a perfect prose match is worth a good shove up the
+       list, never enough to outrank a monster that matches the mechanics. Swept — see
+       DESIGN.md's appearance section. */
+    appearanceCap: 0.25,
   };
 
   /* Damage-interaction cost matrix (F2). Never compare these as booleans: "resistant" when the
@@ -534,7 +539,33 @@
     if (m.partial) raw *= TUNING.partialPenalty;
 
     // F7 — normalise by the evidence actually supplied, so queries of different sizes compare.
-    const score = supplied > 0 ? raw / supplied : 0;
+    let score = supplied > 0 ? raw / supplied : 0;
+
+    /* F10/F12 — appearance, as a capped bonus ADDED AFTER normalisation.
+
+       Two properties this has to have, and both fall out of where it is applied:
+
+       It can never subtract. A player describing a purple owlbear must not push the
+       owlbear down the list — reflavouring is precisely the case where the description
+       is wrong and the monster is right (F3, tier 3).
+
+       It does not enter the F7 denominator. If it did, every monster that failed to
+       match the description would be diluted by it, which is a penalty wearing a
+       bonus's clothes. Adding it after normalisation also keeps the bonus on the same
+       0..1 scale whatever else the query contains, instead of being divided by a small
+       `supplied` and swamping a two-field query.
+
+       The caller passes a precomputed Map of key -> fit, built by src/appearance.js.
+       Deliberately not imported: BM25 needs the whole collection at once, so scoring it
+       per candidate would be wasteful, and score.js stays free of dependencies. */
+    if (o.appearanceScores) {
+      const fit = o.appearanceScores.get(m.key) || 0;
+      if (fit > 0) {
+        const bonus = Math.min(TUNING.appearanceCap, fit * TUNING.appearanceCap);
+        score += bonus;
+        forEvidence.push({ facet: "appearance", value: "looked the part", weight: +bonus.toFixed(3) });
+      }
+    }
     return {
       key: m.key, name: m.name, source: m.source, srd: !!m.srd, cr: m.cr,
       monster: o.keepMonster ? m : undefined,
@@ -709,7 +740,10 @@
     const fields = Object.keys(SCALAR_FIELDS).concat(Object.keys(SET_FIELDS));
     if (fields.some(f => asList(obs[f]).filter(Boolean).length)) return true;
     if (obs.damage && Object.keys(obs.damage).length) return true;
-    return typeof obs.ac === "number" || typeof obs.hp === "number";
+    if (typeof obs.ac === "number" || typeof obs.hp === "number") return true;
+    // Appearance alone is thin evidence, but it is evidence — and it is what someone
+    // with nothing but "it was a big hairy ape thing" has to offer.
+    return !!(obs.appearance && String(obs.appearance).trim());
   }
 
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
