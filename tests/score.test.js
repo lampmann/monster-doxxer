@@ -190,4 +190,67 @@ section("F16 — source filtering, the one legitimate filter");
     S.rank(withOther, obs, R, { sources: { include: ["NOPE"] } }).length, 0);
 }
 
+/* ---------- the tie-break ---------- */
+section("the legacy prior — how a tie is settled");
+{
+  const dated = { mm: "2014-09-30", xmm: "2024-09-17", new1: "2023-01-01" };
+  const base = { type: "beast", typeAlt: [], typeTags: [], size: ["medium"], speeds: { walk: 30 },
+    senseTags: [], conditionImmune: [], traitTags: [], actionTags: [], damageTags: [],
+    resist: [], immune: [], vulnerable: [], symptoms: [], partial: false };
+  const mk = (name, source, srd) => Object.assign({ name, source, srd, key: name + "|" + source }, base);
+
+  const corpus = [
+    mk("Troll", "MM", true), mk("Troll", "XMM", false),
+    mk("Zzz Newcomer", "NEW1", false), mk("Aaa Newcomer", "NEW1", false),
+    mk("Beholder", "MM", false),
+  ];
+  const legacy = S.buildLegacy(corpus, dated);
+  const order = arr => arr.slice().sort(legacy.compare).map(x => x.name + "/" + x.source);
+
+  assertEqual("an SRD monster outranks everything else",
+    order(corpus)[0], "Troll/MM");
+  assert("an older creature outranks a newer one",
+    order([mk("Zzz Newcomer", "NEW1", false), mk("Beholder", "MM", false)])[0] === "Beholder/MM");
+  assertEqual("the oldest PRINTING of the same creature comes first, since this targets 5e 2014",
+    order([mk("Troll", "XMM", false), mk("Troll", "MM", false)])[0], "Troll/MM");
+  assert("...and it is deterministic when nothing else separates them",
+    order([mk("Aaa Newcomer", "NEW1", false), mk("Zzz Newcomer", "NEW1", false)])[0] === "Aaa Newcomer/NEW1");
+
+  assertEqual("a creature reprinted more often is counted as such", legacy.printings["troll"], 2);
+  assertEqual("...and its legacy is the date it FIRST appeared, not this printing's",
+    legacy.firstSeen["troll"], "2014-09-30");
+
+  // Without the optional date files the prior still has to produce an order.
+  const undated = S.buildLegacy(corpus, null);
+  assertEqual("with no dates at all it still settles ties",
+    corpus.slice().sort(undated.compare)[0].name, "Troll");
+
+  // The load-bearing property: a prior must never outrank evidence.
+  const R2 = S.buildRarity(corpus);
+  const ranked = S.rank(corpus, { type: "beast", size: "medium" }, R2, { legacy });
+  const scores = ranked.map(r => r.score);
+  assert("results are still ordered by score first",
+    scores.every((x, i) => i === 0 || scores[i - 1] >= x));
+}
+
+section("collapsing reprints");
+{
+  const base = { type: "beast", typeAlt: [], typeTags: [], size: ["medium"], speeds: { walk: 30 },
+    senseTags: [], conditionImmune: [], traitTags: [], actionTags: [], damageTags: [],
+    resist: [], immune: [], vulnerable: [], symptoms: [], partial: false };
+  const mk = (name, source) => Object.assign({ name, source, key: name + "|" + source }, base);
+  const corpus = [mk("Ghost", "MM"), mk("Ghost", "XMM"), mk("Wight", "MM")];
+  const R2 = S.buildRarity(corpus);
+
+  const loose = S.rank(corpus, { type: "beast" }, R2);
+  assertEqual("uncollapsed, the same creature takes two slots", loose.length, 3);
+
+  const tight = S.rank(corpus, { type: "beast" }, R2, { collapseByName: true });
+  assertEqual("collapsed, it takes one", tight.length, 2);
+  assertEqual("...the surviving row is the one the tie-break preferred", tight[0].name, "Ghost");
+  assertEqual("...and the other printings are recorded rather than hidden", tight[0].alsoIn, ["XMM"]);
+  assert("a creature with one printing gains no alsoIn",
+    !tight.find(r => r.name === "Wight").alsoIn);
+}
+
 report("score");

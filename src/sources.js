@@ -33,7 +33,10 @@
     const byCode = Object.create(null);
     const add = (list, group) => asArray(list).forEach(e => {
       if (!e || !e.id) return;
-      byCode[String(e.id).toLowerCase()] = { code: e.id, name: e.name || e.id, group };
+      byCode[String(e.id).toLowerCase()] = {
+        code: e.id, name: e.name || e.id, group,
+        published: e.published || "",     // release order, for the legacy tiebreak
+      };
     });
     add(booksJson && booksJson.book, "book");
     add(adventuresJson && adventuresJson.adventure, "adventure");
@@ -92,5 +95,18 @@
 
   const isActive = states => Object.values(states || {}).some(s => s === "include" || s === "exclude");
 
-  return { buildCatalogue, sourceRows, groupRows, nextState, toSpec, isActive, GROUP_LABEL, GROUP_ORDER };
+  /* { CODE: "YYYY-MM-DD" } for whatever the catalogue knows, for score.js's legacy
+     tiebreak. Sources with no date simply aren't in the map, and the tiebreak treats
+     them as undatable rather than as ancient or as new. */
+  function sourceDates(catalogue) {
+    const out = Object.create(null);
+    Object.keys(catalogue || {}).forEach(k => {
+      const e = catalogue[k];
+      if (e && e.published) out[e.code.toLowerCase()] = e.published;
+    });
+    return out;
+  }
+
+  return { buildCatalogue, sourceRows, groupRows, nextState, toSpec, isActive, sourceDates,
+           GROUP_LABEL, GROUP_ORDER };
 });

@@ -139,6 +139,19 @@
 
   const SPELL_MODES = new Set(["replaceSpells", "addSpells", "removeSpells"]);
 
+  /* Publication metadata, which a _copy must NOT inherit.
+
+     A copy is a different creature printed in a different book; it borrows the base's
+     MECHANICS, not its bibliography. Letting these ride along made 879 of the 1,141
+     copies claim SRD membership they don't have — The Bagman is a _copy of the Troll,
+     so it arrived flagged as a Basic Rules monster, and any prior built on "is this a
+     monster everyone owns" was reading 19% of the corpus wrong. Page numbers inherited
+     the same way and pointed into the wrong book.
+
+     Only inherited values are dropped: a copy that declares its own srd or page keeps it. */
+  const PUBLICATION_FIELDS = ["srd", "srd52", "basicRules", "basicRules2024",
+    "page", "otherSources", "additionalSources", "reprintedAs"];
+
   function resolveCopy(raw, index, depth) {
     if (!raw._copy) return raw;
     if ((depth || 0) > 5) return raw;                        // cyclic/very deep chains: keep the stub
@@ -148,6 +161,7 @@
     let partial = !!raw._copy._templates;
     Object.keys(raw).forEach(k => { if (k !== "_copy") out[k] = deepClone(raw[k]); });
     out.name = raw.name; out.source = raw.source;
+    PUBLICATION_FIELDS.forEach(k => { if (!(k in raw)) delete out[k]; });
     Object.entries(raw._copy._mod || {}).forEach(([prop, spec]) => {
       asArray(spec).forEach(mod => {
         if (!mod || !mod.mode) return;

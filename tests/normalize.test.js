@@ -146,6 +146,31 @@ section("type");
       .every(t => typeof N.typeInfo(t).type === "string"));
 }
 
+/* A copy borrows the base's MECHANICS, never its bibliography. Letting srd/basicRules
+   ride along made 879 of the real corpus's 1,141 copies claim SRD membership they don't
+   have — The Bagman is a _copy of the Troll, so it arrived flagged as a Basic Rules
+   monster — and page numbers pointed into the wrong book. */
+section("_copy does not inherit publication metadata");
+{
+  const index = {
+    "troll|mm": { name: "Troll", source: "MM", srd: true, basicRules: true, page: 291, size: ["L"] },
+  };
+  const copy = N.resolveCopy({ name: "The Bagman", source: "VRGR", page: 225,
+    _copy: { name: "Troll", source: "MM" } }, index, 0);
+
+  assertEqual("the copy keeps its own name", copy.name, "The Bagman");
+  assertEqual("...and its own source", copy.source, "VRGR");
+  assertEqual("a copy does not inherit the base's SRD membership", copy.srd, undefined);
+  assertEqual("...nor its Basic Rules membership", copy.basicRules, undefined);
+  assertEqual("...and keeps its own page rather than the base's", copy.page, 225);
+  assertEqual("mechanics are still inherited, which is the point of a copy", copy.size, ["L"]);
+
+  // A copy that declares its own publication metadata keeps what it declared.
+  const declared = N.resolveCopy({ name: "Scrag", source: "TftYP", srd: true,
+    _copy: { name: "Troll", source: "MM" } }, index, 0);
+  assertEqual("a copy that states its own SRD membership keeps it", declared.srd, true);
+}
+
 /* ---------- 5. hp.special ---------- */
 section("hp");
 {

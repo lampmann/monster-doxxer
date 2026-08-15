@@ -23,10 +23,15 @@
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   const STORE_KEY = "monster-doxxer-session";
+  /* Rank a wider window than gets shown. The extra rows are never rendered; they exist so
+     the tie count can say "40+ are tied" rather than reporting the size of the list it
+     happened to cut, and so F13 picks its tests against the real field of candidates. */
+  const WINDOW = 40;
+  const SHOWN = 12;
 
   /* ---------- state ---------- */
   const S = {
-    monsters: [], rarity: null, numerics: null, ontology: null, srcRows: [],
+    monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
     obs: { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {} },
     ac: null, hp: null, retuned: false,
     sources: {},              // { CODE: "ignore" | "include" | "exclude" }
@@ -109,7 +114,10 @@
     const [books, adventures] = await Promise.all([
       getJsonOptional("data/books.json"), getJsonOptional("data/adventures.json"),
     ]);
-    S.srcRows = window.sourceRows(S.monsters, window.buildCatalogue(books, adventures));
+    const catalogue = window.buildCatalogue(books, adventures);
+    S.srcRows = window.sourceRows(S.monsters, catalogue);
+    // Release order, for the tie-break. Optional data, so this degrades rather than fails.
+    S.legacy = window.buildLegacy(S.monsters, window.sourceDates(catalogue));
 
     status.textContent = `${S.monsters.length} monsters, ${S.ontology.symptoms.length} symptoms` +
       (books || adventures ? "" : " (add data/books.json for book titles)");
@@ -280,7 +288,8 @@
 
     const spec = window.toSpec(S.sources);
     const ranked = window.rank(S.monsters, obs, S.rarity, {
-      sources: spec, numerics: S.numerics, retuned: S.retuned, limit: 12, keepMonster: true,
+      sources: spec, numerics: S.numerics, retuned: S.retuned, legacy: S.legacy,
+      collapseByName: true, limit: WINDOW, keepMonster: true,
     });
     S.ranked = ranked;
 
@@ -303,12 +312,14 @@
     const top = ranked[0].score;
     const tied = ranked.filter(r => Math.abs(r.score - top) < 1e-9).length;
     if (tied > 1) {
-      notes.push(`The top ${tied} explain your observations equally well — the order between ` +
+      // Counted over the wider window, so "12" never means "12, and we stopped looking".
+      const n = tied >= WINDOW ? `${WINDOW}+` : String(tied);
+      notes.push(`The top ${n} explain your observations equally well — the order between ` +
         `them is a guess. One more observation would separate them.`);
     }
     const noteHtml = notes.length ? `<div class="hint block">${notes.map(esc).join(" ")}</div>` : "";
 
-    box.innerHTML = noteHtml + ranked.map((r, i) => {
+    box.innerHTML = noteHtml + ranked.slice(0, SHOWN).map((r, i) => {
       /* The bar is the ABSOLUTE score, not a share of the leader: F7 already normalises
          it to "how much of the evidence you gave does this monster explain", which is
          the number a reader actually wants. Relative bars made every tied result full
@@ -320,7 +331,8 @@
           <span class="result-rank">${i + 1}.</span>
           <span class="bar-track" title="explains ${(rel * 100).toFixed(0)}% of what you reported"><span class="bar" style="width:${(rel * 100).toFixed(0)}%"></span></span>
           <span class="result-name"><button data-detail="${esc(r.key)}">${esc(r.name)}</button></span>
-          <span class="result-meta">${esc(r.source)}${m && m.cr ? ", CR " + esc(m.cr) : ""}</span>
+          <span class="result-meta">${esc(r.source)}${m && m.cr ? ", CR " + esc(m.cr) : ""}${
+            r.alsoIn ? " (also " + esc(r.alsoIn.slice(0, 2).join(", ")) + ")" : ""}</span>
         </div>
         <div class="why">
           ${evidenceList(r.for.slice(0, 4), "for")}
@@ -328,6 +340,40 @@
         </div>
       </div>`;
     }).join("");
+  }
+
+  /* F13 — what to try next.
+
+     Each suggestion carries the answers as buttons, so the loop closes in one tap:
+     the party hits it with radiant, taps "no effect", and the ranking updates. That
+     is the whole point of the feature — it is advice for the next round, not a
+     report on the last one. */
+  function renderSuggestions() {
+    const mod = $("suggest-module");
+    if (!S.ranked.length || !window.suggest) { mod.hidden = true; return; }
+
+    const tests = window.suggest(S.ranked, {
+      ontology: S.ontology, observation: currentObservation(), limit: 3,
+    });
+    if (!tests.length) { mod.hidden = true; return; }
+    mod.hidden = false;
+
+    const ANSWERS = {
+      damage: [["immune", "no effect"], ["resistant", "halved"], ["normal", "normal"], ["vulnerable", "extra"]],
+      condition: [["immune", "it was immune"], ["affected", "it worked"]],
+      symptom: [["yes", "yes, that happened"], ["no", "no"]],
+    };
+
+    $("suggestions").innerHTML = tests.map((t, i) => {
+      const answers = (ANSWERS[t.kind] || []).map(([value, label]) =>
+        `<button class="chip" data-answer="${i}" data-outcome="${esc(value)}">${esc(label)}</button>`).join("");
+      return `<div class="sugg">
+        <div class="sugg-label">${esc(t.label)}<span class="sugg-gain">${t.gain.toFixed(1)} bits</span></div>
+        <div class="sugg-split">${esc(t.split)}</div>
+        <div class="sugg-answers">what happened? ${answers}</div>
+      </div>`;
+    }).join("");
+    S.suggested = tests;
   }
 
   function renderDetail() {
@@ -359,7 +405,7 @@
 
   function renderAll() {
     renderPickers(); renderDamage(); renderSymptoms(); renderSources();
-    renderCrHint(); renderResults(); renderDetail();
+    renderCrHint(); renderResults(); renderSuggestions(); renderDetail();
   }
 
   /* ============================================================
@@ -378,7 +424,7 @@
       const field = pick.dataset.pick, val = pick.dataset.val;
       if (PICKERS[field].multi) toggleIn(S.obs[field], val);
       else S.obs[field] = S.obs[field] === val ? "" : val;      // clicking the chosen one clears it
-      persist(); renderPickers(); renderResults();
+      persist(); renderPickers(); renderResults(); renderSuggestions();
       return;
     }
 
@@ -386,20 +432,20 @@
     if (add) {
       S.obs.symptoms.push(add.dataset.symAdd);
       $("sym-search").value = "";
-      persist(); renderSymptoms(); renderResults();
+      persist(); renderSymptoms(); renderResults(); renderSuggestions();
       return;
     }
     const rm = t.closest("[data-sym-remove]");
     if (rm) {
       toggleIn(S.obs.symptoms, rm.dataset.symRemove);
-      persist(); renderSymptoms(); renderResults();
+      persist(); renderSymptoms(); renderResults(); renderSuggestions();
       return;
     }
 
     const dclear = t.closest("[data-dmg-clear]");
     if (dclear) {
       delete S.obs.damage[dclear.dataset.dmgClear];
-      persist(); renderDamage(); renderResults();
+      persist(); renderDamage(); renderResults(); renderSuggestions();
       return;
     }
 
@@ -408,7 +454,7 @@
       const code = src.dataset.src;
       S.sources[code] = window.nextState(S.sources[code] || "ignore");
       if (S.sources[code] === "ignore") delete S.sources[code];
-      persist(); renderSources(); renderResults();
+      persist(); renderSources(); renderResults(); renderSuggestions();
       return;
     }
     const bulk = t.closest("[data-src-all],[data-src-none],[data-src-clear]");
@@ -419,7 +465,21 @@
         if (mode === "ignore") delete S.sources[r.code];
         else S.sources[r.code] = mode;
       });
-      persist(); renderSources(); renderResults();
+      persist(); renderSources(); renderResults(); renderSuggestions();
+      return;
+    }
+
+    /* Answering a suggested test writes straight into the observation set, so the tool
+       learns from the round the party just spent on its advice. */
+    const ans = t.closest("[data-answer]");
+    if (ans) {
+      const test = (S.suggested || [])[Number(ans.dataset.answer)];
+      if (!test) return;
+      const next = window.applyAnswer(currentObservation(), test, ans.dataset.outcome);
+      S.obs.damage = next.damage || S.obs.damage;
+      S.obs.condImmune = next.condImmune || S.obs.condImmune;
+      S.obs.symptoms = next.symptoms || S.obs.symptoms;
+      persist(); renderAll();
       return;
     }
 
@@ -438,12 +498,12 @@
     const dmg = e.target.closest("[data-dmg]");
     if (dmg) {
       S.obs.damage[dmg.dataset.dmg] = dmg.value;
-      persist(); renderDamage(); renderResults();
+      persist(); renderDamage(); renderResults(); renderSuggestions();
       return;
     }
     if (e.target.id === "in-retuned") {
       S.retuned = e.target.checked;
-      persist(); renderResults();
+      persist(); renderResults(); renderSuggestions();
     }
   });
 
@@ -453,7 +513,7 @@
       const v = e.target.value === "" ? null : Number(e.target.value);
       const ok = v == null || (Number.isFinite(v) && v > 0);
       if (e.target.id === "in-ac") S.ac = ok ? v : null; else S.hp = ok ? v : null;
-      persist(); renderCrHint(); renderResults();
+      persist(); renderCrHint(); renderResults(); renderSuggestions();
     }
   });
 

@@ -129,6 +129,15 @@ th, td { text-align: left; padding: 1px 4px; }
 .why .against { color: var(--danger); }
 .why ul { margin: .1rem 0; padding-left: 1.1rem; }
 
+/* ----- F13 suggestions ----- */
+.sugg { border-top: 1px solid var(--border-hair); padding: .3rem 0; }
+.sugg:first-child { border-top: 0; }
+.sugg-label { font-weight: bold; font-size: .9rem; }
+.sugg-gain { font-size: .72rem; color: var(--muted-fg); margin-left: .3rem; }
+.sugg-split { font-size: .78rem; color: var(--muted-fg); margin: .1rem 0 .2rem; }
+.sugg-answers .chip { font-size: .75rem; }
+.sugg-answers { font-size: .75rem; color: var(--muted-fg); }
+
 /* ----- statblock panel ----- */
 #detail { font-size: .85rem; }
 #detail .sb-line { margin: .15rem 0; }

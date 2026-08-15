@@ -545,6 +545,91 @@
   }
 
   /* ============================================================
+     The legacy prior — how the tie is broken.
+
+     Three or four observations routinely leave twenty candidates on IDENTICAL scores,
+     so whatever comes first is what the user reads. The evidence genuinely cannot
+     separate them; the tiebreak is therefore a prior on which monster a party is
+     likelier to have fought, and it must never be anything more than that.
+
+     STRICTLY A TIEBREAK, on exactly equal scores. It cannot reorder candidates the
+     evidence has separated, so it cannot launder a guess into a finding.
+
+     What stands in for "legacy", best signal first:
+
+       1. SRD / Basic Rules membership. 333 monsters ship with the free rules. Every
+          DM has them, every adventure reprints them, and new players meet them first.
+       2. When the creature FIRST appeared, across all its printings. This is the
+          release-order idea: an owlbear has been in the game since 1975 and turns up
+          in the 2014 Monster Manual on day one; a one-off from a 2023 adventure has
+          not had time to become anything. Dates come from 5e.tools' books.json and
+          adventures.json and are optional — without them this term simply drops out.
+       3. How many times the creature has been reprinted. WotC reprints what gets used.
+       4. Which printing of it to show, oldest first, because this tool targets 5e 2014
+          and the Monster Manual entry is the one a 2014 table will have open.
+
+     Then name length and alphabetical, so the order is at least deterministic.
+
+     A caveat that has to be stated rather than buried: THE HARNESS CANNOT VALIDATE
+     THIS. It samples monsters uniformly, so a prior favouring canonical monsters helps
+     exactly as often as it hurts there, whereas real parties fight a wildly non-uniform
+     slice of the bestiary. The check the harness CAN run — that this does not make
+     things worse — is the check that was run.
+     ============================================================ */
+  function buildLegacy(monsters, sourceDates) {
+    const dates = sourceDates || {};
+    const dateOf = m => dates[String(m.source || "").toLowerCase()] || "";
+
+    // Keyed by name: a creature's legacy belongs to the creature, not to one printing.
+    const firstSeen = Object.create(null);
+    const printings = Object.create(null);
+    monsters.forEach(m => {
+      const n = norm(m.name);
+      printings[n] = (printings[n] || 0) + 1;
+      const d = dateOf(m);
+      if (d && (!firstSeen[n] || d < firstSeen[n])) firstSeen[n] = d;
+    });
+
+    /* Undated sources sort after dated ones rather than before: an unknown date is
+       "we don't know", and guessing "ancient" would promote every supplement whose
+       metadata the user happens not to have. */
+    const UNDATED = "9999-99-99";
+
+    /* Closed over rather than hung off `this`: the natural way to use a comparator is to
+       hand it straight to Array.sort, which calls it detached. A `this`-dependent version
+       works inside rank() and throws everywhere else — the worst kind of API. */
+    const of = m => {
+      const n = norm(m.name);
+      return {
+        srd: m.srd ? 0 : 1,
+        first: firstSeen[n] || UNDATED,
+        printings: -(printings[n] || 1),
+        printed: dateOf(m) || UNDATED,
+        len: String(m.name || "").length,
+      };
+    };
+    const compare = (a, b) => {
+      const x = of(a), y = of(b);
+      return x.srd - y.srd
+        || (x.first < y.first ? -1 : x.first > y.first ? 1 : 0)
+        || x.printings - y.printings
+        || (x.printed < y.printed ? -1 : x.printed > y.printed ? 1 : 0)
+        || x.len - y.len
+        || String(a.name).localeCompare(String(b.name));
+    };
+    return { firstSeen, printings, of, compare };
+  }
+
+  /* The tiebreak used when no legacy table was built. Same shape, minus everything that
+     needs data the caller didn't supply. */
+  const FALLBACK_LEGACY = {
+    compare: (a, b) =>
+      (a.srd ? 0 : 1) - (b.srd ? 0 : 1)
+      || String(a.name || "").length - String(b.name || "").length
+      || String(a.name).localeCompare(String(b.name)),
+  };
+
+  /* ============================================================
      F16 — source filtering. The one legitimate filter in the whole tool.
 
      It is legitimate because, unlike every other input, it is not a claim about the
@@ -589,27 +674,31 @@
   function rank(monsters, obs, rarity, opts) {
     const o = opts || {};
     const allowed = sourceFilter(o.sources);
-    const out = (allowed ? monsters.filter(m => allowed(m.source)) : monsters)
+    const legacy = o.legacy || FALLBACK_LEGACY;
+    let out = (allowed ? monsters.filter(m => allowed(m.source)) : monsters)
       .map(m => scoreMonster(m, obs, rarity, o));
 
-    /* Ties are common and they matter. Three or four observations routinely leave
-       twenty candidates on identical scores, and whatever comes first is what the
-       user reads — so "alphabetical" meant a query that correctly identified a troll
-       answered "Aquatic Troll, Blinded Troll, Dragonpriest…" with the actual Troll
-       sixteenth, off the bottom of the list.
+    // Score first; the legacy prior only ever settles an exact tie. See buildLegacy.
+    out.sort((a, b) => b.score - a.score || legacy.compare(a, b));
 
-       The evidence genuinely cannot separate these, so the tiebreak is a prior on
-       which monster a party is likelier to have fought, and SRD / Basic Rules
-       membership is the best proxy in the data: those are the ~1,200 monsters that
-       ship with the free rules, that every DM owns, and that adventures reprint.
+    /* Collapse reprints. "Ghost (MM)" and "Ghost (XMM)" are one answer to a player and
+       two rows in a list of twelve, and the same evidence scores them identically, so
+       they arrive adjacent and burn two of the few slots the user will actually read.
+       The first survivor wins, which after the sort above is the printing the legacy
+       prior likes best; the rest are recorded as `alsoIn` so nothing is hidden. */
+    if (o.collapseByName) {
+      const seen = new Map();
+      const kept = [];
+      out.forEach(r => {
+        const n = norm(r.name);
+        const first = seen.get(n);
+        if (first) { first.alsoIn = (first.alsoIn || []).concat([r.source]); return; }
+        seen.set(n, r);
+        kept.push(r);
+      });
+      out = kept;
+    }
 
-       Strictly a tiebreak, on exactly equal scores. It can never reorder candidates
-       the evidence has already separated, so it cannot launder a prior into a
-       finding — which is also why it needs no harness support to be safe. */
-    out.sort((a, b) => b.score - a.score
-      || (b.srd ? 1 : 0) - (a.srd ? 1 : 0)
-      || a.name.length - b.name.length
-      || a.name.localeCompare(b.name));
     return o.limit ? out.slice(0, o.limit) : out;
   }
 
@@ -624,6 +713,6 @@
   }
 
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
-           buildRarity, buildNumerics, scoreNumerics, gaussian, sourceFilter,
+           buildRarity, buildNumerics, buildLegacy, scoreNumerics, gaussian, sourceFilter,
            candidateFeatureSet, scoreMonster, rank, hasEvidence };
 });

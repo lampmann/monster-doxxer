@@ -29,10 +29,11 @@
 const { load } = require("./corpus.js");
 const CORRUPT = require("./corrupt.js");
 const S = require("../src/score.js");
+const D = require("../src/discriminate.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "" };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "" };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -41,6 +42,7 @@ function parseArgs(argv) {
     else if (a === "--show") out.show = Number(next());
     else if (a === "--sweep") out.sweep = next();
     else if (a === "--ablate") out.ablate = true;
+    else if (a === "--suggest") out.suggest = true;
     else if (a === "--stray") out.stray = Number(next());
     else if (a === "--swap") out.swap = Number(next());
     else if (a === "--cr-shift") out.crShift = Number(next());
@@ -57,6 +59,7 @@ const HELP = `eval/run.js — corrupt real statblocks, measure top-5 recall
   --show <count>    print the worst failures, with what argued against the truth
   --sweep <const>   sweep one TUNING constant and print recall at each value
   --ablate          drop one observation facet at a time to price each one
+  --suggest         does following F13's advice actually help? (vs a random test)
   --stray <0..1>    rate at which the party misremembers a feature it never saw
   --swap <0..1>     rate at which a query carries a wrong damage interaction
   --cr-shift <n>    CR steps the DM rebuilt the monster by (tests F5)
@@ -145,7 +148,7 @@ function opts(args, extra) {
     corrupt: { strayRate: args.stray, swapRate: args.swap,
                crShift: args.crShift, numerics: args.numerics },
     numerics: args.numerics,
-    score: { numerics: args.numerics, numericMode: args.mode || undefined },
+    score: { numerics: args.numerics, numericMode: args.mode || undefined, legacy: args.legacy },
   }, extra || {});
 }
 
@@ -205,16 +208,110 @@ function ablate(monsters, rarity, args) {
   console.log("\n  a facet costing ~0 is not pulling its weight in the query form.");
 }
 
+/* F13 — is the advice worth taking?
+
+   Simulate the round the tool is asking for. Rank a corrupted query, take the top
+   suggestion, answer it from the TRUE statblock (the party actually hits the thing with
+   radiant and sees what happens), fold the answer back in and re-rank.
+
+   TOP-5 RECALL IS THE WRONG METRIC HERE and reporting only it undersells the feature to
+   the point of dishonesty. The true monster is usually already near the top; what F13
+   claims to do is collapse the CROWD around it — turn a twelve-way tie into a three-way
+   one — and recall barely moves when the answer was in the list all along. So the
+   headline here is the size of the tied leading group, which is exactly what the UI
+   apologises for when it says "the top 12 explain your observations equally well".
+
+   Three controls, because "better than nothing" is not the claim:
+     arbitrary   a random damage type. What a party does unprompted: hit it with fire.
+     any useful  a random test drawn from those with non-zero information gain. A
+                 deliberately strong control — it already knows which tests can split
+                 anything, which a player does not.
+     F13         the highest-gain test.
+*/
+function suggestion(monsters, rarity, args) {
+  const r = CORRUPT.rng(args.seed);
+  const pool = CORRUPT.shuffled(r, monsters);
+  const n = Math.min(args.n, pool.length);
+  const scoreOpts = { numerics: args.numerics, legacy: args.legacy, limit: 40, keepMonster: true };
+
+  const arms = ["before", "arbitrary", "anyUseful", "advised"];
+  const stat = {};
+  arms.forEach(a => { stat[a] = { top1: 0, top5: 0, rankSum: 0, tieSum: 0 }; });
+  let scored = 0, noAdvice = 0, gainSum = 0;
+
+  /* How many candidates are tied with the leader — the crowd the party still has to
+     tell apart. Capped by the ranking window, so it is a floor, not an estimate. */
+  const tieSize = ranked => {
+    if (!ranked.length) return 0;
+    const top = ranked[0].score;
+    return ranked.filter(x => Math.abs(x.score - top) < 1e-9).length;
+  };
+
+  const evaluate = (arm, obs, m) => {
+    const ranked = S.rank(monsters, obs, rarity, scoreOpts);
+    const i = ranked.findIndex(x => x.name.toLowerCase() === m.name.toLowerCase());
+    const rank = i < 0 ? -1 : i + 1;
+    const s = stat[arm];
+    if (rank > 0 && rank <= 1) s.top1++;
+    if (rank > 0 && rank <= 5) s.top5++;
+    s.rankSum += rank > 0 ? rank : 41;          // outside the window counts as just past it
+    s.tieSum += tieSize(ranked);
+    return ranked;
+  };
+
+  for (let i = 0; i < n; i++) {
+    const m = pool[i];
+    const c = CORRUPT.corruptViable(m, r, { strayRate: args.stray, swapRate: args.swap, vocab: args.vocab },
+      S.hasEvidence);
+    if (!c) continue;
+
+    const baseRanked = S.rank(monsters, c.obs, rarity, scoreOpts);
+    const menu = D.suggest(baseRanked, { ontology: args.ontology, observation: c.obs });
+    if (!menu.length) { noAdvice++; continue; }
+    gainSum += menu[0].gain;
+
+    const arbitrary = { kind: "damage", value: D.DAMAGE_TYPES[Math.floor(r() * D.DAMAGE_TYPES.length)] };
+    const anyUseful = menu[Math.floor(r() * menu.length)];
+
+    scored++;
+    evaluate("before", c.obs, m);
+    evaluate("arbitrary", D.applyAnswer(c.obs, arbitrary, D.answerFor(arbitrary, m)), m);
+    evaluate("anyUseful", D.applyAnswer(c.obs, anyUseful, D.answerFor(anyUseful, m)), m);
+    evaluate("advised", D.applyAnswer(c.obs, menu[0], D.answerFor(menu[0], m)), m);
+  }
+
+  const LABEL = { before: "no extra test", arbitrary: "+ arbitrary damage type",
+                  anyUseful: "+ any useful test", advised: "+ F13's suggestion" };
+  const pct = x => (scored ? (100 * x / scored) : 0).toFixed(1);
+  const avg = x => (scored ? x / scored : 0).toFixed(1);
+
+  console.log(`\nF13 — one extra test, ${scored} queries, seed ${args.seed}` +
+    (noAdvice ? `  (${noAdvice} had no test worth suggesting)` : ""));
+  console.log(`  mean information gain of the top suggestion: ${(gainSum / (scored || 1)).toFixed(2)} bits\n`);
+  console.log(`                            top-1    top-5   mean rank   tied at top`);
+  arms.forEach(a => {
+    const s = stat[a];
+    console.log(`  ${LABEL[a].padEnd(24)} ${pct(s.top1).padStart(5)}%   ${pct(s.top5).padStart(5)}%` +
+      `      ${avg(s.rankSum).padStart(5)}        ${avg(s.tieSum).padStart(5)}`);
+  });
+  console.log(`\n  "tied at top" is the number the feature exists to shrink: how many candidates`);
+  console.log(`  the evidence still cannot tell apart. Recall moves little because the right`);
+  console.log(`  answer was usually already in the list — the crowd around it is the problem.`);
+}
+
 /* ---------- main ---------- */
 function main() {
   const args = parseArgs(process.argv);
-  const { monsters } = load({ quiet: args.quiet });
+  const { monsters, sourceDates, ontology } = load({ quiet: args.quiet });
   const rarity = S.buildRarity(monsters);
   args.vocab = CORRUPT.buildVocab(monsters);
   args.numerics = S.buildNumerics(monsters);
+  args.legacy = S.buildLegacy(monsters, sourceDates);
+  args.ontology = ontology;
 
   if (args.sweep) return sweep(monsters, rarity, args, args.sweep);
   if (args.ablate) return ablate(monsters, rarity, args);
+  if (args.suggest) return suggestion(monsters, rarity, args);
 
   const res = measure(monsters, rarity, opts(args, { show: args.show }));
 

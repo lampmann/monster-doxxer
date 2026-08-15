@@ -14,6 +14,7 @@ const fs = require("fs");
 const path = require("path");
 const N = require("../src/normalize.js");
 const SY = require("../src/symptoms.js");
+const SRC = require("../src/sources.js");
 
 const ROOT = path.join(__dirname, "..");
 const BESTIARY = path.join(ROOT, "data", "bestiary");
@@ -76,7 +77,16 @@ function load(opts) {
   const compiled = SY.compile(readJson(ONTOLOGY));
   SY.tagAll(monsters, compiled);
 
-  cached = { monsters, skipped, badFiles, ontology: compiled, files: files.length };
+  /* Optional: book/adventure titles and publication dates, for F16's filter labels and
+     the legacy tiebreak. Absent, the ranking still works and simply ties differently —
+     so the harness must build them the same way the app does, or it would be measuring
+     a ranking nobody uses. */
+  const readOptional = f => { try { return readJson(path.join(ROOT, "data", f)); } catch (e) { return null; } };
+  const catalogue = SRC.buildCatalogue(readOptional("books.json"), readOptional("adventures.json"));
+  const sourceDates = SRC.sourceDates(catalogue);
+
+  cached = { monsters, skipped, badFiles, ontology: compiled, files: files.length,
+             catalogue, sourceDates };
   if (!o.quiet) {
     process.stdout.write(
       `corpus: ${monsters.length} monsters from ${files.length} files, ` +
@@ -87,4 +97,4 @@ function load(opts) {
   return cached;
 }
 
-module.exports = { load, bestiaryFiles, BESTIARY, ONTOLOGY };
+module.exports = { load, bestiaryFiles, BESTIARY, ONTOLOGY, ROOT };

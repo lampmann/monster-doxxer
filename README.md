@@ -8,12 +8,11 @@ monster explains them.
 
 **Status: early, but usable, and the numbers are measured.** The normalisation pipeline, the
 evidence scorer, the symptom ontology and the browser UI all exist and are tested, and an
-evaluation harness picks the scoring constants instead of leaving them to taste. There is no
-appearance matching yet and no discriminating-test suggestions. See [DESIGN.md](DESIGN.md) for what's
-built and what isn't.
+evaluation harness picks the scoring constants instead of leaving them to taste. Appearance
+matching is the one feature still unbuilt. See [DESIGN.md](DESIGN.md) for what's built and what isn't.
 
 Against the full 4,528-monster corpus, given the observations a party would plausibly have after
-one fight: **the right monster is in the top 5 about 65% of the time**, with a median rank of 2.
+one fight: **the right monster is in the top 5 about 67% of the time**, with a median rank of 2.
 
 ## The one idea
 
@@ -62,6 +61,19 @@ everything else&rdquo;: nobody should have to click 106 books to hide one.
 
 Observations persist across a reload, so you can keep adding to them as the fight goes on.
 
+## What to try next
+
+Three or four observations usually leave a dozen monsters that explain them equally well. When that
+happens the tool says so, and then tells you the cheapest question that would tell them apart:
+
+> **Hit it with poison damage** — Wraith, Wight and 4 others shrug it off entirely; Vampire,
+> Vampire Spawn and 4 others take it normally.
+
+Tap what happened and the list updates. It only ever suggests things you can actually do in a round
+— hit it with something, try to frighten it, watch for a specific tell. Measured against a control
+that already knows which tests carry information, following the advice is worth about 3 points of
+top-5 recall and visibly shrinks the tie.
+
 ## Running the tests
 
 No dependencies, no install:
@@ -81,6 +93,7 @@ node eval/run.js --ablate            # what each kind of evidence is worth
 node eval/run.js --sweep missFactor  # re-derive a scoring constant
 node eval/run.js --show 10           # the worst failures, with reasons
 node eval/run.js --cr-shift 4        # what if the DM rebuilt it four CRs up?
+node eval/run.js --suggest           # does F13's advice actually beat guessing?
 node eval/coverage.js                # how the symptom ontology lands on real prose
 ```
 

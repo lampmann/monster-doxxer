@@ -9,15 +9,16 @@ this file is where it meets reality and where it has been deviated from.
 | | |
 |---|---|
 | `src/normalize.js` | Built, 73 assertions. Ported from pmcrwf. |
-| `src/score.js` | F1, F2, F3, F7 built, 37 assertions. Constants now measured, not guessed. |
+| `src/score.js` | F1, F2, F3, F7 built, 62 assertions. Constants now measured, not guessed. |
+| `src/discriminate.js` | F13 — what to try next, by information gain. |
 | `ontology/symptoms.json` + `src/symptoms.js` | F8 built, 111 symptoms, 38 assertions. |
 | `eval/` | §6 harness built, 29 assertions. **Everything above is measurable now.** |
 | Numerics (F4, F5, F6) | F4 and F6 built, 39 assertions. **F5 measured and rejected** — below. |
 | `index.html` + `src/app.js` | Built. Query form, ranked results with reasons, statblock panel. |
 | Source filter (F16) | Built, tri-state include/exclude, 32 assertions. |
 | Session evidence (F15) | Built — observations persist across a reload. |
-| Appearance (F10–F12) | Not started. |
-| Discriminating tests (F13) | Not started. |
+| Discriminating tests (F13) | Built, 41 assertions, and measured. |
+| Appearance (F10–F12) | Not started. The last unbuilt feature. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
@@ -104,6 +105,31 @@ crashed every facet that lowercased it; `damageTags` were passed through as 5e.t
 letters, so an observation of `fire` could never match `"F"`; and a symptom candidate whose regex
 failed to compile matched *every* monster rather than none.
 
+## The legacy prior, and a bug it uncovered
+
+Ties are settled by a prior on which monster a party is likelier to have fought, approximated from
+release order. Best signal first: SRD / Basic Rules membership; then when the creature *first*
+appeared across all its printings; then how often it has been reprinted; then which printing to
+show, oldest first, because this tool targets 5e 2014 and the Monster Manual entry is the one a 2014
+table will have open. Dates come from 5e.tools' `books.json` / `adventures.json` and are optional.
+
+**Building it exposed a normalisation bug that had been quietly poisoning the signal.** A `_copy`
+was inheriting its base's *publication metadata* along with its mechanics — so The Bagman, a `_copy`
+of the Troll, arrived flagged as an SRD monster, and page numbers pointed into the wrong book.
+**879 of the 1,141 copies claimed SRD membership they do not have**, and the SRD count fell from an
+inflated 1,212 to 333 once fixed — which matches the real SRD. The first version of this tiebreak
+was built on that corrupted flag, which is why it had been ranking "Scrag" and "The Bagman" above
+"Troll".
+
+Reprints are now also collapsed in the results: "Ghost (MM)" and "Ghost (XMM)" are one answer to a
+player and were burning two of the twelve slots anyone actually reads. The surviving row is whichever
+printing the prior prefers, and the others are listed beside it rather than hidden.
+
+**What the harness can and cannot say about this.** It samples monsters uniformly, so a prior
+favouring canonical monsters helps exactly as often as it hurts there, while real parties fight a
+wildly non-uniform slice of the bestiary. The check it *can* run — that this does not make things
+worse — was run, and top-5 went 65.8% → 67.4%. Treat that as "no harm done", not as validation.
+
 ## Constants, and what they rest on
 
 `eval/run.js --sweep <name>` re-derives any of these. They are no longer guesses, but they are not
@@ -148,6 +174,42 @@ scratch. The absolute numbers are an upper bound. What is trustworthy is the *or
 tunings, which is all a tuning harness is really for. `eval/corrupt.js` keeps the unmodelled list
 next to the code that would have to model it.
 
+## F13 — what to try next
+
+After ranking, find the observation that would best split the leaders, and say so.
+`src/discriminate.js` treats the leading candidates' scores as a distribution, partitions
+them by what each possible test would reveal, and ranks tests by expected information gain.
+
+**Only tests a party can actually perform.** This constraint does real work. "Does it have a
+burrow speed" splits the field beautifully and is useless advice, because you cannot make a
+monster burrow. You *can* hit it with radiant damage, try to frighten it, or watch to see
+whether it heals — so the menu is damage types, condition immunities, and the symptoms the
+ontology marks `testable`. That flag was added speculatively when the ontology was written;
+this is what it was for.
+
+The UI closes the loop in one tap: each suggestion carries its possible answers as buttons,
+so the party hits the thing, taps "no effect", and the ranking updates.
+
+**Measured** (`node eval/run.js --suggest`) by simulating the round: rank a corrupted query,
+take the top suggestion, answer it from the true statblock, re-rank.
+
+```
+                          top-1    top-5   mean rank   tied at top
+no extra test             39.3%    65.6%        9.7          3.0
++ arbitrary damage type   40.5%    66.0%        9.2          3.0
++ any useful test         40.1%    66.8%        9.5          2.9
++ F13's suggestion        42.1%    69.6%        9.0          2.7
+```
+
+Two things about that table are worth stating plainly. First, the control is not "nothing" —
+any extra evidence helps, and proving that would prove nothing about F13. The comparison that
+matters is against *any useful test*, a deliberately strong control that already knows which
+tests carry information, which a player does not. F13 beats it on every column.
+
+Second, **top-5 recall is the wrong headline for this feature** and reporting only it undersells
+it. The true monster is usually already in the list; what F13 does is thin the crowd around it.
+"Tied at top" is the number it exists to shrink, and it is the number the UI apologises for.
+
 ## Two fixes the UI forced
 
 Neither is cosmetic, and neither would have surfaced without running the thing.
@@ -155,12 +217,7 @@ Neither is cosmetic, and neither would have surfaced without running the thing.
 **Ties are the normal case, and the tiebreak was arbitrary.** Three or four observations routinely
 leave twenty candidates on identical scores. The old tiebreak was alphabetical, so a query that
 correctly identified a troll answered "Aquatic Troll, Blinded Troll, Dragonpriest…" with the actual
-Troll sixteenth — off the bottom of the list. Ties now break on SRD / Basic Rules membership, which
-is the best proxy in the data for "a monster a party is likely to have actually fought": ~1,200 of
-4,528, the ones that ship with the free rules and that adventures reprint. It is strictly a
-tiebreak, on exactly equal scores, so it can never reorder candidates the evidence has separated —
-which is also why it needs no harness support to be safe. Troll went from 16th to 3rd; top-1 recall
-went up too, as a side effect.
+Troll sixteenth — off the bottom of the list. See "the legacy prior" below for what replaced it.
 
 The UI also *says* when results are tied, rather than presenting a confident-looking order it has
 not earned.
