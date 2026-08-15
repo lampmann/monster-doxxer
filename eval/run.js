@@ -32,7 +32,7 @@ const S = require("../src/score.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, quiet: false, stray: 0, swap: 1 };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "" };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -43,6 +43,8 @@ function parseArgs(argv) {
     else if (a === "--ablate") out.ablate = true;
     else if (a === "--stray") out.stray = Number(next());
     else if (a === "--swap") out.swap = Number(next());
+    else if (a === "--cr-shift") out.crShift = Number(next());
+    else if (a === "--numeric") out.mode = next();
     else if (a === "--quiet") out.quiet = true;
     else if (a === "--help" || a === "-h") { console.log(HELP); process.exit(0); }
   }
@@ -57,6 +59,8 @@ const HELP = `eval/run.js — corrupt real statblocks, measure top-5 recall
   --ablate          drop one observation facet at a time to price each one
   --stray <0..1>    rate at which the party misremembers a feature it never saw
   --swap <0..1>     rate at which a query carries a wrong damage interaction
+  --cr-shift <n>    CR steps the DM rebuilt the monster by (tests F5)
+  --numeric <mode>  hybrid | raw | residual | off
   --quiet           results only`;
 
 /* ---------- one measurement ----------
@@ -138,7 +142,10 @@ const line = res =>
 function opts(args, extra) {
   return Object.assign({
     n: args.n, seed: args.seed, vocab: args.vocab,
-    corrupt: { strayRate: args.stray, swapRate: args.swap },
+    corrupt: { strayRate: args.stray, swapRate: args.swap,
+               crShift: args.crShift, numerics: args.numerics },
+    numerics: args.numerics,
+    score: { numerics: args.numerics, numericMode: args.mode || undefined },
   }, extra || {});
 }
 
@@ -204,6 +211,7 @@ function main() {
   const { monsters } = load({ quiet: args.quiet });
   const rarity = S.buildRarity(monsters);
   args.vocab = CORRUPT.buildVocab(monsters);
+  args.numerics = S.buildNumerics(monsters);
 
   if (args.sweep) return sweep(monsters, rarity, args, args.sweep);
   if (args.ablate) return ablate(monsters, rarity, args);

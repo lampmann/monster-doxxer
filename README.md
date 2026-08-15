@@ -13,7 +13,7 @@ appearance matching, and no numeric scoring. See [DESIGN.md](DESIGN.md) for what
 isn't.
 
 Against the full 4,528-monster corpus, given the observations a party would plausibly have after
-one fight: **the right monster is in the top 5 about 57% of the time**, with a median rank of 3.
+one fight: **the right monster is in the top 5 about 65% of the time**, with a median rank of 2.
 
 ## The one idea
 
@@ -54,6 +54,7 @@ node eval/run.js                     # top-1 / top-5 / top-20 recall
 node eval/run.js --ablate            # what each kind of evidence is worth
 node eval/run.js --sweep missFactor  # re-derive a scoring constant
 node eval/run.js --show 10           # the worst failures, with reasons
+node eval/run.js --cr-shift 4        # what if the DM rebuilt it four CRs up?
 node eval/coverage.js                # how the symptom ontology lands on real prose
 ```
 

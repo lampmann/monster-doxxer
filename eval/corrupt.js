@@ -78,6 +78,7 @@ const DEFAULTS = {
   swapRate: 1.0,          // probability a query carries a wrong damage entry — see below
   damageTestRate: 0.35,   // chance a given damage interaction was tested at all
   strayRate: 0,           // probability each surviving set field gains a false observation
+  crShift: 0,             // CR steps the DM rebuilt the monster by, +/- — see below
 };
 
 /* ON strayRate. The handoff corrupts damage and nothing else, which makes damage the only
@@ -166,6 +167,29 @@ function corrupt(m, r, opts) {
     damage[d] = full.damage[d] || "normal";
   });
   if (Object.keys(damage).length) obs.damage = damage;
+
+  /* 2b. The rebuild. §6's AC and HP shifts move the two numbers independently and at
+     random, which models a DM nudging a stat — not the case F5 was designed for. A DM who
+     rebuilds a monster to threaten a different party moves AC and HP TOGETHER, up the
+     power curve, and leaves the creature's shape intact: still unusually armoured for its
+     weight, still unusually tough for its weight.
+
+     crShift models that properly. It relocates the monster to another CR and preserves
+     its residuals, which is the exact scenario the residual machinery claims to survive.
+     Without this, an evaluation of F5 is an evaluation of something else. */
+  if (o.crShift && o.numerics && m.crNum != null) {
+    const shift = (r() * 2 - 1) * o.crShift;
+    const newCr = Math.max(0, Math.min(30, m.crNum + shift));
+    if (typeof full.ac === "number") {
+      const residual = full.ac - o.numerics.expectedAc(m.crNum);
+      full.ac = Math.max(1, Math.round(o.numerics.expectedAc(newCr) + residual));
+    }
+    if (typeof full.hp === "number") {
+      const residual = Math.log(full.hp) - o.numerics.expectedLogHp(m.crNum);
+      full.hp = Math.max(1, Math.round(Math.exp(o.numerics.expectedLogHp(newCr) + residual)));
+    }
+    notes.push(`rebuilt CR ${m.crNum} -> ${newCr.toFixed(1)}`);
+  }
 
   // 2 & 3. Numeric drift. The DM retuned it; the shape is intact, the values are not.
   if (typeof full.ac === "number" && r() < o.keepRate) {

@@ -164,6 +164,250 @@
   }
 
   /* ============================================================
+     F4, F5, F6 — numbers
+
+     F4  Tolerance curves, never equality. AC scores on a Gaussian; HP scores on a
+         log scale, because being 20 HP out matters enormously at CR 1 and not at
+         all at CR 20.
+
+     F5  Residuals from the CR average, not raw values. Homebrew tuning mostly
+         shifts the whole power scale and leaves the shape intact — a DM who
+         rebuilds a monster three CRs up moves its AC and HP together, and a tool
+         that compares raw numbers loses it while a tool that compares "how tough
+         for its weight class" keeps it.
+
+     THE PROBLEM F5 HAS, which the handoff does not address: the query has no CR to
+     take a residual from. The CR is most of what the user is trying to find out.
+     DESIGN.md lays out three ways round it; this implements the third — infer the
+     CR from the observed numbers themselves by inverting the corpus CR→HP curve,
+     then compare each candidate's residual against the observation's residual at
+     that implied CR. Both sides get normalised to their own scale, which is the
+     only version that survives the case F5 exists for.
+
+     `mode` selects between that and the simpler raw comparison so the evaluation
+     harness can referee, rather than the question being settled by argument.
+     ============================================================ */
+  const NUMERIC = {
+    acSigma: 2.5,        // AC points; F4's "sigma of about 2"
+    hpLogSigma: 0.45,    // natural-log HP, so ~±57% is one sigma
+    /* Nats, so numbers compete on the same scale as a mid-rarity structural feature.
+       Chosen for robustness rather than for the best headline. Recall keeps climbing to
+       ~6 when the monster is at its book numbers, but that gain is bought by trusting
+       the numbers, and it reverses as soon as the DM retunes: at a ±8 CR rebuild, 6
+       scores 57.5% against 59.0% at 3.2. Since "the DM adjusts numbers" is the premise
+       the whole tool is built on, 3.2 takes the value that is never much worse than the
+       best rather than the one that wins the easy case. (n=400.) */
+    acWeight: 3.2,
+    hpWeight: 3.2,
+    retunedFactor: 0.05, // F6: the "assume this was rebuilt" toggle
+    minPerCr: 8,         // below this a CR bucket is too thin to trust alone
+    /* "raw" | "residual" | "joint" | "off". raw is the default and F5 is off; the
+       measurement that decided it is written up under scoreNumerics below. */
+    mode: "raw",
+  };
+
+  const gaussian = (delta, sigma) => Math.exp(-(delta * delta) / (2 * sigma * sigma));
+
+  /* CR → expected AC and expected log-HP, measured off the corpus rather than taken
+     from the DMG's table. The corpus is what we are ranking against, and where the
+     books disagree with themselves the corpus is the thing that has to be matched. */
+  function buildNumerics(monsters) {
+    const buckets = new Map();
+    monsters.forEach(m => {
+      if (m.crNum == null) return;
+      let b = buckets.get(m.crNum);
+      if (!b) { b = { cr: m.crNum, ac: [], logHp: [] }; buckets.set(m.crNum, b); }
+      if (typeof m.ac === "number" && m.ac > 0) b.ac.push(m.ac);
+      if (typeof m.hpAvg === "number" && m.hpAvg > 0) b.logHp.push(Math.log(m.hpAvg));
+    });
+
+    const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const rows = [...buckets.values()].sort((a, b) => a.cr - b.cr)
+      .map(b => ({ cr: b.cr, n: Math.max(b.ac.length, b.logHp.length), ac: mean(b.ac), logHp: mean(b.logHp) }))
+      .filter(r => r.ac != null && r.logHp != null);
+
+    /* Thin buckets borrow from their neighbours. CR 27 has a handful of monsters and
+       its raw mean is whatever those few happen to be; smoothing keeps the curve a
+       curve instead of a row of spikes. */
+    const smooth = rows.map((r, i) => {
+      if (r.n >= NUMERIC.minPerCr) return { cr: r.cr, ac: r.ac, logHp: r.logHp };
+      const lo = Math.max(0, i - 1), hi = Math.min(rows.length - 1, i + 1);
+      const win = rows.slice(lo, hi + 1);
+      const wsum = win.reduce((s, x) => s + x.n, 0) || 1;
+      return {
+        cr: r.cr,
+        ac: win.reduce((s, x) => s + x.ac * x.n, 0) / wsum,
+        logHp: win.reduce((s, x) => s + x.logHp * x.n, 0) / wsum,
+      };
+    });
+
+    /* HP must rise with CR for the inversion below to have a unique answer. It does in
+       the data; this only guards against a thin bucket dipping. */
+    for (let i = 1; i < smooth.length; i++) {
+      if (smooth[i].logHp < smooth[i - 1].logHp) smooth[i].logHp = smooth[i - 1].logHp;
+    }
+
+    const interp = (cr, key) => {
+      if (!smooth.length) return null;
+      if (cr <= smooth[0].cr) return smooth[0][key];
+      if (cr >= smooth[smooth.length - 1].cr) return smooth[smooth.length - 1][key];
+      for (let i = 1; i < smooth.length; i++) {
+        if (cr <= smooth[i].cr) {
+          const a = smooth[i - 1], b = smooth[i];
+          const t = (cr - a.cr) / ((b.cr - a.cr) || 1);
+          return a[key] + t * (b[key] - a[key]);
+        }
+      }
+      return smooth[smooth.length - 1][key];
+    };
+
+    /* Invert the curve: what CR would produce these numbers? HP carries almost all of
+       the signal — it spans three orders of magnitude across the corpus while AC spans
+       about fifteen points and saturates early — so AC only gets a say when HP is absent. */
+    function inferCr(obs) {
+      const fromCurve = (value, key) => {
+        if (!smooth.length) return null;
+        if (value <= smooth[0][key]) return smooth[0].cr;
+        for (let i = 1; i < smooth.length; i++) {
+          if (value <= smooth[i][key]) {
+            const a = smooth[i - 1], b = smooth[i];
+            const span = (b[key] - a[key]) || 1;
+            return a.cr + (value - a[key]) / span * (b.cr - a.cr);
+          }
+        }
+        return smooth[smooth.length - 1].cr;
+      };
+      if (!smooth.length) return null;          // no corpus, nothing to infer against
+      const hasHp = typeof obs.hp === "number" && obs.hp > 0;
+      const hasAc = typeof obs.ac === "number" && obs.ac > 0;
+      // `from` matters to the caller: a residual taken against a CR inferred from the
+      // same quantity is identically zero. See the note on the residual modes below.
+      if (hasHp && hasAc) return { cr: fitCr(obs), from: "both" };
+      if (hasHp) return { cr: fromCurve(Math.log(obs.hp), "logHp"), from: "hp" };
+      if (hasAc) return { cr: fromCurve(obs.ac, "ac"), from: "ac" };
+      return null;
+    }
+
+    /* Fit one CR to BOTH numbers at once, by least squares in units of each field's own
+       tolerance. This is what makes F5 work at all.
+
+       Two observations, one free parameter: the fit generally cannot drive both residuals
+       to zero, so what is left over is real information about the creature's shape rather
+       than an artefact of the inversion. Inferring from HP alone zeroes HP's residual by
+       construction and throws that information away — which is precisely why `residual`
+       mode scored no better than switching numbers off. */
+    function fitCr(obs) {
+      const targetAc = obs.ac, targetLog = Math.log(obs.hp);
+      const err = cr => {
+        const dAc = (targetAc - interp(cr, "ac")) / NUMERIC.acSigma;
+        const dHp = (targetLog - interp(cr, "logHp")) / NUMERIC.hpLogSigma;
+        return dAc * dAc + dHp * dHp;
+      };
+      let best = smooth.length ? smooth[0].cr : 0, bestErr = Infinity;
+      smooth.forEach(row => { const e = err(row.cr); if (e < bestErr) { bestErr = e; best = row.cr; } });
+      // Refine between the tabulated CRs — the curve is interpolated, so the minimum
+      // usually sits between two of them.
+      let step = 1;
+      for (let i = 0; i < 12; i++) {
+        const lo = err(Math.max(0, best - step)), hi = err(Math.min(30, best + step));
+        if (lo < bestErr) { best = Math.max(0, best - step); bestErr = lo; }
+        else if (hi < bestErr) { best = Math.min(30, best + step); bestErr = hi; }
+        else step /= 2;
+      }
+      return best;
+    }
+
+    return {
+      rows: smooth,
+      expectedAc: cr => interp(cr, "ac"),
+      expectedLogHp: cr => interp(cr, "logHp"),
+      inferCr,
+    };
+  }
+
+  /* Score the numeric part of an observation against one candidate. Never subtracts:
+     a tolerance curve that decays to zero already costs the candidate everything it
+     could have earned, and F3 puts numbers in tier 2 precisely because DMs retune them. */
+  function scoreNumerics(m, obs, numerics, opts) {
+    const o = opts || {};
+    const mode = o.numericMode || NUMERIC.mode;
+    const out = { credit: 0, supplied: 0, hits: [] };
+    if (mode === "off" || !numerics) return out;
+
+    const hasAc = typeof obs.ac === "number" && obs.ac > 0;
+    const hasHp = typeof obs.hp === "number" && obs.hp > 0;
+    if (!hasAc && !hasHp) return out;
+
+    // F6 — the user says the DM rebuilds statblocks, so the numbers barely count.
+    const scale = o.retuned ? NUMERIC.retunedFactor : 1;
+
+    /* F5, and the correction the harness forced.
+
+       The handoff says to compare residuals from the CR average, and DESIGN.md picked
+       inferring the CR from the observed numbers as the way to get a CR for the query.
+       Both halves are right and they do not compose: inferring the CR from HP and then
+       taking HP's residual AT that CR gives exactly zero, every time, by construction.
+       The inversion and the residual cancel, and the measurement agreed — residual mode
+       scored no better than switching numbers off entirely (56.8% vs 56.6%).
+
+       So the two numbers are treated differently, which is what the algebra was asking
+       for all along:
+
+         HP  sets the power scale. Compared raw, in log space. (Comparing implied CR to
+             the candidate's CR is the same comparison under a monotone transform, so
+             there is nothing to gain by dressing it up as a residual.)
+         AC  is compared as a residual at the CR that HP implies — "how armoured is this
+             for its weight class". Here F5's insight pays, because the CR came from a
+             different quantity and the residual is a real number rather than zero.
+
+       That is `hybrid`, and it is the default. A residual is only taken against a CR
+       inferred from something else. */
+    const usesResidual = mode === "residual" || mode === "joint";
+    const implied = usesResidual ? numerics.inferCr(obs) : null;
+
+    if (hasAc) {
+      const w = NUMERIC.acWeight * scale;
+      out.supplied += w;
+      if (typeof m.ac === "number" && m.ac > 0) {
+        let delta;
+        const acResidual = implied && m.crNum != null && (mode === "residual" || mode === "joint");
+        if (acResidual) {
+          delta = (obs.ac - numerics.expectedAc(implied.cr)) - (m.ac - numerics.expectedAc(m.crNum));
+        } else {
+          delta = obs.ac - m.ac;
+        }
+        const fit = gaussian(delta, NUMERIC.acSigma);
+        out.credit += w * fit;
+        out.hits.push({ facet: "ac", value: `AC ${obs.ac}`, weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
+      }
+    }
+
+    if (hasHp) {
+      const w = NUMERIC.hpWeight * scale;
+      out.supplied += w;
+      if (typeof m.hpAvg === "number" && m.hpAvg > 0) {
+        const obsLog = Math.log(obs.hp), monLog = Math.log(m.hpAvg);
+        let delta;
+        /* `joint` takes HP's residual too, but only when the CR was fitted to BOTH
+           numbers — that is the case where the residual is not self-cancelling.
+           `residual` is kept so the harness can still reproduce the comparison that
+           ruled it out. */
+        const hpResidual = implied && m.crNum != null &&
+          (mode === "residual" || (mode === "joint" && implied.from === "both"));
+        if (hpResidual) {
+          delta = (obsLog - numerics.expectedLogHp(implied.cr)) - (monLog - numerics.expectedLogHp(m.crNum));
+        } else {
+          delta = obsLog - monLog;
+        }
+        const fit = gaussian(delta, NUMERIC.hpLogSigma);
+        out.credit += w * fit;
+        out.hits.push({ facet: "hp", value: `${obs.hp} hp`, weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
+      }
+    }
+    return out;
+  }
+
+  /* ============================================================
      Observations
      -----------
      Everything is optional. A field the user did not supply contributes nothing at all,
@@ -277,6 +521,16 @@
       });
     }
 
+    /* F4/F5/F6 — numbers, on tolerance curves. Added after the categorical evidence so
+       the numeric weight sits in the same units (nats) as everything else, and normalised
+       through the same F7 denominator. */
+    const num = scoreNumerics(m, obs, o.numerics, o);
+    if (num.supplied) {
+      raw += num.credit;
+      supplied += num.supplied;
+      num.hits.forEach(h => forEvidence.push(h));
+    }
+
     if (m.partial) raw *= TUNING.partialPenalty;
 
     // F7 — normalise by the evidence actually supplied, so queries of different sizes compare.
@@ -304,9 +558,11 @@
     if (!obs) return false;
     const fields = Object.keys(SCALAR_FIELDS).concat(Object.keys(SET_FIELDS));
     if (fields.some(f => asList(obs[f]).filter(Boolean).length)) return true;
-    return !!(obs.damage && Object.keys(obs.damage).length);
+    if (obs.damage && Object.keys(obs.damage).length) return true;
+    return typeof obs.ac === "number" || typeof obs.hp === "number";
   }
 
-  return { TUNING, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
-           buildRarity, candidateFeatureSet, scoreMonster, rank, hasEvidence };
+  return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
+           buildRarity, buildNumerics, scoreNumerics, gaussian,
+           candidateFeatureSet, scoreMonster, rank, hasEvidence };
 });

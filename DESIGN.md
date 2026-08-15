@@ -12,17 +12,17 @@ this file is where it meets reality and where it has been deviated from.
 | `src/score.js` | F1, F2, F3, F7 built, 37 assertions. Constants now measured, not guessed. |
 | `ontology/symptoms.json` + `src/symptoms.js` | F8 built, 111 symptoms, 38 assertions. |
 | `eval/` | §6 harness built, 29 assertions. **Everything above is measurable now.** |
-| Numerics (F4, F5, F6) | Not started — has an open question, below. |
+| Numerics (F4, F5, F6) | F4 and F6 built, 39 assertions. **F5 measured and rejected** — below. |
 | Appearance (F10–F12) | Not started. |
 | Discriminating tests (F13) | Not started. |
 | UI, session evidence (F15) | Not started. |
 
-Current measurement, 400 sampled monsters against the full 4,528-record corpus:
+Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
 ```
                           top-1    top-5   top-20   median rank
-handoff §6 corruption     35.5%    57.5%    76.5%       3
-+ misremembering          32.5%    56.0%    69.8%       4
+handoff §6 corruption     39.6%    64.6%    82.4%       2
++ misremembering          37.4%    62.6%    79.4%       2
 ```
 
 ## Decisions
@@ -104,6 +104,8 @@ all equally well founded.
 | `damageCostFactor` | 0.1 | Swept — see the caveat below. |
 | `minSymptomConfidence` | 0.5 | **The harness cannot test this.** See below. |
 | `partialPenalty` | 0.9 | Not yet swept; affects 202 records. |
+| `acWeight` / `hpWeight` | 3.2 | Swept. Minimax, not best-case — see below. |
+| `NUMERIC.mode` | `raw` | Measured against three alternatives; see F5 above. |
 
 Two of these deserve their caveats stated rather than buried.
 
@@ -121,6 +123,12 @@ where a loose regex attached a symptom the monster cannot actually produce, is e
 harness never generates. Set to 0.5, half strength, for ~0.7 points. This needs a test set of real
 player reports, which does not exist yet.
 
+**`acWeight` / `hpWeight` — chosen to be never much worse, not to win.** Recall keeps climbing as
+the numbers are trusted more, up to about 6 nats, *provided the monster is at its book numbers*.
+That gain reverses under rebuild: at ±8 CR, a weight of 6 scores 57.5% against 59.0% at 3.2. Since
+"the DM adjusts numbers constantly" is the premise the entire tool rests on, the value that is
+never much worse than the best beats the value that wins the easy case.
+
 **A limit worth stating plainly.** Every observation the harness generates is derived from the
 statblock it is trying to find, and the true answer is always in the corpus. It does not model
 reflavouring, two monsters merged into one set of observations, or a monster the DM wrote from
@@ -130,27 +138,57 @@ next to the code that would have to model it.
 
 ## Open questions
 
-### F5's residual is underspecified, and it matters
+### F5's residual — settled, and the answer is no
 
-The handoff says: store numeric features as residuals from the CR average, because homebrew tuning
-shifts the whole power scale but leaves the shape intact. Store `AC − expected AC at this CR`.
+**Resolved: F5 is implemented, measured, and off.** Option 2, the one this document dismissed as
+"abandons the property F5 exists for", wins. The reasoning that made option 3 look obvious was
+wrong in a way that only showed up when someone did the algebra.
 
-That works for indexing the corpus. It does not obviously work for the *query*, because the user
-does not know the CR — that's most of what they're trying to find out. There is no CR to take a
-residual from.
+The question was: residuals need a CR, and the query has none, because the CR is most of what the
+user is trying to find out. Option 3 was to infer the CR from the observed numbers, then compare
+residuals at that implied CR. It does not work, and it cannot:
 
-Three ways out:
+> Infer the CR from HP by inverting the CR→HP curve. Now take HP's residual at that CR. It is
+> **zero**. Always, exactly, by construction — the inversion and the residual are the same
+> operation run in opposite directions. The residual carries no information about HP at all.
 
-1. **Ask for an estimate.** Party level plus "how hard was it" gives a usable CR band. Cheap, but
-   leans on a judgement players are bad at.
-2. **Compare raw values with a wide tolerance.** Simple, and abandons the property F5 exists for.
-3. **Infer the CR from the numbers themselves.** Invert the corpus CR→mean-AC and CR→mean-HP tables
-   to get an implied CR from what was observed, then compare each candidate's residual against the
-   observation's residual at that implied CR. This is the only option that actually survives "the
-   DM rebuilt it three CRs higher", because both sides get normalised to their own scale.
+The measurement agreed before the cause was found: residual mode scored 55.8% against 55.2% for
+switching numbers off entirely, and 61.4% for comparing them raw. Two corrected formulations were
+built and measured too:
 
-(3) is almost certainly right. The harness now exists to settle it, and it already carries the
-corrupted `ac` and `hp` on every generated observation, waiting for a scorer to read them.
+- **hybrid** — HP raw, AC as a residual at the CR that HP implies. Ties raw (62.0% vs 61.5%).
+- **joint** — fit one CR to *both* numbers by least squares, then take both residuals. Two
+  observations against one free parameter cannot zero both, so information genuinely survives.
+  This is the mathematically correct version of F5, and it *loses*: 59.3% against raw's 61.5%.
+
+And the case F5 was designed for was tested directly, since §6's independent ±3 AC / ±30% HP jitter
+does not model it. `--cr-shift N` relocates a monster N CRs up or down the power curve while
+preserving its residuals — a DM rebuilding a monster for a different party. Raw still wins at every
+rebuild severity:
+
+```
+                  no rebuild   ±2 CR   ±4 CR   ±6 CR
+raw                     61.5    61.3    60.3    59.5
+hybrid                  62.0    61.3    59.5    59.0
+joint                   59.3    59.5    57.5    58.0
+residual                55.8    54.8    54.8    55.0
+off                     55.2    54.0    54.0    54.0
+```
+
+Why raw wins even under a coherent rebuild: the absolute power level is itself strong identifying
+evidence, and the residual throws it away to buy robustness against a case that is rare and, when
+it happens, only partially damaging. A monster rebuilt six CRs up is still a *big* monster, and raw
+log-HP still ranks it near other big monsters. F6's toggle already covers the heavy-rebuild case,
+and covers it better, because it is opt-in — the user knows whether their DM rebuilds statblocks
+and the scorer does not.
+
+`residual` and `joint` are kept as selectable modes (`--numeric`) rather than deleted, so the
+finding stays reproducible and nobody re-derives option 3 from first principles in six months.
+The self-cancelling property is pinned in `tests/numerics.test.js` as arithmetic rather than as a
+benchmark result.
+
+The CR curve itself stays and earns its keep elsewhere: `inferCr` answers "what CR did this fight
+like", which is worth showing the user directly and is the natural input to F13's test suggestions.
 
 ### Others, carried from the handoff
 
