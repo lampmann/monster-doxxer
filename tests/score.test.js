@@ -1,0 +1,148 @@
+/* Scorer tests — F1, F2, F3, F7.
+
+   These pin BEHAVIOUR, not constants. The numbers in TUNING are provisional
+   until the evaluation harness picks them, so asserting "this scores 0.62"
+   would just freeze a guess. What must stay true regardless of tuning:
+   rare evidence outranks common evidence, an unmentioned feature is free, a
+   contradiction is not, and query size doesn't change the scale.
+
+   Run: node tests/score.test.js
+*/
+"use strict";
+const S = require("../src/score.js");
+const { assert, assertEqual, section, report } = require("./harness.js");
+
+/* A small synthetic corpus. Deliberately hand-built rather than sampled from real data:
+   the rarity maths is what's under test, and it's only checkable when you know the counts.
+   99 mundane beasts with darkvision, one thing with tremorsense + burrow. */
+function corpus() {
+  const beasts = [];
+  for (let i = 0; i < 99; i++) {
+    beasts.push({
+      key: "Beast " + i + "|T", name: "Beast " + i, source: "T",
+      type: "beast", typeTags: [], size: ["medium"], speeds: { walk: 30 }, hover: false,
+      senseTags: ["Darkvision"], conditionImmune: [], traitTags: [], actionTags: [], damageTags: [],
+      resist: [], immune: [], vulnerable: [], symptoms: [], partial: false, crNum: 1, ac: 12, hpAvg: 20,
+    });
+  }
+  beasts.push({
+    key: "Delver|T", name: "Delver", source: "T",
+    type: "aberration", typeTags: [], size: ["huge"], speeds: { walk: 30, burrow: 30 }, hover: false,
+    senseTags: ["Tremorsense", "Darkvision"], conditionImmune: [], traitTags: ["Regeneration"],
+    actionTags: [], damageTags: [], resist: [], immune: ["acid"], vulnerable: [],
+    symptoms: ["healed-between-rounds"], partial: false, crNum: 9, ac: 18, hpAvg: 200,
+  });
+  return beasts;
+}
+
+const MONS = corpus();
+const R = S.buildRarity(MONS);
+
+/* ---------- F1: rarity ---------- */
+section("F1 — rarity weighting");
+{
+  assertEqual("the corpus size is what the table normalises against", R.total, 100);
+  const common = R.weight(S.featureKey("sense", "darkvision"));   // all 100 have it
+  const rare = R.weight(S.featureKey("sense", "tremorsense"));    // 1 of 100
+  assertEqual("a feature EVERY monster has is worth exactly nothing, which is the point of F1", common, 0);
+  assert("a feature one monster in a hundred has is worth a lot", rare > 4);
+  assert("...and no weight is ever negative", common >= 0 && rare >= 0);
+
+  const unseen = R.weight(S.featureKey("sense", "blindsight"));
+  assert("a feature NOTHING has is finite rather than infinite", Number.isFinite(unseen));
+  assert("...and is capped so one freak tag can't outvote the rest", unseen <= S.TUNING.maxWeight);
+
+  // A monster listing the same feature twice must not make it look commoner than it is.
+  const dupCorpus = MONS.concat([{
+    key: "Dup|T", name: "Dup", source: "T", type: "beast", typeTags: [], size: ["medium", "medium"],
+    speeds: {}, senseTags: ["Darkvision", "Darkvision"], conditionImmune: [], traitTags: [],
+    actionTags: [], damageTags: [], resist: [], immune: [], vulnerable: [], symptoms: [], partial: false,
+  }]);
+  // 100 monsters already have darkvision; Dup lists it twice and must still add exactly 1.
+  assertEqual("a feature listed twice on one monster adds one to its count, not two",
+    S.buildRarity(dupCorpus).counts[S.featureKey("sense", "darkvision")], 101);
+}
+
+/* ---------- F2: asymmetry ---------- */
+section("F2 — asymmetry: unmentioned is free, contradiction is not");
+{
+  // The Delver has Regeneration, acid immunity, huge size and a burrow speed. Report only ONE
+  // of them: the four the player never mentioned must not count against it.
+  const justBurrow = S.rank(MONS, { movement: ["burrow"] }, R, { limit: 1 })[0];
+  assertEqual("one rare observation is enough to surface the right monster", justBurrow.name, "Delver");
+  assertEqual("...and nothing it has but the player didn't mention counts against it", justBurrow.against.length, 0);
+
+  // Now contradict it. Same query plus a damage interaction the Delver gets wrong.
+  const contradicted = S.rank(MONS, { movement: ["burrow"], damage: { acid: "vulnerable" } }, R, { limit: 1 })[0];
+  assert("a contradiction is recorded against the candidate", contradicted.against.length > 0);
+  assert("...and drags the score below the clean match", contradicted.score < justBurrow.score);
+  assert("...naming what the statblock actually says", /immune/.test(contradicted.against[0].why));
+}
+
+section("F2 — the damage cost matrix is graded, not boolean");
+{
+  const w = st => S.rank(MONS, { movement: ["burrow"], damage: { acid: st } }, R, { limit: 1 })[0].score;
+  const exact = w("immune"), near = w("resistant"), far = w("vulnerable");
+  assert("reporting the exact interaction scores highest", exact > near);
+  assert("...an adjacent one costs a little", near > far);
+  assert("...and the opposite one costs the most", far < near);
+  assertEqual("every state in the matrix has a cost for every other state",
+    S.DMG_STATES.every(a => S.DMG_STATES.every(b => typeof S.DMG_COST[a][b] === "number")), true);
+  assertEqual("...and matching itself is always free", S.DMG_STATES.every(a => S.DMG_COST[a][a] === 0), true);
+  assert("the matrix is symmetric — being wrong costs the same in either direction",
+    S.DMG_STATES.every(a => S.DMG_STATES.every(b => S.DMG_COST[a][b] === S.DMG_COST[b][a])));
+}
+
+/* ---------- F7: normalisation ---------- */
+section("F7 — evidence normalisation");
+{
+  const one = S.rank(MONS, { movement: ["burrow"] }, R, { limit: 1 })[0];
+  const many = S.rank(MONS, {
+    movement: ["burrow"], senses: ["tremorsense"], size: "huge",
+    type: "aberration", symptoms: ["healed-between-rounds"],
+  }, R, { limit: 1 })[0];
+  assertEqual("both queries find the same monster", one.name, many.name);
+  assert("a perfect 1-field match and a perfect 5-field match score alike", Math.abs(one.score - many.score) < 1e-9);
+  assert("...both at the ceiling, since nothing contradicted", Math.abs(many.score - 1) < 1e-9);
+  assert("the raw scores differ — it's the normalisation doing the work", many.raw > one.raw);
+}
+
+/* ---------- ranking behaviour ---------- */
+section("ranking");
+{
+  const all = S.rank(MONS, { movement: ["burrow"] }, R);
+  assertEqual("every monster is ranked — nothing is filtered out", all.length, MONS.length);
+  assert("...scores descend", all.every((r, i) => i === 0 || all[i - 1].score >= r.score));
+  assert("a monster with no bearing on the query still scores, rather than being dropped",
+    all.some(r => r.name === "Beast 0"));
+
+  const srcFiltered = S.rank(MONS.concat([Object.assign({}, MONS[0], { key: "X|OTHER", name: "X", source: "OTHER" })]),
+    { movement: ["burrow"] }, R, { sources: ["T"] });
+  assert("source filtering is the one legitimate filter (F16)", !srcFiltered.some(r => r.source === "OTHER"));
+
+  assert("a query with nothing in it is reported as such rather than ranked", !S.hasEvidence({}));
+  assert("...and one with a single field is not", S.hasEvidence({ movement: ["burrow"] }));
+  assert("...nor is one with only a damage interaction", S.hasEvidence({ damage: { fire: "immune" } }));
+}
+
+section("explanation (F14)");
+{
+  const r = S.rank(MONS, { movement: ["burrow"], senses: ["tremorsense"], damage: { acid: "normal" } }, R, { limit: 1 })[0];
+  assert("the result lists what argued for it", r.for.length >= 2);
+  assert("...strongest first", r.for.every((x, i) => i === 0 || r.for[i - 1].weight >= x.weight));
+  assert("...and what argued against", r.against.length >= 1);
+  assert("...with a reason a human can check", r.against.every(x => typeof x.why === "string" && x.why.length > 5));
+  assert("every contribution names the facet it came from", r.for.every(x => S.FACET_KEYS.includes(x.facet) || x.facet === "damage"));
+}
+
+section("robustness");
+{
+  const weird = { movement: ["  BURROW  "], senses: [null, ""], type: "Aberration" };
+  const r = S.rank(MONS, weird, R, { limit: 1 })[0];
+  assertEqual("input is case- and whitespace-insensitive", r.name, "Delver");
+  assert("...and empty values in a list are ignored rather than scored", r.for.length === 2);
+  const bogus = S.rank(MONS, { damage: { fire: "sort of resistant?" } }, R, { limit: 1 })[0];
+  assertEqual("an unrecognised damage state is skipped, not guessed at", bogus.for.length + bogus.against.length, 0);
+}
+
+report("score");

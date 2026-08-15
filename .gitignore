@@ -1,0 +1,15 @@
+# Game data is user-supplied and never committed. Same rule as pmcrwf: this repo ships
+# mechanics and code, never sourcebook content. See DESIGN.md "What may be committed".
+data/*
+!data/README.md
+
+# Build artefacts from build/ (the optional Python index step)
+index/*.bin
+index/*.json
+!index/README.md
+
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
