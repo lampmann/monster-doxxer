@@ -25,6 +25,8 @@
    to move.
    ============================================================ */
 "use strict";
+const fs = require("fs");
+const path = require("path");
 const { load } = require("./corpus.js");
 const APP = require("../src/appearance.js");
 const EM = require("../src/embeddings.js");
@@ -52,13 +54,40 @@ const CASES = [
 ];
 
 function parseArgs(argv) {
-  const out = { show: 0, sweep: false, weight: 0.5 };
+  const out = { show: 0, sweep: false, weight: 0.5, dump: false };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--show") out.show = Number(argv[++i]);
     else if (argv[i] === "--sweep") out.sweep = true;
     else if (argv[i] === "--weight") out.weight = Number(argv[++i]);
+    else if (argv[i] === "--dump-queries") out.dump = true;
   }
   return out;
+}
+
+/* Properly-encoded query sentences, if `build/embed.py --queries` has been run.
+
+   THE POINT OF THESE. The browser has no text encoder, so a typed query is approximated
+   as the MEAN of its words' shipped vectors — word order and composition thrown away.
+   That approximation was chosen to keep the page dependency-free, and it was never
+   measured. These vectors are the same sentences encoded properly, by the model, which
+   makes the comparison possible: if the true sentences rank well and the means do not,
+   the fault is the shortcut and not CLIP. If both fail, it is not the shortcut. */
+function loadTrueQueries(dim) {
+  const dir = path.join(__dirname, "..", "index");
+  const manifest = path.join(dir, "appearance-queries.json");
+  if (!fs.existsSync(manifest)) return null;
+  try {
+    const meta = JSON.parse(fs.readFileSync(manifest, "utf8"));
+    const buf = fs.readFileSync(path.join(dir, "appearance-queries.i8"));
+    const bytes = new Int8Array(buf.buffer, buf.byteOffset, buf.length);
+    if (meta.dim !== dim || bytes.length < meta.queries.length * dim) return null;
+    const out = new Map();
+    meta.queries.forEach((q, i) => out.set(q, EM.dequantise(bytes, i * dim, dim)));
+    return out;
+  } catch (e) {
+    process.stderr.write("index/appearance-queries is unreadable: " + e.message + "\n");
+    return null;
+  }
 }
 
 /* Where the true answer landed, for one scorer. */
@@ -76,6 +105,10 @@ const summarise = ranks => ({
 
 function main() {
   const args = parseArgs(process.argv);
+  if (args.dump) {                        // feed these to build/embed.py --queries
+    CASES.forEach(([query]) => console.log(query));
+    return;
+  }
   const { monsters, appearanceIndex, embeddings } = load({});
 
   /* THE COMPARISON THIS FILE EXISTS FOR. Lexical alone is what shipped before CLIP;
@@ -85,21 +118,45 @@ function main() {
   if (embeddings) {
     const weights = args.sweep ? [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1] : [args.weight];
     console.log(`\nindex: ${embeddings.model}, ${embeddings.dim} dims, ` +
-      `${embeddings.keys.length} monsters, ${embeddings.vocabCount} vocabulary words\n`);
-    console.log("  blend weight   top-1   top-5   top-20   never found");
-    weights.forEach(w => {
-      const ranks = CASES.map(([query, want]) => {
-        const lex = APP.appearanceScore(query, appearanceIndex);
-        const sem = EM.embeddingScore(APP.withoutSize(query), embeddings);
-        return rankOf(EM.blend(lex, sem, w), want).rank;
+      `${embeddings.keys.length} monsters, ${embeddings.vocabCount} vocabulary words` +
+      (embeddings.withImages ? ", artwork mixed in" : ", text only") + "\n");
+
+    const sweep = (label, queryFor) => {
+      console.log(`  ${label}`);
+      console.log("  blend weight   top-1   top-5   top-20   never found");
+      weights.forEach(w => {
+        const ranks = CASES.map(([query, want]) => {
+          const lex = APP.appearanceScore(query, appearanceIndex);
+          const sem = EM.embeddingScore(queryFor(query), embeddings);
+          return rankOf(EM.blend(lex, sem, w), want).rank;
+        });
+        const r = summarise(ranks);
+        const name = w === 0 ? "lexical only" : w === 1 ? "semantic only" : String(w);
+        console.log(`  ${name.padEnd(13)}  ${String(r.top1).padStart(4)}/${CASES.length}` +
+          `${String(r.top5).padStart(6)}/${CASES.length}${String(r.top20).padStart(7)}/${CASES.length}` +
+          `${String(r.lost).padStart(12)}`);
       });
-      const r = summarise(ranks);
-      const label = w === 0 ? "lexical only" : w === 1 ? "semantic only" : String(w);
-      console.log(`  ${label.padEnd(13)}  ${String(r.top1).padStart(4)}/${CASES.length}` +
-        `${String(r.top5).padStart(6)}/${CASES.length}${String(r.top20).padStart(7)}/${CASES.length}` +
-        `${String(r.lost).padStart(12)}`);
-    });
-    console.log("");
+      console.log("");
+    };
+
+    sweep("query = mean of its words' vectors (what the page does)",
+      q => APP.withoutSize(q));
+
+    /* The controlled comparison. Same monsters, same blend, same everything — the only
+       thing that changes is how the query got its vector. */
+    const truth = loadTrueQueries(embeddings.dim);
+    if (truth) {
+      const missing = CASES.filter(([q]) => !truth.has(q)).length;
+      if (missing) console.log(`  (${missing} of ${CASES.length} queries were not encoded)\n`);
+      sweep("query = the sentence encoded properly by the model",
+        q => truth.get(q) || APP.withoutSize(q));
+    } else {
+      console.log("  For the controlled comparison, encode the queries themselves:\n" +
+        "    node eval/appearance.js --dump-queries > queries.txt\n" +
+        "    python3 build/embed.py --queries queries.txt   (add --images if you have them)\n" +
+        "  This table then gains a second half, and the mean-of-words shortcut stops being\n" +
+        "  an assumption.\n");
+    }
   }
 
   const ranks = [];

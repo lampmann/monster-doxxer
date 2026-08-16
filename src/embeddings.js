@@ -76,6 +76,8 @@
     return {
       model: manifest.model || "unknown",
       dim, keys, vocab,
+      withImages: !!manifest.withImages,
+      centred: !!manifest.centred,
       vocabCount: (manifest.vocab || []).length,
       monsterBytes, vocabBytes: vocabBytes || null,
       monsterAt(i) { return dequantise(monsterBytes, i * dim, dim); },

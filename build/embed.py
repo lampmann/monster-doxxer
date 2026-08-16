@@ -256,6 +256,29 @@ def quantise(vectors):
     return q.tobytes()
 
 
+def centre(blocks):
+    """Subtract the corpus mean direction from every vector (--center).
+
+    WHY THIS MIGHT MATTER MORE THAN ANY OTHER KNOB. CLIP's text embeddings are famously
+    anisotropic: they do not spread over the sphere, they crowd into a narrow cone, so any
+    two of them have a high cosine before either one's meaning is considered. Ranking by
+    raw cosine then measures mostly that shared direction — how generically document-like a
+    document is — and the semantic residual that actually distinguishes a beholder from a
+    bullywug is a small perturbation on top of it, easily swamped.
+
+    Removing the mean removes the part every document has in common and leaves the part
+    that differs. It is applied to the documents, the vocabulary and the queries with the
+    SAME mean, which is what keeps them comparable — and because centring is linear, the
+    browser's mean-of-words trick still lands where it should afterwards.
+
+    This is a hypothesis with a good pedigree, not a measured result. --center exists so it
+    can be tested rather than argued about."""
+    import numpy as np
+    stacked = np.concatenate([b for b in blocks if len(b)])
+    mu = stacked.mean(axis=0, keepdims=True)
+    return [b - mu if len(b) else b for b in blocks]
+
+
 def encode(model_name, pretrained, texts, images, batch=64):
     """Returns (text_vectors, image_vectors_or_None). Imported here rather than at module
     scope so `--help` and the corpus loading work without torch installed."""
@@ -324,6 +347,8 @@ def main():
     ap.add_argument("--image-weight", type=float, default=0.5,
                     help="how much of a monster's vector comes from its picture (0..1)")
     ap.add_argument("--vocab-size", type=int, default=8000)
+    ap.add_argument("--center", "--centre", dest="center", action="store_true",
+                    help="subtract the corpus mean before quantising (see centre())")
     ap.add_argument("--queries", help="file of one query per line; encode these too, for eval")
     ap.add_argument("--limit", type=int, help="only the first N monsters, for a quick trial run")
     args = ap.parse_args()
@@ -357,6 +382,13 @@ def main():
                               image_vectors[:n] if image_vectors is not None else None,
                               args.image_weight)
     vocab_vectors = text_vectors[n:n + len(vocab)]
+    query_vectors = text_vectors[n + len(vocab):]
+
+    if args.center:
+        # One mean, shared by all three blocks, or they stop being comparable.
+        monster_vectors, vocab_vectors, query_vectors = centre(
+            [monster_vectors, vocab_vectors, query_vectors])
+        print("centred on the corpus mean")
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "appearance-mon.i8"), "wb") as fh:
@@ -368,6 +400,7 @@ def main():
         "model": "%s/%s" % (args.model, args.pretrained),
         "dim": int(monster_vectors.shape[1]),
         "withImages": bool(args.images),
+        "centred": bool(args.center),
         "imageWeight": args.image_weight if args.images else 0,
         "keys": [d["key"] for d in docs],
         "vocab": vocab,
@@ -376,7 +409,7 @@ def main():
         json.dump(manifest, fh)
 
     if query_lines:
-        qv = text_vectors[n + len(vocab):]
+        qv = query_vectors
         with open(os.path.join(OUT, "appearance-queries.json"), "w", encoding="utf8") as fh:
             json.dump({"queries": query_lines, "dim": manifest["dim"]}, fh)
         with open(os.path.join(OUT, "appearance-queries.i8"), "wb") as fh:
