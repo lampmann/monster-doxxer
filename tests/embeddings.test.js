@@ -153,6 +153,14 @@ section("blending the lexical and semantic halves");
     EM.blend(lex, new Map(), 0.5).get("Rust Monster|MM"), 1);
   assert("...and with no lexical scores, the semantic ones still rank",
     (EM.blend(new Map(), sem, 0.5).get("Beholder|MM") || 0) > 0);
+
+  /* A query BM25 finds nothing for, scored at weight 0. The answer is "no monster
+     scored", not "every monster scored zero" — the latter hands the benchmark a full
+     ranking built out of nothing, and inflates whatever it is measuring. */
+  assertEqual("a query the lexical half missed ranks nobody at weight 0",
+    EM.blend(new Map(), sem, 0).size, 0);
+  assertEqual("...and the same is true when the lexical map is absent entirely",
+    EM.blend(null, sem, 0).size, 0);
 }
 
 report("embeddings");

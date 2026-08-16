@@ -138,8 +138,11 @@
     const w = Math.max(0, Math.min(1, weight == null ? 0.5 : weight));
     if (!semantic || !semantic.size) return lexical || new Map();
     if (!lexical || !lexical.size) {
+      // Positives only, same as every other path. At weight 0 this branch used to emit a
+      // map of zeroes, which ranks every monster in the corpus for a query BM25 found
+      // nothing for — it made "lexical only" look like it had found things it hadn't.
       const only = new Map();
-      semantic.forEach((v, k) => only.set(k, v * w));
+      semantic.forEach((v, k) => { const x = v * w; if (x > 0) only.set(k, x); });
       return only;
     }
     const out = new Map();

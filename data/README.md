@@ -12,14 +12,21 @@ data/
     bestiary-mm.json
     bestiary-vgm.json
     ...
-  bestiary/
-    fluff-index.json       (optional — the manifest for the fluff files below)
-  fluff-bestiary/          (optional — appearance matching only)
-    fluff-bestiary-mm.json
+    fluff-index.json         (optional — the manifest for the fluff files)
+    fluff-bestiary-mm.json   (optional — appearance matching only)
     ...
-  books.json               (optional — book titles in the source filter)
-  adventures.json          (optional — adventure titles, and the spoiler grouping)
+  books.json                 (optional — book titles in the source filter)
+  adventures.json            (optional — adventure titles, and the spoiler grouping)
 ```
+
+Copy 5e.tools' `bestiary/` folder across whole and you are done: the fluff files ship inside it,
+next to the statblocks. A separate `data/fluff-bestiary/` is also read, for anyone who already
+split them out that way, but there is no reason to do so.
+
+**Check the count.** Every entry point prints how many monsters it found prose for —
+`4528 monsters ... 3367 described`. If that second number is **0**, the fluff files are missing or
+somewhere else, and appearance matching is running on nothing but names and action titles. It will
+not error; it will just score badly, which is much harder to notice.
 
 `books.json` and `adventures.json` sit at the top of 5e.tools' `data/` folder. They are only used to
 label F16's source filter: without them it still works and shows source codes (`MM`, `CoS`) instead

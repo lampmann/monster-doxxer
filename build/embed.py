@@ -85,26 +85,55 @@ def load_bestiary():
             "name": m["name"],
             "source": m.get("source", ""),
             "doc": describe(m, fluff.get(key.lower(), "")),
+            "prose": bool(fluff.get(key.lower(), "")),
         })
+
+    # SAY THIS OUT LOUD. The prose is most of what CLIP has to work with: without it a
+    # document is a name, a size, a type and a list of action titles, and the paraphrase
+    # benchmark measures a missing directory rather than a model. Building anyway is the
+    # right call — the index is still usable — but building QUIETLY is not.
+    described = sum(1 for d in out if d["prose"])
+    print("%d of %d monsters have descriptive prose" % (described, len(out)))
+    if described < len(out) // 4:
+        sys.stderr.write(
+            "\n  WARNING: almost nothing here is described.\n"
+            "  Expected data/bestiary/fluff-bestiary-*.json (where 5e.tools ships them)\n"
+            "  or data/fluff-bestiary/*.json. Without those the semantic index has no\n"
+            "  appearance to index and the benchmark will read as a model failure.\n\n")
     return out
+
+
+def load_fluff_raw():
+    """name|source -> the raw fluff entry, from wherever the files actually are.
+
+    5e.tools ships them INSIDE data/bestiary/ alongside the statblocks; data/README.md
+    asked for a data/fluff-bestiary/ instead. Both are read, because finding neither is
+    silent: every document collapses to a name and a list of action titles, the build
+    succeeds, and the benchmark reports a model failure that is really a missing file."""
+    raw = {}
+    seen = set()
+    for d, keep in [(os.path.join(DATA, "bestiary"),
+                     lambda f: f.startswith("fluff-") and f.endswith(".json")),
+                    (os.path.join(DATA, "fluff-bestiary"),
+                     lambda f: f.endswith(".json"))]:
+        if not os.path.isdir(d):
+            continue
+        for fname in sorted(os.listdir(d)):
+            if not keep(fname) or fname in seen:
+                continue
+            seen.add(fname)
+            try:
+                for f in read_json(os.path.join(d, fname)).get("monsterFluff", []):
+                    if f.get("name"):
+                        raw["%s|%s" % (f["name"].lower(), f.get("source", "").lower())] = f
+            except Exception:
+                continue
+    return raw
 
 
 def load_fluff():
     """name|source -> the opening descriptive prose, with _copy resolved."""
-    fdir = os.path.join(DATA, "fluff-bestiary")
-    if not os.path.isdir(fdir):
-        return {}
-    raw = {}
-    for fname in sorted(os.listdir(fdir)):
-        if not fname.endswith(".json"):
-            continue
-        try:
-            for f in read_json(os.path.join(fdir, fname)).get("monsterFluff", []):
-                if f.get("name"):
-                    raw["%s|%s" % (f["name"].lower(), f.get("source", "").lower())] = f
-        except Exception:
-            continue
-
+    raw = load_fluff_raw()
     out = {}
     for key, f in raw.items():
         seen = 0
@@ -306,18 +335,7 @@ def main():
 
     images = None
     if args.images:
-        fluff_raw = {}
-        fdir = os.path.join(DATA, "fluff-bestiary")
-        if os.path.isdir(fdir):
-            for fname in sorted(os.listdir(fdir)):
-                if fname.endswith(".json"):
-                    try:
-                        for f in read_json(os.path.join(fdir, fname)).get("monsterFluff", []):
-                            if f.get("name"):
-                                fluff_raw["%s|%s" % (f["name"].lower(),
-                                                     f.get("source", "").lower())] = f
-                    except Exception:
-                        continue
+        fluff_raw = load_fluff_raw()
         images = [artwork_path(d, fluff_raw) for d in docs]
         print("%d of them have artwork on disk" % sum(1 for p in images if p))
 

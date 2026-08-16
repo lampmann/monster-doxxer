@@ -148,7 +148,11 @@
     const fluffLists = [];
     if (fidx) {
       await Promise.all(Object.values(fidx).map(async f => {
-        const j = await getJsonOptional("data/fluff-bestiary/" + f);
+        /* 5e.tools ships these inside bestiary/ next to the statblocks; data/README.md
+           asked for a fluff-bestiary/ of your own. Try both — reading neither is silent,
+           and leaves every description document with no prose in it. */
+        const j = await getJsonOptional("data/bestiary/" + f)
+               || await getJsonOptional("data/fluff-bestiary/" + f);
         if (j && Array.isArray(j.monsterFluff)) fluffLists.push(j.monsterFluff);
       }));
     }

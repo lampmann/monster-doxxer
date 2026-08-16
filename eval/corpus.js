@@ -88,17 +88,26 @@ function load(opts) {
   const sourceDates = SRC.sourceDates(catalogue);
 
   /* Fluff, for F10's appearance index. Also optional: without it the description
-     documents still exist (name, size, type, trait names) and simply carry no prose. */
-  const fluffDir = path.join(ROOT, "data", "fluff-bestiary");
+     documents still exist (name, size, type, trait names) and simply carry no prose.
+
+     TWO LOCATIONS, and both are checked deliberately. 5e.tools ships the fluff files
+     INSIDE data/bestiary/ alongside the statblocks; this project's README asked for a
+     data/fluff-bestiary/ instead. Looking in only one of those is how you end up with an
+     index that loads, reports 4528 monsters, and quietly describes none of them — a tool
+     that looks like it works and scores like it doesn't. */
   const fluffLists = [];
-  if (fs.existsSync(fluffDir)) {
-    fs.readdirSync(fluffDir).filter(f => /\.json$/.test(f)).forEach(f => {
+  const seenFluff = new Set();
+  [["bestiary", /^fluff-.*\.json$/], ["fluff-bestiary", /\.json$/]].forEach(([dir, keep]) => {
+    const full = path.join(ROOT, "data", dir);
+    if (!fs.existsSync(full)) return;
+    fs.readdirSync(full).filter(f => keep.test(f) && !seenFluff.has(f)).forEach(f => {
+      seenFluff.add(f);
       try {
-        const j = readJson(path.join(fluffDir, f));
+        const j = readJson(path.join(full, f));
         if (Array.isArray(j.monsterFluff)) fluffLists.push(j.monsterFluff);
       } catch (e) { badFiles.push(f + ": " + e.message); }
     });
-  }
+  });
   const fluff = APP.fluffMap(fluffLists);
   const appearanceIndex = APP.buildAppearanceIndex(monsters, fluff);
   /* What a party could say about how it LOOKED, for the harness to paraphrase back.
