@@ -63,6 +63,19 @@ everything else&rdquo;: nobody should have to click 106 books to hide one.
 
 Observations persist across a reload, so you can keep adding to them as the fight goes on.
 
+## Several monsters at once
+
+There is a tab per monster, because you are usually working out what two or three things
+were. Click the active tab to give it a name — VTTs hand out names like "Ogre B", and that
+is more use than whatever the tool currently guesses. Each tab keeps its own evidence;
+mixing two monsters' observations together is the one mistake no amount of ranking recovers
+from.
+
+Tell it your party's level and size, and which tabs are in the same fight, and it works out
+the CR band a DM building that fight would be aiming at — one ogre is a very different
+proposition from one of eight. It never changes a score and never rules anything out; it
+only decides the order among monsters the evidence can't separate.
+
 ## If you caught a name
 
 DMs narrate, and narration has nouns. If yours said "the barghest lunges at you", you have the

@@ -16,6 +16,8 @@
   </span>
 </div>
 
+<div id="doxx-tabs"></div>
+
 <div id="fatal" class="error" hidden></div>
 
 <div class="cols">
@@ -83,6 +85,22 @@
     </div>
 
     <div class="module">
+      <h2>Your party</h2>
+      <span class="hint block">Optional. This never changes a score and never rules anything
+        out &mdash; it only decides the order among monsters the evidence can't tell apart,
+        which is most of them. DMs throw wildly over- and under-levelled monsters at parties
+        on purpose, so it is a preference, not a fact.</span>
+      <label>Level <input type="number" class="num" id="in-level" min="1" max="20"></label>
+      <label style="margin-left:.4rem">Adventurers <input type="number" class="num" id="in-party" min="1" max="10"></label>
+      <div style="margin-top:.35rem">
+        <label>In this fight: <select id="in-fight" title="tabs in the same fight share one encounter budget"></select></label>
+        <label style="margin-left:.4rem">How many of <i>this</i> one?
+          <input type="number" class="num" id="in-count" min="1" max="40"></label>
+      </div>
+      <div class="hint" id="band-read"></div>
+    </div>
+
+    <div class="module">
       <h2>Books</h2>
       <span class="hint block">Click once to <b style="color:var(--link)">include</b>, again to
         <b style="color:var(--danger)">exclude</b>, again to clear. Include when you know which
@@ -116,6 +134,7 @@
 <script src="src/symptoms.js"></script>
 <script src="src/appearance.js"></script>
 <script src="src/names.js"></script>
+<script src="src/encounter.js"></script>
 <script src="src/score.js"></script>
 <script src="src/discriminate.js"></script>
 <script src="src/sources.js"></script>

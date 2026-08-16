@@ -29,13 +29,31 @@
   const WINDOW = 40;
   const SHOWN = 12;
 
-  /* ---------- state ---------- */
+  /* ---------- state ----------
+
+     WHAT IS PER-TAB AND WHAT IS NOT is the only real decision here. Observations belong
+     to a monster: the whole point of tabs is that the evidence for the thing in the
+     doorway must never blend into the evidence for the thing on the ceiling, which is
+     the "two monsters, one set of observations" failure the handoff flagged from the
+     start. Everything else — which books your DM owns, how big your party is — is a fact
+     about the TABLE and is shared, because retyping it per monster would be absurd. */
+  const blankObs = () => ({ symptoms: [], type: "", size: "", movement: [], senses: [],
+    condImmune: [], damage: {}, appearance: "", heardName: "" });
+  const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    label: "", best: "", obs: blankObs(), ac: null, hp: null, retuned: false,
+    // Which fight this creature was in, and how many of it there were. Both feed the
+    // party-plausibility band: one ogre and one of eight ogres are very different CRs.
+    fight: "f1", count: 1 });
+
   const S = {
     monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
     appearanceIndex: null, nameIndex: null, sizeFromProse: "",
-    obs: { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "", heardName: "" },
+    // The active tab's fields, mirrored here so the rest of the app reads them unchanged.
+    obs: blankObs(),
     ac: null, hp: null, retuned: false,
-    sources: {},              // { CODE: "ignore" | "include" | "exclude" }
+    tabs: [], activeId: "",
+    sources: {},              // { CODE: "ignore" | "include" | "exclude" } — shared
+    party: { level: null, size: 4 },   // a fact about the table, so shared across tabs
     ranked: [], selected: null,
   };
 
@@ -144,36 +162,119 @@
      F15 — session evidence. The fight is still going; the tool should not
      forget what you told it because you reloaded the page.
      ============================================================ */
+  /* Copy the live fields back into whichever tab is showing, so a switch or a save
+     never loses what was typed since the last one. */
+  function syncActive() {
+    const t = S.tabs.find(x => x.id === S.activeId);
+    if (!t) return;
+    t.obs = S.obs; t.ac = S.ac; t.hp = S.hp; t.retuned = S.retuned;
+  }
+
   function persist() {
+    syncActive();
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
-        obs: S.obs, ac: S.ac, hp: S.hp, retuned: S.retuned, sources: S.sources,
+        tabs: S.tabs, activeId: S.activeId, sources: S.sources, party: S.party,
       }));
     } catch (e) { /* private browsing, quota — not worth interrupting a fight over */ }
   }
   function restore() {
     let d = null;
-    try { d = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { return; }
-    if (!d) return;
-    if (d.obs) Object.assign(S.obs, d.obs);
-    S.ac = d.ac == null ? null : d.ac;
-    S.hp = d.hp == null ? null : d.hp;
-    S.retuned = !!d.retuned;
-    S.sources = d.sources || {};
+    try { d = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { d = null; }
+    if (d && Array.isArray(d.tabs) && d.tabs.length) {
+      S.tabs = d.tabs.map(t => Object.assign(blankTab(), t, { obs: Object.assign(blankObs(), t.obs) }));
+      S.activeId = d.tabs.some(t => t.id === d.activeId) ? d.activeId : S.tabs[0].id;
+    } else if (d && d.obs) {
+      // A session saved before tabs existed. Carry it into the first tab rather than bin it.
+      const t = blankTab();
+      Object.assign(t, { obs: Object.assign(blankObs(), d.obs), ac: d.ac, hp: d.hp, retuned: !!d.retuned });
+      S.tabs = [t]; S.activeId = t.id;
+    } else {
+      const t = blankTab();
+      S.tabs = [t]; S.activeId = t.id;
+    }
+    if (d) {
+      S.sources = d.sources || {};
+      if (d.party) S.party = Object.assign({ level: null, size: 4 }, d.party);
+    }
+    $("in-level").value = S.party.level == null ? "" : S.party.level;
+    $("in-party").value = S.party.size == null ? "" : S.party.size;
+    loadActive();
+  }
+
+  /* Pull the showing tab's fields into the live state and into the inputs. */
+  function loadActive() {
+    const t = S.tabs.find(x => x.id === S.activeId) || S.tabs[0];
+    if (!t) return;
+    S.activeId = t.id;
+    S.obs = Object.assign(blankObs(), t.obs);
+    S.ac = t.ac == null ? null : t.ac;
+    S.hp = t.hp == null ? null : t.hp;
+    S.retuned = !!t.retuned;
+    S.sizeFromProse = "";
+    S.selected = null;
     $("in-ac").value = S.ac == null ? "" : S.ac;
     $("in-hp").value = S.hp == null ? "" : S.hp;
     $("in-retuned").checked = S.retuned;
     $("in-appearance").value = S.obs.appearance || "";
     $("in-name").value = S.obs.heardName || "";
-  }
-  function clearSession() {
-    S.obs = { symptoms: [], type: "", size: "", movement: [], senses: [], condImmune: [], damage: {}, appearance: "", heardName: "" };
-    S.sizeFromProse = "";
-    S.ac = S.hp = null; S.retuned = false; S.sources = {}; S.selected = null;
-    $("in-ac").value = ""; $("in-hp").value = ""; $("in-retuned").checked = false;
     $("sym-search").value = "";
-    $("in-appearance").value = "";
-    $("in-name").value = "";
+    $("in-count").value = t.count || 1;
+    renderFightPicker();
+  }
+
+  /* How many creatures were in this tab's fight, across every tab in it. This is the
+     number that shifts the band: the DMG multiplies an encounter's XP by how crowded it
+     is, so inverting it divides each individual monster's plausible CR down. */
+  function fightCount(fight) {
+    return S.tabs.filter(t => (t.fight || "f1") === fight)
+      .reduce((n, t) => n + Math.max(1, Number(t.count) || 1), 0);
+  }
+  const fightIds = () => {
+    const ids = [...new Set(S.tabs.map(t => t.fight || "f1"))];
+    return ids.sort();
+  };
+
+  function renderFightPicker() {
+    const sel = $("in-fight");
+    if (!sel) return;
+    const t = S.tabs.find(x => x.id === S.activeId);
+    const cur = (t && t.fight) || "f1";
+    const ids = [...new Set(fightIds().concat([cur]))].sort();
+    sel.innerHTML = ids.map((f, i) =>
+      `<option value="${esc(f)}"${f === cur ? " selected" : ""}>Fight ${i + 1}</option>`).join("") +
+      `<option value="__new">+ a separate fight</option>`;
+  }
+
+  /* A tab shows what it is about without being named: whatever is currently winning.
+     Naming it yourself wins, because "Goblin" beside a tab you know is a disguised
+     doppelganger is worse than no label at all. */
+  function tabLabel(t) {
+    if (t.label) return t.label;
+    // `best` is remembered from the last time this tab was ranked, so a tab you are not
+    // looking at keeps showing what it resolved to instead of reverting to raw input.
+    if (t.best) return t.best;
+    if (t.obs && t.obs.heardName) return t.obs.heardName;
+    return "Monster " + (S.tabs.indexOf(t) + 1);
+  }
+
+  function renderTabs() {
+    const el = $("doxx-tabs");
+    if (!el) return;
+    el.innerHTML = S.tabs.map(t => {
+      const active = t.id === S.activeId;
+      return `<button type="button" class="doxx-tab${active ? " active" : ""}" data-tab="${esc(t.id)}" ` +
+        `title="${active ? "click to rename" : "switch to this monster"}">${esc(tabLabel(t))}` +
+        (S.tabs.length > 1 ? `<span class="doxx-tab-x" data-closetab="${esc(t.id)}" title="close">×</span>` : "") +
+        `</button>`;
+    }).join("") + `<button type="button" id="tab-add" title="another monster in the same fight">+ Another monster</button>`;
+  }
+  // Clears the monster in front of you, not the whole session — the other tabs and the
+  // book filter are separate work and losing them to a mis-click would be its own bug.
+  function clearSession() {
+    const t = S.tabs.find(x => x.id === S.activeId);
+    if (t) { t.obs = blankObs(); t.ac = t.hp = null; t.retuned = false; t.label = ""; }
+    loadActive();
     persist(); renderAll();
   }
 
@@ -302,8 +403,11 @@
 
     if (!window.hasEvidence(obs)) {
       S.ranked = [];
+      const empty = S.tabs.find(x => x.id === S.activeId);
+      if (empty) empty.best = "";
       box.innerHTML = `<span class="hint">Nothing observed yet. Start with what it did &mdash; ` +
         `that box is worth more than all the others together.</span>`;
+      renderTabs();
       return;
     }
 
@@ -314,14 +418,23 @@
       ? window.appearanceScore(obs.appearance, S.appearanceIndex) : null;
     const nameScores = obs.heardName && S.nameIndex
       ? window.nameScore(obs.heardName, S.nameIndex) : null;
+    /* The party prior. Needs a level to mean anything; without one it is simply absent
+       rather than assumed, because guessing the party's level would be inventing evidence. */
+    const active = S.tabs.find(x => x.id === S.activeId);
+    const crScores = S.party.level
+      ? window.crPlausibility(S.monsters, S.party.level, S.party.size,
+                              fightCount((active && active.fight) || "f1"))
+      : null;
     const ranked = window.rank(S.monsters, obs, S.rarity, {
       sources: spec, numerics: S.numerics, retuned: S.retuned, legacy: S.legacy,
-      appearanceScores, nameScores, collapseByName: true, limit: WINDOW, keepMonster: true,
+      appearanceScores, nameScores, crPlausibility: crScores,
+      collapseByName: true, limit: WINDOW, keepMonster: true,
     });
     S.ranked = ranked;
 
     if (!ranked.length) {
       box.innerHTML = `<span class="error">Every book is excluded, so there is nothing left to rank.</span>`;
+      renderTabs();
       return;
     }
 
@@ -383,6 +496,13 @@
         </div>
       </div>`;
     }).join("");
+
+    /* Drawn here rather than in renderAll: a tab is labelled by whatever is currently
+       winning, so the label has to follow the ranking it reads — and doing it at the end
+       of the one function that re-ranks means every handler updates it for free. */
+    const cur = S.tabs.find(x => x.id === S.activeId);
+    if (cur) cur.best = shown.length && shown[0].score > 1e-9 ? shown[0].name : "";
+    renderTabs();
   }
 
   /* F13 — what to try next.
@@ -447,7 +567,7 @@
   }
 
   function renderAll() {
-    applyProseSize(); renderNameRead();
+    applyProseSize(); renderNameRead(); renderFightPicker(); renderBand();
     renderPickers(); renderDamage(); renderSymptoms(); renderSources();
     renderCrHint(); renderResults(); renderSuggestions(); renderDetail();
   }
@@ -537,10 +657,70 @@
       return;
     }
 
-    if (t.closest("#btn-clear")) clearSession();
+    if (t.closest("#btn-clear")) { clearSession(); return; }
+
+    /* ---- tabs ---- */
+    const close = t.closest("[data-closetab]");
+    if (close) {
+      const id = close.dataset.closetab;
+      const i = S.tabs.findIndex(x => x.id === id);
+      if (i < 0 || S.tabs.length <= 1) return;
+      syncActive();
+      S.tabs.splice(i, 1);
+      if (S.activeId === id) S.activeId = S.tabs[Math.max(0, i - 1)].id;
+      loadActive();
+      persist(); renderAll();
+      return;
+    }
+    const tab = t.closest("[data-tab]");
+    if (tab) {
+      const id = tab.dataset.tab;
+      if (id === S.activeId) {
+        // Clicking the tab you are already on renames it, as in pmcrwf.
+        const cur = S.tabs.find(x => x.id === id);
+        const name = window.prompt("Call this one:", cur.label || tabLabel(cur));
+        if (name != null) { cur.label = name.trim(); persist(); renderTabs(); }
+        return;
+      }
+      syncActive();
+      S.activeId = id;
+      loadActive();
+      persist(); renderAll();
+      return;
+    }
+    if (t.closest("#tab-add")) {
+      syncActive();
+      const fresh = blankTab();
+      S.tabs.push(fresh);
+      S.activeId = fresh.id;
+      loadActive();
+      persist(); renderAll();
+    }
   });
 
+  function renderBand() {
+    const el = $("band-read");
+    if (!el) return;
+    if (!S.party.level) { el.textContent = ""; return; }
+    const t = S.tabs.find(x => x.id === S.activeId);
+    const n = fightCount((t && t.fight) || "f1");
+    const b = window.band(S.party.level, S.party.size, n);
+    el.textContent = `${n} creature${n === 1 ? "" : "s"} in this fight — a DM building it would ` +
+      `be working around ${window.describeBand(b)}. Used only to order monsters the evidence ties.`;
+  }
+
   document.addEventListener("change", e => {
+    if (e.target.id === "in-fight") {
+      const t = S.tabs.find(x => x.id === S.activeId);
+      if (!t) return;
+      // "+ a separate fight" mints an id nothing else uses yet.
+      t.fight = e.target.value === "__new"
+        ? "f" + (fightIds().length + 1) + Date.now().toString(36).slice(-3)
+        : e.target.value;
+      renderFightPicker(); renderBand();
+      persist(); renderResults(); renderSuggestions();
+      return;
+    }
     const dmg = e.target.closest("[data-dmg]");
     if (dmg) {
       S.obs.damage[dmg.dataset.dmg] = dmg.value;
@@ -609,6 +789,22 @@
       S.obs.appearance = e.target.value;
       applyProseSize();
       persist(); renderPickers(); renderResults(); renderSuggestions();
+      return;
+    }
+    if (e.target.id === "in-level" || e.target.id === "in-party") {
+      const v = e.target.value === "" ? null : Number(e.target.value);
+      const ok = v == null || (Number.isFinite(v) && v > 0);
+      if (e.target.id === "in-level") S.party.level = ok ? v : null;
+      else S.party.size = ok ? v : 4;
+      renderBand();
+      persist(); renderResults(); renderSuggestions();
+      return;
+    }
+    if (e.target.id === "in-count") {
+      const t = S.tabs.find(x => x.id === S.activeId);
+      if (t) t.count = Math.max(1, Number(e.target.value) || 1);
+      renderBand();
+      persist(); renderResults(); renderSuggestions();
       return;
     }
     if (e.target.id === "in-ac" || e.target.id === "in-hp") {

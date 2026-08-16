@@ -74,6 +74,17 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 button:focus-visible, .chip:focus-visible, .fbtn:focus-visible, .fctrl-btn:focus-visible,
 input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
+/* ----- tabs: one per monster being doxxed. pmcrwf's character-tab idiom. -----
+   You are usually working out what several things were at once, and the evidence for
+   each has to stay separate — merging two monsters' observations is the failure mode
+   the design has warned about since the handoff. */
+#doxx-tabs { display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .75rem;
+             border-bottom: 1px solid var(--border-hair); padding-bottom: .35rem; }
+#doxx-tabs button { font: inherit; font-size: .85rem; padding: .15rem .5rem; }
+.doxx-tab.active { font-weight: bold; border-bottom-width: 2px; border-bottom-color: var(--link-border); }
+.doxx-tab-x { margin-left: .4rem; opacity: .55; }
+.doxx-tab .hint { margin-left: .3rem; }
+
 /* ----- chips: the general on/off control ----- */
 .chip { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);
         padding: 0 5px; margin: 1px; font: inherit; font-size: .8rem; border-radius: var(--radius); }

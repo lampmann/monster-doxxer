@@ -20,6 +20,8 @@ this file is where it meets reality and where it has been deviated from.
 | Discriminating tests (F13) | Built, 41 assertions, and measured. |
 | `src/appearance.js` | F10 (lexical half), F11, F12 built, 45 assertions. **Embeddings not built** — below. |
 | `src/names.js` | Matching a name the party heard. Not in the handoff; 38 assertions. |
+| `src/encounter.js` | Party-plausibility tiebreak from level and fight size; 33 assertions. |
+| Tabs | One per monster, with per-tab evidence and encounter grouping. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
@@ -105,6 +107,51 @@ corpus through: `type` can nest a `{choose: [...]}` (the Empyrean is "celestial 
 crashed every facet that lowercased it; `damageTags` were passed through as 5e.tools' raw single
 letters, so an observation of `fire` could never match `"F"`; and a symptom candidate whose regex
 failed to compile matched *every* monster rather than none.
+
+## Tabs, and what is shared between them
+
+You are usually working out what several things were at once, so there is a tab per
+monster, in pmcrwf's idiom: click the active tab to rename it, `×` to close, `+` to add.
+A tab labels itself with whatever is currently winning until you name it — and VTT parties
+usually have a DM-assigned name for each token, so naming is the expected path rather than
+a nicety.
+
+**What is per-tab and what is not is the only real decision here.** Observations belong to a
+monster: the whole point is that the evidence for the thing in the doorway never blends into
+the evidence for the thing on the ceiling, which is the "two monsters, one set of
+observations" failure the handoff flagged from the start and which no amount of scoring can
+recover from. Everything else — which books your DM owns, how big your party is — is a fact
+about the TABLE and is shared.
+
+## The party, and a prior that had to be demoted
+
+Tell the tool your level and how many adventurers you have, and it works out the CR band a DM
+building that encounter would be aiming at, from the DMG's own tables (p.82 thresholds,
+p.274 XP-by-CR). Tabs can be grouped into a fight and given a count, because **the DMG
+multiplies an encounter's XP by how crowded it is** — inverting that is what pushes each
+individual monster's plausible CR down. One ogre is CR 1–7 for a level 3 party; one of eight
+creatures in the same fight is CR 1/8–1. That difference is large and worth capturing.
+
+**It was built as a capped score bonus and the harness demoted it to a tiebreak.** Measured
+two ways — a party level chosen so the monster is in band, and one chosen so it is deliberately
+out:
+
+```
+                        prior off    as a score    as a tiebreak
+DM built to the party      64.3%         64.7%           65.3%
+DM went off-piste          64.3%         56.3%           63.0%
+```
+
+As a score it was worth **+0.4 points when right and −8 when wrong**, and the tool cannot tell
+which kind of DM it is talking to. The reason is structural: a band wide enough to be fair
+boosts thousands of monsters equally, so it carries almost no information once the evidence has
+spoken. Narrowing the band to a peak instead of a plateau was tried at three widths and did not
+rescue it.
+
+As a tiebreak it can only order candidates the evidence has already called identical — which
+is the common case, as F13 established — so the downside collapses to about a point. That is
+the same discipline the legacy prior follows: **a prior may arrange what the evidence could not
+distinguish, and nothing more.**
 
 ## A name the party heard
 
@@ -238,6 +285,7 @@ all equally well founded.
 | `NUMERIC.mode` | `raw` | Measured against three alternatives; see F5 above. |
 | `appearanceCap` | 0.25 | Swept — and overruled, see below. |
 | `nameWeight` | 9 | Swept, and agrees with the derivation. The best-founded constant here. |
+| party prior | tiebreak | Measured as a score, rejected, demoted. See above. |
 
 Two of these deserve their caveats stated rather than buried.
 
@@ -393,6 +441,29 @@ like", which is worth showing the user directly and is the natural input to F13'
 - Two monsters, one merged set of observations.
 - The `by name` / `by key` gap in the harness output is the reprint rate, and it is small. If it
   grows, duplicate consolidation becomes a real feature rather than a reporting detail.
+- **Reverse image search of a VTT token.** Measured, and the obvious approach does not scale.
+  5e.tools ships official artwork for 2,747 monsters, so a purely local perceptual-hash match
+  is possible with no external service. Simulating what a VTT token actually is — a circular
+  crop of the art, resized small, recoloured, with a border ring — and matching it back by
+  pHash:
+
+  ```
+  index size    top-1    top-5
+          50      46%      72%
+         100      43%      61%
+         200      35%      60%
+         478      28%      47%
+  ```
+
+  It degrades steadily with corpus size, and that is the BEST case: the token has to be cut
+  from the official art. Most VTT tokens are third-party pack art or custom images, which are
+  not near-duplicates of anything and which perceptual hashing cannot touch at all. A 64-bit
+  hash simply does not have the capacity to separate 2,747 images under that much distortion.
+
+  The version that would work is semantic rather than pixel matching — a CLIP-style image
+  embedding, compared against text or against the artwork. That is **the same missing capability
+  as the embedding half of F10**: one model would close both gaps, and neither is worth a
+  build step on its own. Worth revisiting as one piece of work, not two.
 - Ties are frequent enough that F13 (suggest the test that best splits the leaders) is now the
   obvious next feature rather than a nice-to-have: the UI can already tell you it is stuck, and the
   ontology already marks which symptoms a party can provoke in one round (`testable`).

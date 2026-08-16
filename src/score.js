@@ -599,6 +599,7 @@
     }
 
 
+
     return {
       key: m.key, name: m.name, source: m.source, srd: !!m.srd, cr: m.cr,
       monster: o.keepMonster ? m : undefined,
@@ -742,8 +743,24 @@
     let out = (allowed ? monsters.filter(m => allowed(m.source)) : monsters)
       .map(m => scoreMonster(m, obs, rarity, o));
 
-    // Score first; the legacy prior only ever settles an exact tie. See buildLegacy.
-    out.sort((a, b) => b.score - a.score || legacy.compare(a, b));
+    /* Score first; the priors only ever settle an EXACT tie.
+
+       The party-plausibility prior (src/encounter.js) sits here rather than in the score
+       for a measured reason. As a capped score bonus it was worth +0.4 points of top-5
+       when the DM had built the encounter by the book, and cost EIGHT when they had not —
+       and the tool cannot tell which kind of DM it is talking to. A band wide enough to
+       be fair boosts thousands of monsters equally, so it carries almost no information
+       once the evidence has spoken. Peaking the band instead of flattening it did not
+       rescue it either.
+
+       As a tiebreak it cannot cost anything: it only orders candidates the evidence has
+       already declared identical, which is the common case (see F13). Same argument as
+       the legacy prior, and the same discipline — a prior may arrange what the evidence
+       could not distinguish, and nothing more. */
+    const plaus = o.crPlausibility;
+    out.sort((a, b) => b.score - a.score
+      || (plaus ? (plaus.get(b.key) || 0) - (plaus.get(a.key) || 0) : 0)
+      || legacy.compare(a, b));
 
     /* Collapse reprints. "Ghost (MM)" and "Ghost (XMM)" are one answer to a player and
        two rows in a list of twelve, and the same evidence scores them identically, so
