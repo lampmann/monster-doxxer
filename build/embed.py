@@ -199,7 +199,11 @@ def artwork_path(m, fluff_raw):
     entry = fluff_raw.get("%s|%s" % (m["name"].lower(), m["source"].lower()))
     if not entry:
         return None
-    for image in entry.get("images", []):
+    # `images` is sometimes present and null rather than absent, which is not the same
+    # thing as an empty list and used to raise on the first such entry.
+    for image in (entry.get("images") or []):
+        if not isinstance(image, dict):
+            continue
         href = image.get("href") or {}
         if href.get("path"):
             path = os.path.join(DATA, "img", href["path"])
