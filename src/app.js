@@ -28,6 +28,10 @@
      happened to cut, and so F13 picks its tests against the real field of candidates. */
   const WINDOW = 40;
   const SHOWN = 12;
+  /* The embedding half's share of the appearance score. Set by `eval/appearance.js
+     --sweep` against a real index, not by taste — 0.35 is the midpoint of the range
+     that helped on the smoke run and should be re-derived once a CLIP index exists. */
+  const BLEND_WEIGHT = 0.35;
 
   /* ---------- state ----------
 
@@ -47,7 +51,7 @@
 
   const S = {
     monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
-    appearanceIndex: null, nameIndex: null, sizeFromProse: "",
+    appearanceIndex: null, nameIndex: null, embeddings: null, sizeFromProse: "",
     // The active tab's fields, mirrored here so the rest of the app reads them unchanged.
     obs: blankObs(),
     ac: null, hp: null, retuned: false,
@@ -150,12 +154,33 @@
     }
     S.appearanceIndex = window.buildAppearanceIndex(S.monsters, window.fluffMap(fluffLists));
     S.nameIndex = window.buildNameIndex(S.monsters);
+    S.embeddings = await loadEmbeddings();
 
     status.textContent = `${S.monsters.length} monsters, ${S.ontology.symptoms.length} symptoms` +
+      (S.embeddings ? ", semantic search on" : "") +
       (books || adventures ? "" : " (add data/books.json for book titles)");
 
     restore();
     renderAll();
+  }
+
+  /* The CLIP index, if build/embed.py has been run. Absent is the normal state: the
+     tool ranks on BM25 alone and simply loses the paraphrase half, so this never warns
+     and never blocks the page on a download that may not exist. */
+  async function loadEmbeddings() {
+    const manifest = await getJsonOptional("index/appearance.json");
+    if (!manifest) return null;
+    const bytes = async path => {
+      try {
+        const res = await fetch(path, { cache: "no-cache" });
+        if (!res.ok) return null;
+        return new Int8Array(await res.arrayBuffer());
+      } catch (e) { return null; }
+    };
+    const [mon, vocab] = await Promise.all([
+      bytes("index/appearance-mon.i8"), bytes("index/appearance-vocab.i8"),
+    ]);
+    return window.buildEmbeddingIndex(manifest, mon, vocab);
   }
 
   /* ============================================================
@@ -414,8 +439,14 @@
     const spec = window.toSpec(S.sources);
     /* F10 is scored against the whole collection at once — BM25 needs the collection —
        so it is computed here and handed in, rather than recomputed per candidate. */
-    const appearanceScores = obs.appearance && S.appearanceIndex
+    /* F10 asks for the two scorers BLENDED, not for one to replace the other: BM25 is
+       strong on distinctive nouns it shares with the book, embeddings on paraphrase. */
+    let appearanceScores = obs.appearance && S.appearanceIndex
       ? window.appearanceScore(obs.appearance, S.appearanceIndex) : null;
+    if (obs.appearance && S.embeddings) {
+      const semantic = window.embeddingScore(window.withoutSize(obs.appearance), S.embeddings);
+      appearanceScores = window.blend(appearanceScores || new Map(), semantic, BLEND_WEIGHT);
+    }
     const nameScores = obs.heardName && S.nameIndex
       ? window.nameScore(obs.heardName, S.nameIndex) : null;
     /* The party prior. Needs a level to mean anything; without one it is simply absent

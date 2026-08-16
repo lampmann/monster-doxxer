@@ -3,9 +3,10 @@
 data/*
 !data/README.md
 
-# Build artefacts from build/ (the optional Python index step)
-index/*.bin
-index/*.json
+# Build artefacts from build/embed.py. Quantised vectors ARE safe to commit under
+# DESIGN.md's rule (derived numbers, not source text) — but a locally built index is
+# large and model-specific, so it stays out unless deliberately added with `git add -f`.
+index/*
 !index/README.md
 
 node_modules/

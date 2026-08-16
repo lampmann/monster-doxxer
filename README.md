@@ -97,9 +97,21 @@ Type what it looked like in your own words. Two things happen:
   count against a monster**. If your DM repainted the thing purple, saying so must not push
   the real answer down the list.
 
-Distinctive nouns work best — *carapace*, *tentacles*, *eyestalks*. Paraphrase is weaker: the
-tool matches words, and the Monster Manual says a beholder is "spheroid" where you'd say "a
-floating orb". `node eval/appearance.js` measures exactly that gap.
+Distinctive nouns work best out of the box — *carapace*, *tentacles*, *eyestalks* — because
+the default matching is lexical: it matches words, and the Monster Manual says a beholder is
+"spheroid" where you'd say "a floating orb". `node eval/appearance.js` measures exactly that gap.
+
+To close it, build the CLIP index once:
+
+```sh
+pip install open_clip_torch pillow
+python3 build/embed.py --images      # embeds the descriptions AND the official artwork
+node eval/appearance.js --sweep      # see whether it helped, and pick the blend weight
+```
+
+The artwork matters more than the prose here: the books often describe temperament where you
+want shape, and the picture is unambiguously what the thing looked like. Everything works
+without the index — you just keep the lexical half only.
 
 ## What to try next
 

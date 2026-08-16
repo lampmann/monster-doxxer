@@ -20,7 +20,8 @@ this file is where it meets reality and where it has been deviated from.
 | Discriminating tests (F13) | Built, 41 assertions, and measured. |
 | `src/appearance.js` | F10 (lexical half), F11, F12 built, 45 assertions. **Embeddings not built** — below. |
 | `src/names.js` | Matching a name the party heard. Not in the handoff; 38 assertions. |
-| `src/encounter.js` | Party-plausibility tiebreak from level and fight size; 33 assertions. |
+| `src/encounter.js` | Party-plausibility tiebreak from level and fight size; 44 assertions. |
+| `build/embed.py` + `src/embeddings.js` | F9 / F10's semantic half. Built; **index never built here** — below. |
 | Tabs | One per monster, with per-tab evidence and encounter grouping. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
@@ -196,6 +197,50 @@ wrong**, the tool is well above the no-name baseline; a filter would have collap
 agree without argument: an exact name is the rarest possible observation, one in 4,528, about
 8.4 nats — and 9 is what the sweep picks, under both the usually-right and the half-wrong
 conditions.
+
+## The semantic half: CLIP
+
+`build/embed.py` encodes each monster and ships a quantised index; `src/embeddings.js`
+consumes it in the browser and blends it with BM25, which is what F10 actually asks for.
+
+**Why CLIP rather than a text model.** Because the picture is frequently the better
+document. The Monster Manual's opening paragraphs are often about ecology and temperament —
+the beholder's entry discusses its arrogance before it mentions eyestalks — while the
+artwork is unambiguously what the thing looked like, which is what the player is describing.
+CLIP puts text and images in one space, so a typed description can match either, and the
+same index later answers a VTT token screenshot that perceptual hashing could not.
+
+**The query-side compromise.** Ranking needs the query embedded, and the query only exists
+at runtime, which naively means shipping the text encoder to the browser. Instead the build
+step also emits vectors for a vocabulary (~8,000 words drawn from the corpus plus plain
+English a player would reach for), and a query is the mean of its words' vectors. That is an
+*approximation* of encoding the sentence — it loses word order and composition — chosen to
+keep the page dependency-free. `build/embed.py --queries` encodes sentences properly, so the
+approximation can be measured against the real thing rather than assumed adequate.
+
+### What is verified, and what is not
+
+**This environment cannot reach any pretrained weights.** `huggingface.co` is refused by the
+network policy, its mirrors and ModelScope are unreachable, OpenAI's CDN is unreachable,
+GitHub release assets return 403, and spaCy's vector models are not on PyPI. So the index was
+never built here and **no claim is made about how much CLIP improves the benchmark.**
+
+What *was* verified, and how:
+
+- The Python pipeline end to end except the model call: 4,528 documents built, 8,010-word
+  vocabulary, int8 quantisation round-tripping at cosine 0.9986.
+- The whole browser side, on a hand-built four-dimensional vector space where synonyms are
+  placed deliberately close — proving that *if* the space puts "orb" near "spheroid", the
+  beholder is found, and proving every degradation path (32 assertions).
+- The complete integration, by generating a synthetic index in the real format from hashed
+  bag-of-words vectors and running the benchmark against it. Format, loader, query embedding,
+  cosine, blending and the sweep all work. The smoke index scored *badly* — semantic-only
+  0/16 — which is the correct result for an index with no semantics in it, and is the reason
+  it is a smoke test rather than a measurement.
+
+`eval/appearance.js --sweep` grows three rows the moment a real index exists, comparing
+lexical, semantic and blended. That table is the acceptance test, and `BLEND_WEIGHT` in
+app.js should be re-derived from it rather than left at its placeholder.
 
 ## Appearance, and the half of F10 that is missing
 
@@ -460,10 +505,12 @@ like", which is worth showing the user directly and is the natural input to F13'
   not near-duplicates of anything and which perceptual hashing cannot touch at all. A 64-bit
   hash simply does not have the capacity to separate 2,747 images under that much distortion.
 
-  The version that would work is semantic rather than pixel matching — a CLIP-style image
-  embedding, compared against text or against the artwork. That is **the same missing capability
-  as the embedding half of F10**: one model would close both gaps, and neither is worth a
-  build step on its own. Worth revisiting as one piece of work, not two.
+  The version that would work is semantic rather than pixel matching — a CLIP image embedding
+  compared against the artwork vectors. **That index now exists** (`build/embed.py --images`);
+  what is still missing is the runtime image encoder, since a screenshot cannot be embedded
+  from a shipped word vocabulary the way typed text can. Encoding one image in the browser is
+  a far smaller problem than encoding the corpus, so this is now a bounded piece of work
+  rather than an open question.
 - Ties are frequent enough that F13 (suggest the test that best splits the leaders) is now the
   obvious next feature rather than a nice-to-have: the UI can already tell you it is stuck, and the
   ontology already marks which symptoms a party can provoke in one round (`testable`).

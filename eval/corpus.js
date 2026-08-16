@@ -16,6 +16,7 @@ const N = require("../src/normalize.js");
 const SY = require("../src/symptoms.js");
 const SRC = require("../src/sources.js");
 const APP = require("../src/appearance.js");
+const EM = require("../src/embeddings.js");
 
 const ROOT = path.join(__dirname, "..");
 const BESTIARY = path.join(ROOT, "data", "bestiary");
@@ -122,16 +123,40 @@ function load(opts) {
     if (prose.trim()) documents[m.key] = prose;
   });
 
+  const embeddings = loadEmbeddingIndex();
   cached = { monsters, skipped, badFiles, ontology: compiled, files: files.length,
-             catalogue, sourceDates, fluff, appearanceIndex, documents };
+             catalogue, sourceDates, fluff, appearanceIndex, documents, embeddings };
   if (!o.quiet) {
     process.stdout.write(
       `corpus: ${monsters.length} monsters from ${files.length} files, ` +
       `${compiled.symptoms.length} symptoms, ${appearanceIndex.withProse} described` +
+      (embeddings ? ", embeddings on" : "") +
       (skipped.length ? `, ${skipped.length} skipped` : "") +
       (badFiles.length ? `, ${badFiles.length} unreadable files` : "") + "\n");
   }
   return cached;
 }
 
-module.exports = { load, bestiaryFiles, BESTIARY, ONTOLOGY, ROOT };
+/* The CLIP index, if build/embed.py has been run. Absent is the normal state — the
+   tool works without it and simply has no semantic half — so this returns null rather
+   than complaining. */
+function loadEmbeddingIndex() {
+  const dir = path.join(ROOT, "index");
+  const manifestPath = path.join(dir, "appearance.json");
+  if (!fs.existsSync(manifestPath)) return null;
+  try {
+    const manifest = readJson(manifestPath);
+    const read = f => {
+      const p = path.join(dir, f);
+      if (!fs.existsSync(p)) return null;
+      const buf = fs.readFileSync(p);
+      return new Int8Array(buf.buffer, buf.byteOffset, buf.length);
+    };
+    return EM.buildEmbeddingIndex(manifest, read("appearance-mon.i8"), read("appearance-vocab.i8"));
+  } catch (e) {
+    process.stderr.write("index/ is present but unreadable: " + e.message + "\n");
+    return null;
+  }
+}
+
+module.exports = { load, bestiaryFiles, loadEmbeddingIndex, BESTIARY, ONTOLOGY, ROOT };

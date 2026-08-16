@@ -27,6 +27,7 @@
 "use strict";
 const { load } = require("./corpus.js");
 const APP = require("../src/appearance.js");
+const EM = require("../src/embeddings.js");
 
 /* Written as a player would say it, not as the book does. Each is a creature
    distinctive enough that a person who saw one could describe it, and iconic enough
@@ -51,16 +52,55 @@ const CASES = [
 ];
 
 function parseArgs(argv) {
-  const out = { show: 0 };
+  const out = { show: 0, sweep: false, weight: 0.5 };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--show") out.show = Number(argv[++i]);
+    else if (argv[i] === "--sweep") out.sweep = true;
+    else if (argv[i] === "--weight") out.weight = Number(argv[++i]);
   }
   return out;
 }
 
+/* Where the true answer landed, for one scorer. */
+function rankOf(scores, want) {
+  const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
+  const i = sorted.findIndex(([key]) => key.split("|")[0].toLowerCase() === want.toLowerCase());
+  return { rank: i < 0 ? Infinity : i + 1, top: sorted };
+}
+const summarise = ranks => ({
+  top1: ranks.filter(r => r <= 1).length,
+  top5: ranks.filter(r => r <= 5).length,
+  top20: ranks.filter(r => r <= 20).length,
+  lost: ranks.filter(r => r === Infinity).length,
+});
+
 function main() {
   const args = parseArgs(process.argv);
-  const { monsters, appearanceIndex } = load({});
+  const { monsters, appearanceIndex, embeddings } = load({});
+
+  /* THE COMPARISON THIS FILE EXISTS FOR. Lexical alone is what shipped before CLIP;
+     semantic alone is what CLIP contributes; the blend is what F10 actually asks for.
+     Reporting all three keeps the embedding half honest — if it does not beat BM25 on
+     the queries BM25 was failing, it has not earned its build step. */
+  if (embeddings) {
+    const weights = args.sweep ? [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1] : [args.weight];
+    console.log(`\nindex: ${embeddings.model}, ${embeddings.dim} dims, ` +
+      `${embeddings.keys.length} monsters, ${embeddings.vocabCount} vocabulary words\n`);
+    console.log("  blend weight   top-1   top-5   top-20   never found");
+    weights.forEach(w => {
+      const ranks = CASES.map(([query, want]) => {
+        const lex = APP.appearanceScore(query, appearanceIndex);
+        const sem = EM.embeddingScore(APP.withoutSize(query), embeddings);
+        return rankOf(EM.blend(lex, sem, w), want).rank;
+      });
+      const r = summarise(ranks);
+      const label = w === 0 ? "lexical only" : w === 1 ? "semantic only" : String(w);
+      console.log(`  ${label.padEnd(13)}  ${String(r.top1).padStart(4)}/${CASES.length}` +
+        `${String(r.top5).padStart(6)}/${CASES.length}${String(r.top20).padStart(7)}/${CASES.length}` +
+        `${String(r.lost).padStart(12)}`);
+    });
+    console.log("");
+  }
 
   const ranks = [];
   console.log(`\n${CASES.length} hand-written paraphrase queries\n`);
@@ -89,9 +129,12 @@ function main() {
   console.log(`\n  top-1 ${within(1)}/${CASES.length}   top-5 ${within(5)}/${CASES.length}` +
     `   top-20 ${within(20)}/${CASES.length}   never found ${ranks.filter(r => r === Infinity).length}`);
   console.log(`  median rank ${finite.length ? finite[Math.floor(finite.length / 2)] : "—"}`);
-  console.log(`\n  BM25 matches words. Where these fail it is because the player's word and the`);
-  console.log(`  book's word for the same thing are different — orb against spheroid, bug against`);
-  console.log(`  insectile. That is the gap the embedding half of F10 would close.`);
+  if (!embeddings) {
+    console.log(`\n  BM25 matches words. Where these fail it is because the player's word and the`);
+    console.log(`  book's word for the same thing are different — orb against spheroid, bug against`);
+    console.log(`  insectile. That is the gap the embedding half of F10 closes — run`);
+    console.log(`  build/embed.py to build the index, then this table gains three more rows.`);
+  }
 }
 
 if (require.main === module) main();
