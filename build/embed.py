@@ -361,6 +361,41 @@ def combine(text_vectors, image_vectors, image_weight):
 
 # ---------------------------------------------------------------- main
 
+def preflight(need_images):
+    """Check the model is importable BEFORE reading 4528 documents and building an
+    8010-word vocabulary. Failing after that work — as this used to — wastes a minute and
+    buries the actual problem under a traceback from deep inside encode()."""
+    missing = []
+    for mod, why in [("torch", "open_clip_torch"), ("open_clip", "open_clip_torch")]:
+        try:
+            __import__(mod)
+        except ImportError:
+            if why not in missing:
+                missing.append(why)
+    if need_images:
+        try:
+            __import__("PIL")
+        except ImportError:
+            missing.append("pillow")
+    if not missing:
+        return
+
+    venv = os.environ.get("VIRTUAL_ENV")
+    sys.stderr.write("\nCannot import the model: missing %s\n\n" % ", ".join(missing))
+    if not venv:
+        # By far the likeliest cause, and invisible in a traceback: the shell is using
+        # the system interpreter because the virtual environment was never activated.
+        sys.stderr.write(
+            "  No virtual environment is active (VIRTUAL_ENV is unset), so this is very\n"
+            "  likely the system Python rather than the one you installed into. Activate it:\n\n"
+            "      .\\.venv\\Scripts\\Activate.ps1        (Windows PowerShell)\n"
+            "      source .venv/bin/activate            (macOS / Linux)\n\n"
+            "  Your prompt should read (.venv) before you run this again.\n\n")
+    sys.stderr.write("  Otherwise install into the interpreter you are using:\n\n"
+                     "      %s -m pip install %s\n\n" % (sys.executable, " ".join(missing)))
+    sys.exit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -376,6 +411,7 @@ def main():
     ap.add_argument("--queries", help="file of one query per line; encode these too, for eval")
     ap.add_argument("--limit", type=int, help="only the first N monsters, for a quick trial run")
     args = ap.parse_args()
+    preflight(args.images)
 
     docs = load_bestiary()
     if args.limit:
