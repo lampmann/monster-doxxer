@@ -54,12 +54,19 @@ const CASES = [
 ];
 
 function parseArgs(argv) {
-  const out = { show: 0, sweep: false, weight: 0.5, dump: false };
+  const out = { show: 0, sweep: false, weight: 0.5, dump: false, dumpFile: null };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--show") out.show = Number(argv[++i]);
     else if (argv[i] === "--sweep") out.sweep = true;
     else if (argv[i] === "--weight") out.weight = Number(argv[++i]);
-    else if (argv[i] === "--dump-queries") out.dump = true;
+    else if (argv[i] === "--dump-queries") {
+      out.dump = true;
+      // Optional filename. `node eval/appearance.js --dump-queries > queries.txt` works
+      // on a POSIX shell, but PowerShell's `>` writes UTF-16LE by default — Python's
+      // open(encoding="utf8") then rejects the BOM outright. Writing the file directly,
+      // in UTF-8, with no shell redirection involved, sidesteps that on every platform.
+      if (argv[i + 1] && !argv[i + 1].startsWith("--")) out.dumpFile = argv[++i];
+    }
   }
   return out;
 }
@@ -106,7 +113,13 @@ const summarise = ranks => ({
 function main() {
   const args = parseArgs(process.argv);
   if (args.dump) {                        // feed these to build/embed.py --queries
-    CASES.forEach(([query]) => console.log(query));
+    const text = CASES.map(([query]) => query).join("\n") + "\n";
+    if (args.dumpFile) {
+      fs.writeFileSync(args.dumpFile, text, "utf8");
+      console.log(`wrote ${CASES.length} queries to ${args.dumpFile}`);
+    } else {
+      process.stdout.write(text);
+    }
     return;
   }
   const { monsters, appearanceIndex, embeddings } = load({});

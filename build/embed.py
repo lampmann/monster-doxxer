@@ -57,6 +57,26 @@ def read_json(path):
         return json.load(fh)
 
 
+def read_lines(path):
+    """A plain text file, one query per line — encoding-agnostic.
+
+    `node eval/appearance.js --dump-queries > queries.txt` on PowerShell writes
+    UTF-16LE by default, which starts with a 0xFF byte that plain utf8 rejects outright.
+    The dump command now writes the file itself in UTF-8, sidestepping this, but a file
+    someone already produced by redirection should still work rather than requiring a
+    re-run — so try the common encodings before giving up."""
+    raw = open(path, "rb").read()
+    for enc in ("utf-8-sig", "utf-16", "utf8"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        text = raw.decode("utf8", errors="replace")
+    return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+
 def load_bestiary():
     """Every monster, as {key, name, source, doc}. The description document is built
     the same way src/appearance.js builds it — name, size, type, trait and action
@@ -374,8 +394,7 @@ def main():
     texts = [d["doc"] for d in docs] + vocab
     query_lines = []
     if args.queries:
-        with open(args.queries, encoding="utf8") as fh:
-            query_lines = [ln.strip() for ln in fh if ln.strip()]
+        query_lines = read_lines(args.queries)
         texts += query_lines
 
     text_vectors, image_vectors = encode(args.model, args.pretrained, texts,
