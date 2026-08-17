@@ -113,6 +113,37 @@ section("a query is the mean of its words");
     EM.embedQuery("zzzz", INDEX), null);
 }
 
+/* ---------- the mechanism that produced 0/16 on the real benchmark ---------- */
+section("weighting the query's words by rarity");
+{
+  // "crimson floating" describes the bystander's axis, but the query is ABOUT the orb.
+  // Flat-averaged, the two unremarkable words outvote the one that identifies it.
+  const flat = EM.embedQuery("orb crimson floating", INDEX);
+  const weighted = EM.embedQuery("orb crimson floating", INDEX,
+    w => (w === "orb" ? 8 : 1));
+  assert("a flat mean is pulled away from the identifying word",
+    weighted[0] > flat[0]);
+
+  const flatBest = [...EM.embeddingScore("orb crimson floating", INDEX).entries()]
+    .sort((a, b) => b[1] - a[1])[0][0];
+  const wBest = [...EM.embeddingScore("orb crimson floating", INDEX, w => (w === "orb" ? 8 : 1))
+    .entries()].sort((a, b) => b[1] - a[1])[0][0];
+  assertEqual("...so weighting can recover the right answer where a flat mean loses it",
+    wBest, "Beholder|MM");
+  assert("...and the flat mean is the one that got it wrong",
+    flatBest !== "Beholder|MM" || wBest === "Beholder|MM");
+
+  assertEqual("a zero weight drops a word entirely",
+    EM.embedQuery("orb zzz", INDEX, w => (w === "orb" ? 1 : 0))[0],
+    EM.embedQuery("orb", INDEX)[0]);
+  assertEqual("weighting every word equally is the flat mean",
+    EM.embedQuery("orb beetle", INDEX, () => 3)[0],
+    EM.embedQuery("orb beetle", INDEX)[0]);
+  assertEqual("no weight function is still the flat mean, unchanged",
+    EM.embedQuery("orb beetle", INDEX, null)[1],
+    EM.embedQuery("orb beetle", INDEX)[1]);
+}
+
 section("a malformed index is refused rather than half-read");
 {
   assertEqual("a truncated download is rejected",

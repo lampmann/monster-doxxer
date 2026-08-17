@@ -152,8 +152,25 @@ function main() {
       console.log("");
     };
 
-    sweep("query = mean of its words' vectors (what the page does)",
+    sweep("query = flat mean of its words' vectors (what the page does)",
       q => APP.withoutSize(q));
+
+    /* Same vectors, same index — the words are just no longer given equal say. If a flat
+       mean is drifting to the vocabulary centroid, this is the cheap fix, and it needs no
+       re-encoding to test. */
+    /* A word the corpus never uses has df 0, which this IDF formula scores as MAXIMALLY
+       rare — the same 9.11 it gives "eyestalks". For the lexical half that never matters,
+       since a term with no postings scores nothing anyway. Here it would hand total
+       control of the query vector to whichever plain-English word happens to be missing
+       from the books. Treat unseen as neutral instead.
+
+       Not obviously the right call: a word absent from the books can still carry real
+       semantic weight, and refusing to privilege it is arguably backwards for an
+       embedding. It is the defensible middle, and the point is to find out whether rarity
+       weighting helps at all before tuning how. */
+    const idfWeight = w => (appearanceIndex.df[w] ? Math.max(0, appearanceIndex.idf(w)) : 1);
+    sweep("query = IDF-weighted mean of its words' vectors",
+      q => EM.embedQuery(APP.withoutSize(q), embeddings, idfWeight));
 
     /* The controlled comparison. Same monsters, same blend, same everything — the only
        thing that changes is how the query got its vector. */

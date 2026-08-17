@@ -88,7 +88,7 @@
   /* The mean of the query's known words, renormalised. Unknown words are skipped
      rather than treated as zero — a zero vector would drag the mean toward nothing
      and quietly weaken every other word in the sentence. */
-  function embedQuery(text, index) {
+  function embedQuery(text, index, weightOf) {
     if (!index || !index.vocabBytes || !index.vocabCount) return null;
     const words = String(text || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/[\s-]+/);
     const acc = new Float32Array(index.dim);
@@ -96,8 +96,21 @@
     words.forEach(w => {
       const at = index.vocab[w];
       if (at == null) return;
+      /* WHY WEIGHTS. A flat mean gives "covered" and "eyestalks" an equal say, and since
+         most words in a sentence are unremarkable the mean drifts toward the centroid of
+         the whole vocabulary — which is in the same place for every query. That is a
+         mechanism that would produce exactly what the benchmark measured: semantic-only
+         retrieval at 0/16, indistinguishable from ranking at random, while the very same
+         index queried with a properly encoded sentence reaches 7/16.
+
+         Weighting by rarity is the same correction BM25 already applies on the lexical
+         side (F12): let the word that identifies the monster dominate the words that
+         merely hold the sentence together. Costs nothing at runtime and needs no
+         re-encoding, which is why it is worth trying before anything more drastic. */
+      const w8 = weightOf ? weightOf(w) : 1;
+      if (!(w8 > 0)) return;
       const v = index.vocabAt(at);
-      for (let i = 0; i < index.dim; i++) acc[i] += v[i];
+      for (let i = 0; i < index.dim; i++) acc[i] += v[i] * w8;
       used++;
     });
     if (!used) return null;
@@ -108,9 +121,9 @@
      by the best hit so it reads as a fraction, exactly like the BM25 scorer it blends
      with. Negative cosines are clamped away: "the opposite of this description" is not
      evidence against a monster, it is just no evidence (F3, tier 3). */
-  function embeddingScore(query, index) {
+  function embeddingScore(query, index, weightOf) {
     const out = new Map();
-    const q = typeof query === "string" ? embedQuery(query, index) : query;
+    const q = typeof query === "string" ? embedQuery(query, index, weightOf) : query;
     if (!q || !index) return out;
 
     const { dim, keys, monsterBytes } = index;
