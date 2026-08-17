@@ -220,39 +220,49 @@ approximation can be measured against the real thing rather than assumed adequat
 
 ### What CLIP actually bought, measured
 
-The index was eventually built on a machine that could reach the weights:
-ViT-B-32/laion2b_s34b_b79k over 4,528 monsters, 2,632 of them with their official artwork
-mixed into the vector, 8,010 vocabulary words. `eval/appearance.js --sweep`, 16 hand-written
-paraphrase queries:
+Built on hardware that could reach the weights: ViT-B-32/laion2b_s34b_b79k over 4,528
+monsters, 2,632 with their official artwork mixed into the vector, 8,010 vocabulary words.
+`eval/appearance.js --sweep`, 16 hand-written paraphrase queries. The three blocks differ
+only in how the QUERY gets its vector — same index, same monsters, same blend:
 
-| | top-1 | top-5 | top-20 |
+| query representation | top-1 | top-5 | top-20 |
 |---|---|---|---|
-| BM25 alone | 4/16 | 8/16 | 10/16 |
-| blended 0.35, **query = mean of its words** | 4/16 | 8/16 | **12/16** |
-| semantic only, mean of its words | 0/16 | 0/16 | 0/16 |
-| blended 0.5, query = sentence encoded properly | 4/16 | **9/16** | **13/16** |
-| semantic only, sentence encoded properly | 1/16 | 3/16 | 7/16 |
+| BM25 alone, no embeddings | 4/16 | 8/16 | 10/16 |
+| flat mean of its words, blended 0.35 | 4/16 | 8/16 | 12/16 |
+| **IDF-weighted mean, blended 0.35** ← ships | 4/16 | 8/16 | **13/16** |
+| sentence encoded by the model, blended 0.5 | 4/16 | **9/16** | 13/16 |
+| semantic only — flat mean, or IDF-weighted | 0/16 | 0/16 | 0/16 |
+| semantic only — sentence encoded properly | 1/16 | 3/16 | 7/16 |
 
-**The narrow, shippable claim: +2 of 16 at top-20, and nothing at top-1 or top-5.** That is
-what the deployed configuration earns, and `BLEND_WEIGHT = 0.35` is set from that row rather
-than from taste. It is a real improvement on the metric the feature was built for and it is
-much smaller than the feature's ambition.
+**+3 of 16 at top-20, nothing at top-1 or top-5.** That is what ships, and `BLEND_WEIGHT`
+is 0.35 from that row.
 
-**The interesting result is the third row against the fifth.** Queried the way the page
-queries it, the embedding half retrieves *nothing at all* — 0/16 even at top-20, where chance
-on 4,528 monsters is about 0.07 expected hits. Queried with the same sentences encoded by the
-model, the same index finds 7/16 in the top 20. The vectors are fine. **The mean-of-its-words
-query approximation is what destroys them**, and that approximation exists purely to keep a
-text encoder out of the browser.
+Three things worth taking from this table.
 
-So the blend's +2 is a reranking effect inside what BM25 already surfaced, not retrieval. It
-is worth having, but it is not the feature that was designed, and the ceiling with a real
-query encoder is visibly higher — 13/16 top-20 and 9/16 top-5.
+**Weighting the query's words by rarity is worth a whole point**, and it is free — no
+re-encoding, no extra bytes. A flat mean lets "covered" pull as hard as "eyestalks", and
+since most words in a sentence are unremarkable the mean drifts toward the centroid of the
+vocabulary, which sits in the same place for every query. The same correction BM25 already
+applies on the lexical side (F12).
 
-`build/embed.py --vocab-prompt "a photo of a {}"` is the attempt to close that gap without
-shipping an encoder: a bare word and a sentence are different kinds of string to CLIP and land
-in different neighbourhoods, so wrapping each vocabulary word in a caption should move the
-mean toward where a real query lands. Untested at the time of writing.
+**On top-20 the browser's approximation now costs nothing.** 13/16 is exactly what the
+properly-encoded sentence reaches. It still costs a point of top-5 — 9/16 against 8/16 —
+so a real text encoder would buy something, just much less than it looked like before.
+
+**But the embedding half still retrieves nothing on its own**, and that has never moved:
+0/16 even at top-20, where chance across 4,528 monsters is about 0.07 expected hits.
+Properly-encoded sentences reach 7/16 from the identical vectors. So the vectors can
+retrieve and an averaged bag of word vectors cannot — what ships is a reranker over what
+BM25 already surfaced, not the semantic search the feature was named for. Worth having at
++3, and worth being precise about.
+
+### Two theories that were wrong
+
+`--vocab-prompt` wrapped each vocabulary word in a caption ("a photo of a {}"), on the
+theory that a bare word and a sentence are different kinds of string to CLIP and land in
+different neighbourhoods. Measured: semantic-only stayed at exactly 0/16 and the operating
+point was unchanged at 4/8/12. The flag is kept so the result is reproducible; it is not
+the default and there is no reason to use it.
 
 ### Mean-centring: tried, measured, rejected
 

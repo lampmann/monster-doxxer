@@ -31,23 +31,27 @@
   /* The embedding half's share of the appearance score. Now MEASURED, on a real
      ViT-B-32/laion2b index over 4528 monsters with 2632 pictures mixed in
      (eval/appearance.js --sweep), against the query representation this page actually
-     uses — the mean of a query's word vectors:
+     uses — an IDF-weighted mean of a query's word vectors:
 
          lexical only   4/16 top-1   8/16 top-5   10/16 top-20
-         0.35           4/16         8/16         12/16
-         0.5            4/16         8/16         12/16
-         0.65           4/16         6/16          9/16
+         0.35           4/16         8/16         13/16
+         0.5            4/16         7/16         13/16
+         0.65           4/16         7/16         12/16
          semantic only  0/16         0/16          0/16
 
-     So the honest claim is narrow: +2 of 16 at top-20, nothing at top-1 or top-5. 0.35
-     and 0.5 tie, and the lower weight is kept because performance falls off a cliff
-     above 0.5 and there is no reason to sit nearer the edge for no gain.
+     +3 of 16 at top-20, nothing at top-1 or top-5. 0.35 over the equal-scoring 0.5
+     because top-5 is a point better there and performance collapses above 0.5 anyway.
 
-     Note the last row. On its own the embedding half finds nothing, which means this is
-     a reranking effect within what BM25 already surfaced, not retrieval. The same index
-     queried with properly-encoded sentences scores 1/3/7 semantic-only and 4/9/13
-     blended, so the vectors are not the problem — the mean-of-words shortcut is. See
-     DESIGN.md; build/embed.py --vocab-prompt is the attempt to close that gap. */
+     Two things that comment used to get wrong, both now measured. The flat mean scored
+     12/16 here; weighting the query's words by rarity is worth the extra point, and it
+     is free. And 13/16 is exactly what the properly-encoded sentence reaches — so on
+     top-20 the browser's approximation now costs nothing at all. It still costs a point
+     of top-5 (9/16 encoded properly against 8/16 here).
+
+     The last row is the honest caveat and has never moved: alone, the embedding half
+     finds nothing. This is reranking within what BM25 already surfaced, not retrieval.
+     Properly-encoded sentences reach 1/3/7 semantic-only, so the vectors can retrieve —
+     an averaged bag of word vectors cannot. See DESIGN.md. */
   const BLEND_WEIGHT = 0.35;
 
   /* ---------- state ----------
@@ -465,7 +469,19 @@
     let appearanceScores = obs.appearance && S.appearanceIndex
       ? window.appearanceScore(obs.appearance, S.appearanceIndex) : null;
     if (obs.appearance && S.embeddings) {
-      const semantic = window.embeddingScore(window.withoutSize(obs.appearance), S.embeddings);
+      /* Weight the query's words by rarity before averaging them. A flat mean lets
+         "covered" pull as hard as "eyestalks", and since most words in a sentence are
+         unremarkable the mean drifts toward the vocabulary's centroid — the same place
+         for every query. Measured: this is worth a whole point of top-20 (12/16 to
+         13/16), which is the entire ceiling the properly-encoded sentence reaches.
+
+         A word the books never use has df 0, which this IDF rates as maximally rare.
+         Neutral is the safer reading — otherwise one absent plain-English word owns the
+         whole query vector. */
+      const idf = w => (S.appearanceIndex && S.appearanceIndex.df[w]
+        ? Math.max(0, S.appearanceIndex.idf(w)) : 1);
+      const semantic = window.embeddingScore(
+        window.withoutSize(obs.appearance), S.embeddings, idf);
       appearanceScores = window.blend(appearanceScores || new Map(), semantic, BLEND_WEIGHT);
     }
     const nameScores = obs.heardName && S.nameIndex

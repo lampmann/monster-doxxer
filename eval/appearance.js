@@ -169,8 +169,20 @@ function main() {
        embedding. It is the defensible middle, and the point is to find out whether rarity
        weighting helps at all before tuning how. */
     const idfWeight = w => (appearanceIndex.df[w] ? Math.max(0, appearanceIndex.idf(w)) : 1);
-    sweep("query = IDF-weighted mean of its words' vectors",
+    sweep("query = IDF-weighted mean, unseen words neutral",
       q => EM.embedQuery(APP.withoutSize(q), embeddings, idfWeight));
+
+    /* The guard above has a visible cost: "eyestalks" appears in no description document,
+       so df is 0, so it is weighted 1 — while "covered" gets 4.25. The single word that
+       identifies a beholder is worth less than a filler word, in the query that feature
+       exists to serve.
+       Without the guard, df 0 scores MAXIMALLY rare instead, which is the right instinct
+       for an embedding — a word the books never use is exactly what the semantic half is
+       for — and the wrong one for a stopword that slipped through. Both are one line, so
+       measure rather than argue. */
+    const idfRaw = w => Math.max(0, appearanceIndex.idf(w));
+    sweep("query = IDF-weighted mean, unseen words treated as rarest",
+      q => EM.embedQuery(APP.withoutSize(q), embeddings, idfRaw));
 
     /* The controlled comparison. Same monsters, same blend, same everything — the only
        thing that changes is how the query got its vector. */
