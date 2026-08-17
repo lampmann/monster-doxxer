@@ -327,18 +327,25 @@ def encode(model_name, pretrained, texts, images, batch=64):
     if images:
         from PIL import Image
         image_vectors = np.zeros((len(images), text_vectors.shape[1]), "float32")
+        # Count real pictures, not list slots. The list is padded out to len(texts) so the
+        # indices line up with the text vectors, and the old counter divided by that
+        # padded length while only ticking on entries that had a path — so it reported
+        # "images 4350/12554" for a run that encoded 2632 pictures out of 2632.
+        real = [(i, p) for i, p in enumerate(images) if p]
+        done = broken = 0
         with torch.no_grad():
-            for i, path in enumerate(images):
-                if not path:
-                    continue
+            for i, path in real:
                 try:
                     tensor = preprocess(Image.open(path).convert("RGB")).unsqueeze(0)
                     image_vectors[i] = model.encode_image(tensor).float().numpy()[0]
+                    done += 1
                 except Exception:
-                    pass
-                if i % 50 == 0:
-                    sys.stderr.write("\rimages %d/%d" % (i, len(images)))
+                    broken += 1
+                if (done + broken) % 25 == 0 or done + broken == len(real):
+                    sys.stderr.write("\rimages %d/%d" % (done + broken, len(real)))
         sys.stderr.write("\n")
+        if broken:
+            sys.stderr.write("  %d images could not be read and were skipped\n" % broken)
     return text_vectors, image_vectors
 
 
@@ -406,6 +413,10 @@ def main():
     ap.add_argument("--image-weight", type=float, default=0.5,
                     help="how much of a monster's vector comes from its picture (0..1)")
     ap.add_argument("--vocab-size", type=int, default=8000)
+    ap.add_argument("--vocab-prompt", metavar="TEMPLATE",
+                    help='encode vocabulary words inside a caption, e.g. "a photo of a {}". '
+                         "The manifest still stores the bare word, so the browser is "
+                         "unchanged. See the note beside vocab_texts.")
     ap.add_argument("--center", "--centre", dest="center", action="store_true",
                     help="subtract the corpus mean before quantising (see centre())")
     ap.add_argument("--queries", help="file of one query per line; encode these too, for eval")
@@ -427,7 +438,24 @@ def main():
     vocab = build_vocab(docs, args.vocab_size)
     print("%d vocabulary words" % len(vocab))
 
-    texts = [d["doc"] for d in docs] + vocab
+    # THE MEASURED PROBLEM, and the thing --vocab-prompt exists to attack.
+    #
+    # Semantic-only retrieval scores 0/16 with the browser's mean-of-its-words query and
+    # 1/3/7 with the same sentences encoded properly. The vectors are fine; the way the
+    # page builds a query out of them is not. Part of why: a bare word ("orb") and a
+    # sentence ("a floating orb covered in eyestalks") are different kinds of string to
+    # CLIP, and their embeddings sit in different neighbourhoods, so averaging bare-word
+    # vectors lands nowhere near the sentence it is meant to approximate.
+    #
+    # Wrapping each vocabulary word in a caption template makes every word vector a
+    # sentence vector, which is the standard CLIP practice and should put the mean much
+    # closer to where a real encoded query lands. The manifest still stores the BARE word,
+    # so the browser's lookup is unchanged — only what got encoded differs.
+    vocab_texts = [args.vocab_prompt.replace("{}", w) for w in vocab] if args.vocab_prompt \
+        else list(vocab)
+    if args.vocab_prompt:
+        print('vocabulary encoded as "%s"' % args.vocab_prompt.replace("{}", "…"))
+    texts = [d["doc"] for d in docs] + vocab_texts
     query_lines = []
     if args.queries:
         query_lines = read_lines(args.queries)

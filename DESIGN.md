@@ -218,29 +218,65 @@ English a player would reach for), and a query is the mean of its words' vectors
 keep the page dependency-free. `build/embed.py --queries` encodes sentences properly, so the
 approximation can be measured against the real thing rather than assumed adequate.
 
-### What is verified, and what is not
+### What CLIP actually bought, measured
 
-**This environment cannot reach any pretrained weights.** `huggingface.co` is refused by the
-network policy, its mirrors and ModelScope are unreachable, OpenAI's CDN is unreachable,
-GitHub release assets return 403, and spaCy's vector models are not on PyPI. So the index was
-never built here and **no claim is made about how much CLIP improves the benchmark.**
+The index was eventually built on a machine that could reach the weights:
+ViT-B-32/laion2b_s34b_b79k over 4,528 monsters, 2,632 of them with their official artwork
+mixed into the vector, 8,010 vocabulary words. `eval/appearance.js --sweep`, 16 hand-written
+paraphrase queries:
 
-What *was* verified, and how:
+| | top-1 | top-5 | top-20 |
+|---|---|---|---|
+| BM25 alone | 4/16 | 8/16 | 10/16 |
+| blended 0.35, **query = mean of its words** | 4/16 | 8/16 | **12/16** |
+| semantic only, mean of its words | 0/16 | 0/16 | 0/16 |
+| blended 0.5, query = sentence encoded properly | 4/16 | **9/16** | **13/16** |
+| semantic only, sentence encoded properly | 1/16 | 3/16 | 7/16 |
 
-- The Python pipeline end to end except the model call: 4,528 documents built, 8,010-word
-  vocabulary, int8 quantisation round-tripping at cosine 0.9986.
-- The whole browser side, on a hand-built four-dimensional vector space where synonyms are
-  placed deliberately close — proving that *if* the space puts "orb" near "spheroid", the
-  beholder is found, and proving every degradation path (32 assertions).
-- The complete integration, by generating a synthetic index in the real format from hashed
-  bag-of-words vectors and running the benchmark against it. Format, loader, query embedding,
-  cosine, blending and the sweep all work. The smoke index scored *badly* — semantic-only
-  0/16 — which is the correct result for an index with no semantics in it, and is the reason
-  it is a smoke test rather than a measurement.
+**The narrow, shippable claim: +2 of 16 at top-20, and nothing at top-1 or top-5.** That is
+what the deployed configuration earns, and `BLEND_WEIGHT = 0.35` is set from that row rather
+than from taste. It is a real improvement on the metric the feature was built for and it is
+much smaller than the feature's ambition.
 
-`eval/appearance.js --sweep` grows three rows the moment a real index exists, comparing
-lexical, semantic and blended. That table is the acceptance test, and `BLEND_WEIGHT` in
-app.js should be re-derived from it rather than left at its placeholder.
+**The interesting result is the third row against the fifth.** Queried the way the page
+queries it, the embedding half retrieves *nothing at all* — 0/16 even at top-20, where chance
+on 4,528 monsters is about 0.07 expected hits. Queried with the same sentences encoded by the
+model, the same index finds 7/16 in the top 20. The vectors are fine. **The mean-of-its-words
+query approximation is what destroys them**, and that approximation exists purely to keep a
+text encoder out of the browser.
+
+So the blend's +2 is a reranking effect inside what BM25 already surfaced, not retrieval. It
+is worth having, but it is not the feature that was designed, and the ceiling with a real
+query encoder is visibly higher — 13/16 top-20 and 9/16 top-5.
+
+`build/embed.py --vocab-prompt "a photo of a {}"` is the attempt to close that gap without
+shipping an encoder: a bare word and a sentence are different kinds of string to CLIP and land
+in different neighbourhoods, so wrapping each vocabulary word in a caption should move the
+mean toward where a real query lands. Untested at the time of writing.
+
+### Mean-centring: tried, measured, rejected
+
+CLIP's text embeddings are anisotropic, so raw cosine partly measures a direction every
+document shares rather than what distinguishes them. `--center` subtracts the corpus mean to
+remove it. It made things **worse** across the board — semantic-only top-20 fell from 7/16 to
+4/16, the best blend from 13/16 to 12/16, and the mean-of-words query collapsed completely
+(never-found 16/16). The flag is kept because the measurement is worth being able to
+reproduce, and it is not the default.
+
+The collapse also exposed an error in this file's earlier reasoning. It claimed centring was
+safe for the browser's mean-of-words trick "because centring is linear". It isn't: `quantise()`
+L2-normalises each vector *after* centring, so every word vector is renormalised individually
+and the mean of renormalised centred vectors is not the centred mean. The 16/16 never-found is
+that mistake showing up as a number.
+
+### What is verified by test rather than by measurement
+
+- The Python pipeline end to end: 4,528 documents, 8,010-word vocabulary, int8 quantisation
+  round-tripping at cosine 0.9986.
+- The browser side, on a hand-built four-dimensional space where synonyms are placed
+  deliberately close — proving that *if* the space puts "orb" near "spheroid" the beholder is
+  found, and proving every degradation path (34 assertions).
+- The page degrades to BM25-only with no index present, silently and correctly.
 
 ## Appearance, and the half of F10 that is missing
 

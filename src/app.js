@@ -28,9 +28,26 @@
      happened to cut, and so F13 picks its tests against the real field of candidates. */
   const WINDOW = 40;
   const SHOWN = 12;
-  /* The embedding half's share of the appearance score. Set by `eval/appearance.js
-     --sweep` against a real index, not by taste — 0.35 is the midpoint of the range
-     that helped on the smoke run and should be re-derived once a CLIP index exists. */
+  /* The embedding half's share of the appearance score. Now MEASURED, on a real
+     ViT-B-32/laion2b index over 4528 monsters with 2632 pictures mixed in
+     (eval/appearance.js --sweep), against the query representation this page actually
+     uses — the mean of a query's word vectors:
+
+         lexical only   4/16 top-1   8/16 top-5   10/16 top-20
+         0.35           4/16         8/16         12/16
+         0.5            4/16         8/16         12/16
+         0.65           4/16         6/16          9/16
+         semantic only  0/16         0/16          0/16
+
+     So the honest claim is narrow: +2 of 16 at top-20, nothing at top-1 or top-5. 0.35
+     and 0.5 tie, and the lower weight is kept because performance falls off a cliff
+     above 0.5 and there is no reason to sit nearer the edge for no gain.
+
+     Note the last row. On its own the embedding half finds nothing, which means this is
+     a reranking effect within what BM25 already surfaced, not retrieval. The same index
+     queried with properly-encoded sentences scores 1/3/7 semantic-only and 4/9/13
+     blended, so the vectors are not the problem — the mean-of-words shortcut is. See
+     DESIGN.md; build/embed.py --vocab-prompt is the attempt to close that gap. */
   const BLEND_WEIGHT = 0.35;
 
   /* ---------- state ----------

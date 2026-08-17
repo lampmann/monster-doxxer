@@ -101,17 +101,22 @@ Distinctive nouns work best out of the box — *carapace*, *tentacles*, *eyestal
 the default matching is lexical: it matches words, and the Monster Manual says a beholder is
 "spheroid" where you'd say "a floating orb". `node eval/appearance.js` measures exactly that gap.
 
-To close it, build the CLIP index once:
+To narrow it, build the CLIP index once:
 
 ```sh
 pip install open_clip_torch pillow
-python3 build/embed.py --images      # embeds the descriptions AND the official artwork
-node eval/appearance.js --sweep      # see whether it helped, and pick the blend weight
+python3 build/fetch_images.py        # the official artwork, ~2700 files, resumable
+python3 build/embed.py --images      # embeds the descriptions AND the artwork
+node eval/appearance.js --sweep      # the table that decides whether it helped
 ```
 
-The artwork matters more than the prose here: the books often describe temperament where you
-want shape, and the picture is unambiguously what the thing looked like. Everything works
-without the index — you just keep the lexical half only.
+**Measured, on the full bestiary with artwork: +2 of 16 at top-20, and nothing at top-1 or
+top-5.** Worth having, much smaller than it was meant to be, and DESIGN.md explains why —
+the page approximates a typed query as the mean of its words' vectors to avoid shipping a
+text encoder, and that approximation turns out to cost most of the benefit. The same index
+queried properly reaches 13/16.
+
+Everything works without the index; you just keep the lexical half only.
 
 ## What to try next
 
