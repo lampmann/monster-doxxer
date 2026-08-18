@@ -345,7 +345,31 @@
   /* Exported as `appearanceScore` rather than `score`: in the browser these modules
      assign onto the global object, and a name that generic would collide with the next
      module that wants it. */
-  return { tokens, stem, STOP, COLOURS, MORPHOLOGY, TEXTURE, CREATURE_NOUNS, VISUAL, isVisual,
+  /* How much a query word should count when the SEMANTIC half averages word vectors.
+
+     The embedding index is keyed by whole words, but this index's `df` is keyed by
+     STEMMED tokens, and forgetting that is expensive in a way that is invisible: looking
+     up "eyestalks" finds nothing (df 0) while "eyestalk" has 19, so every plural a player
+     types silently lands in the unseen branch. Eyestalks, tentacles, eyes, claws,
+     feathers — the exact nouns somebody uses to describe what they saw. Stemming the
+     lookup takes the vocabulary's unseen count from 1893 words to 45.
+
+     Stopwords are dropped outright rather than weighted low. They are sentence glue and
+     carry no evidence, and because this index strips them their df is also 0 — so without
+     an explicit check they would score as MAXIMALLY rare and dominate the average.
+
+     What is genuinely absent after all that gets 1: neutral. It is a small set (45 words)
+     and splitting it further would be tuning against sixteen queries. */
+  function semanticWeight(index) {
+    return function (word) {
+      if (!index || !word || STOP.has(word)) return 0;
+      const s = stem(word);
+      return index.df[s] ? Math.max(0, index.idf(s)) : 1;
+    };
+  }
+
+  return { tokens, stem, STOP, semanticWeight,
+           COLOURS, MORPHOLOGY, TEXTURE, CREATURE_NOUNS, VISUAL, isVisual,
            WEIGHTS, termWeight, PARAGRAPHS,
            SIZES, SIZE_LIKE, extractSize, withoutSize, fluffProse, fluffMap, describe,
            buildAppearanceIndex: buildIndex, appearanceScore: score };

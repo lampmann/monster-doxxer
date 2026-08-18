@@ -170,4 +170,36 @@ section("robustness");
     "A long enough sentence about a shaggy white ape to count as prose.");
 }
 
+
+/* ---------- what the SEMANTIC half weights each query word by ---------- */
+section("F10 — query word weights for the embedding half");
+{
+  const w = A.semanticWeight(INDEX);
+
+  /* THE REGRESSION THIS EXISTS FOR. The index's df is keyed by STEMMED tokens, so a
+     lookup of the plural finds nothing and the word silently falls through to the
+     unseen branch. It shipped that way once: every plural a player types — eyestalks,
+     tentacles, claws, eyes — counted for less than a filler word like "covered". */
+  assertEqual("the raw plural really is absent from the index — this is the trap",
+    INDEX.df["eyes"] || 0, 0);
+  assert("...while its stem is present", INDEX.df[A.stem("eyes")] > 0);
+  assertEqual("so the plural is weighted by its stem rather than the unseen fallback",
+    w("eyes"), Math.max(0, INDEX.idf(A.stem("eyes"))));
+  assert("...which is not the unseen fallback of exactly 1", w("eyes") !== 1);
+  assert("a distinctive noun outweighs a common one", w("carapace") > w("creature"));
+
+  // Stopwords have df 0 because the index strips them, so without an explicit check
+  // this IDF would rate them MAXIMALLY rare and let them dominate the average.
+  assertEqual("a stopword is dropped, not treated as rare", w("have"), 0);
+  assertEqual("...and so is sentence glue", w("the"), 0);
+  assert("...which is the opposite of what raw IDF would say",
+    INDEX.idf("have") > 1);
+
+  assertEqual("a word the books genuinely never use is neutral, not maximal",
+    w("zzznotaword"), 1);
+  assertEqual("no index means no weights rather than a crash",
+    A.semanticWeight(null)("orb"), 0);
+  assertEqual("...and an empty word too", w(""), 0);
+}
+
 report("appearance");

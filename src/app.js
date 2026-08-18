@@ -472,16 +472,10 @@
       /* Weight the query's words by rarity before averaging them. A flat mean lets
          "covered" pull as hard as "eyestalks", and since most words in a sentence are
          unremarkable the mean drifts toward the vocabulary's centroid — the same place
-         for every query. Measured: this is worth a whole point of top-20 (12/16 to
-         13/16), which is the entire ceiling the properly-encoded sentence reaches.
-
-         A word the books never use has df 0, which this IDF rates as maximally rare.
-         Neutral is the safer reading — otherwise one absent plain-English word owns the
-         whole query vector. */
-      const idf = w => (S.appearanceIndex && S.appearanceIndex.df[w]
-        ? Math.max(0, S.appearanceIndex.idf(w)) : 1);
-      const semantic = window.embeddingScore(
-        window.withoutSize(obs.appearance), S.embeddings, idf);
+         for every query, which is how the semantic half ends up ranking at chance.
+         Worth a point of top-20 on the benchmark. See semanticWeight(). */
+      const semantic = window.embeddingScore(window.withoutSize(obs.appearance),
+        S.embeddings, window.semanticWeight(S.appearanceIndex));
       appearanceScores = window.blend(appearanceScores || new Map(), semantic, BLEND_WEIGHT);
     }
     const nameScores = obs.heardName && S.nameIndex

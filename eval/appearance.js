@@ -168,20 +168,22 @@ function main() {
        semantic weight, and refusing to privilege it is arguably backwards for an
        embedding. It is the defensible middle, and the point is to find out whether rarity
        weighting helps at all before tuning how. */
-    const idfWeight = w => (appearanceIndex.df[w] ? Math.max(0, appearanceIndex.idf(w)) : 1);
-    sweep("query = IDF-weighted mean, unseen words neutral",
-      q => EM.embedQuery(APP.withoutSize(q), embeddings, idfWeight));
+    // What shipped first: IDF, but looked up WITHOUT stemming, so every plural missed.
+    const idfUnstemmed = w => (appearanceIndex.df[w] ? Math.max(0, appearanceIndex.idf(w)) : 1);
+    sweep("query = IDF-weighted mean, unstemmed lookup (the first attempt)",
+      q => EM.embedQuery(APP.withoutSize(q), embeddings, idfUnstemmed));
 
-    /* The guard above has a visible cost: "eyestalks" appears in no description document,
-       so df is 0, so it is weighted 1 — while "covered" gets 4.25. The single word that
-       identifies a beholder is worth less than a filler word, in the query that feature
-       exists to serve.
-       Without the guard, df 0 scores MAXIMALLY rare instead, which is the right instinct
-       for an embedding — a word the books never use is exactly what the semantic half is
-       for — and the wrong one for a stopword that slipped through. Both are one line, so
-       measure rather than argue. */
+    sweep("query = IDF-weighted mean, stemmed lookup, stopwords dropped",
+      q => EM.embedQuery(APP.withoutSize(q), embeddings,
+        APP.semanticWeight(appearanceIndex)));
+
+    /* And the variant that treats an unseen word as maximally rare rather than neutral.
+       Measured worse (12/16 against 13/16 at top-20) and the reason is visible in the
+       data: 1893 of the 8010 vocabulary words had df 0 on an unstemmed lookup, and the
+       bulk of them are stopwords — have, also, some, many, each, two — every one of which
+       this variant hands maximum weight. Kept as a control. */
     const idfRaw = w => Math.max(0, appearanceIndex.idf(w));
-    sweep("query = IDF-weighted mean, unseen words treated as rarest",
+    sweep("query = IDF-weighted mean, unseen treated as rarest (control)",
       q => EM.embedQuery(APP.withoutSize(q), embeddings, idfRaw));
 
     /* The controlled comparison. Same monsters, same blend, same everything — the only
