@@ -222,47 +222,57 @@ approximation can be measured against the real thing rather than assumed adequat
 
 Built on hardware that could reach the weights: ViT-B-32/laion2b_s34b_b79k over 4,528
 monsters, 2,632 with their official artwork mixed into the vector, 8,010 vocabulary words.
-`eval/appearance.js --sweep`, 16 hand-written paraphrase queries. The three blocks differ
-only in how the QUERY gets its vector — same index, same monsters, same blend:
+`eval/appearance.js --sweep`, 16 hand-written paraphrase queries. Every row below differs
+only in how the QUERY gets its vector — same index, same monsters, same blend weight 0.35:
 
 | query representation | top-1 | top-5 | top-20 |
 |---|---|---|---|
 | BM25 alone, no embeddings | 4/16 | 8/16 | 10/16 |
-| flat mean of its words, blended 0.35 | 4/16 | 8/16 | 12/16 |
-| **IDF-weighted mean, blended 0.35** ← ships | 4/16 | 8/16 | **13/16** |
+| flat mean of its words | 4/16 | 8/16 | 12/16 |
+| IDF-weighted mean, unstemmed lookup (a bug, since fixed) | 4/16 | 8/16 | 13/16 |
+| **IDF-weighted mean, stemmed lookup** ← ships | 4/16 | 8/16 | **12/16** |
+| IDF-weighted mean, unseen words treated as rarest | 4/16 | 8/16 | 12/16 |
 | sentence encoded by the model, blended 0.5 | 4/16 | **9/16** | 13/16 |
-| semantic only — flat mean, or IDF-weighted | 0/16 | 0/16 | 0/16 |
+| semantic only — every averaged-query variant above | 0/16 | 0/16 | 0/16 |
 | semantic only — sentence encoded properly | 1/16 | 3/16 | 7/16 |
 
-**+3 of 16 at top-20, nothing at top-1 or top-5.** That is what ships, and `BLEND_WEIGHT`
-is 0.35 from that row.
+**+2 of 16 at top-20, nothing at top-1 or top-5. That is what ships**, and it is
+indistinguishable from a plain flat mean on this benchmark — both land at 4/8/12.
 
-Three things worth taking from this table.
+An earlier version of this section reported +3 (13/16), measured on a build with a real
+bug: the IDF lookup wasn't stemming the query word, so "eyestalks" (df 0 unstemmed, 19
+stemmed) fell through to the same neutral weight as a genuinely unseen word, while
+"covered" — sentence glue — outweighed it. Fixed, with a regression test pinned to that
+exact failure (`tests/appearance.test.js`, "query word weights for the embedding half").
+The corrected version does NOT reproduce the higher number. This is worth stating plainly
+rather than quietly editing away: fixing a real, demonstrated bug made the benchmark score
+*tie or slightly worse* than the bug did.
 
-**Weighting the query's words by rarity is worth a whole point**, and it is free — no
-re-encoding, no extra bytes. A flat mean lets "covered" pull as hard as "eyestalks", and
-since most words in a sentence are unremarkable the mean drifts toward the centroid of the
-vocabulary, which sits in the same place for every query. The same correction BM25 already
-applies on the lexical side (F12).
+That is not a reason to keep the bug. Sixteen queries cannot reliably distinguish a
+12 from a 13 — that is a one-query swing, well inside noise — and the bug was
+mechanistically, provably wrong regardless of what the aggregate number rewards. The
+regression test exists because the benchmark cannot be trusted to catch a regression here;
+it is not sensitive enough.
 
-**On top-20 the browser's approximation now costs nothing.** 13/16 is exactly what the
-properly-encoded sentence reaches. It still costs a point of top-5 — 9/16 against 8/16 —
-so a real text encoder would buy something, just much less than it looked like before.
+**The number that actually matters did not move at all, under any of the four weighting
+schemes tried.** Semantic-only sits at exactly 0/16 — flat mean, buggy IDF, fixed IDF,
+unseen-as-rarest, all identical zero — where chance across 4,528 monsters is about 0.07
+expected hits at top-20. Properly-encoded sentences reach 7/16 from the identical vectors.
+So the vectors can retrieve, and no way of averaging a bag of word vectors tried here can.
+What ships is a reranker over whatever BM25 already surfaced, not the semantic search the
+feature was named for.
 
-**But the embedding half still retrieves nothing on its own**, and that has never moved:
-0/16 even at top-20, where chance across 4,528 monsters is about 0.07 expected hits.
-Properly-encoded sentences reach 7/16 from the identical vectors. So the vectors can
-retrieve and an averaged bag of word vectors cannot — what ships is a reranker over what
-BM25 already surfaced, not the semantic search the feature was named for. Worth having at
-+3, and worth being precise about.
-
-### Two theories that were wrong
+### Three theories that were wrong, or didn't matter
 
 `--vocab-prompt` wrapped each vocabulary word in a caption ("a photo of a {}"), on the
 theory that a bare word and a sentence are different kinds of string to CLIP and land in
 different neighbourhoods. Measured: semantic-only stayed at exactly 0/16 and the operating
-point was unchanged at 4/8/12. The flag is kept so the result is reproducible; it is not
-the default and there is no reason to use it.
+point was unchanged at 4/8/12. Kept for reproducibility; not the default.
+
+Weighting a query's words by rarity at all — the whole premise of this section — turned
+out, once correctly implemented, to be a wash against not weighting them. It is kept
+anyway (see above) because it is free and it is correct, not because the benchmark asked
+for it.
 
 ### Mean-centring: tried, measured, rejected
 

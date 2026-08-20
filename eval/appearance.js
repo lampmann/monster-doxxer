@@ -152,7 +152,7 @@ function main() {
       console.log("");
     };
 
-    sweep("query = flat mean of its words' vectors (what the page does)",
+    sweep("query = flat mean of its words' vectors (unweighted control)",
       q => APP.withoutSize(q));
 
     /* Same vectors, same index — the words are just no longer given equal say. If a flat
@@ -173,7 +173,7 @@ function main() {
     sweep("query = IDF-weighted mean, unstemmed lookup (the first attempt)",
       q => EM.embedQuery(APP.withoutSize(q), embeddings, idfUnstemmed));
 
-    sweep("query = IDF-weighted mean, stemmed lookup, stopwords dropped",
+    sweep("query = IDF-weighted mean, stemmed lookup, stopwords dropped (what the page does)",
       q => EM.embedQuery(APP.withoutSize(q), embeddings,
         APP.semanticWeight(appearanceIndex)));
 

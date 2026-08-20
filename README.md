@@ -110,14 +110,11 @@ python3 build/embed.py --images      # embeds the descriptions AND the artwork
 node eval/appearance.js --sweep      # the table that decides whether it helped
 ```
 
-**Measured, on the full bestiary with artwork: +3 of 16 at top-20 (10 → 13), and nothing at
-top-1 or top-5.** That equals what the same index reaches when the query is encoded properly
-by the model rather than approximated in the browser, so on top-20 the approximation now
-costs nothing.
-
-Be clear about what it is, though: on its own the embedding half retrieves nothing at all.
-It reranks what BM25 already found. DESIGN.md has the full table, including the two theories
-that were measured and thrown away.
+**Measured, on the full bestiary with artwork: +2 of 16 at top-20 (10 → 12), and nothing at
+top-1 or top-5.** That's a rerank of what BM25 already found, not retrieval — on its own
+the embedding half scores 0/16, no matter how the query's words are weighted before
+averaging. DESIGN.md has the full table, including a bug that briefly made the number
+look better than this, and why the honest figure is smaller.
 
 Everything works without the index; you just keep the lexical half only.
 

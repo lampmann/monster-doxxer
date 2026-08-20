@@ -28,30 +28,32 @@
      happened to cut, and so F13 picks its tests against the real field of candidates. */
   const WINDOW = 40;
   const SHOWN = 12;
-  /* The embedding half's share of the appearance score. Now MEASURED, on a real
+  /* The embedding half's share of the appearance score. MEASURED, on a real
      ViT-B-32/laion2b index over 4528 monsters with 2632 pictures mixed in
      (eval/appearance.js --sweep), against the query representation this page actually
-     uses — an IDF-weighted mean of a query's word vectors:
+     uses — an IDF-weighted mean of a query's word vectors, correctly stemmed:
 
          lexical only   4/16 top-1   8/16 top-5   10/16 top-20
-         0.35           4/16         8/16         13/16
+         0.35           4/16         8/16         12/16
          0.5            4/16         7/16         13/16
-         0.65           4/16         7/16         12/16
+         0.65           3/16         7/16         12/16
          semantic only  0/16         0/16          0/16
 
-     +3 of 16 at top-20, nothing at top-1 or top-5. 0.35 over the equal-scoring 0.5
-     because top-5 is a point better there and performance collapses above 0.5 anyway.
+     +2 of 16 at top-20, nothing at top-1 or top-5. Ties a flat, unweighted mean exactly
+     (both 4/8/12 at 0.35) — weighting by rarity is kept for being demonstrably correct
+     (see semanticWeight() in appearance.js and its regression test), not because this
+     benchmark rewards it. It doesn't, at n=16, and that is stated plainly rather than
+     papered over: an earlier build of this same idea had a real bug — the IDF lookup
+     wasn't stemming, so "eyestalks" scored as unseen — and THAT version measured 13/16.
+     Fixing the bug did not reproduce the higher number. Sixteen queries cannot tell a 12
+     from a 13 apart; the bug was wrong regardless of what the aggregate rewarded.
 
-     Two things that comment used to get wrong, both now measured. The flat mean scored
-     12/16 here; weighting the query's words by rarity is worth the extra point, and it
-     is free. And 13/16 is exactly what the properly-encoded sentence reaches — so on
-     top-20 the browser's approximation now costs nothing at all. It still costs a point
-     of top-5 (9/16 encoded properly against 8/16 here).
-
-     The last row is the honest caveat and has never moved: alone, the embedding half
-     finds nothing. This is reranking within what BM25 already surfaced, not retrieval.
-     Properly-encoded sentences reach 1/3/7 semantic-only, so the vectors can retrieve —
-     an averaged bag of word vectors cannot. See DESIGN.md. */
+     The number that has never moved, under any weighting scheme tried: alone, the
+     embedding half finds nothing. 0/16 even at top-20, where chance over 4528 monsters is
+     ~0.07 expected hits. Properly-encoded sentences reach 1/3/7 semantic-only from the
+     identical vectors — so the vectors can retrieve, and no way of averaging a bag of
+     word vectors tried here can. What ships is a reranker over what BM25 already
+     surfaced, not the semantic search this feature is named for. See DESIGN.md. */
   const BLEND_WEIGHT = 0.35;
 
   /* ---------- state ----------
