@@ -84,6 +84,7 @@ const DEFAULTS = {
   heardRate: 0,           // probability the DM said a name the party caught
   garbleRate: 0.4,        // ...and wrote down wrong, having heard it rather than read it
   mishearRate: 0.1,       // ...or got completely wrong. See below.
+  bossDriftRate: 0,       // probability the DM added legendary/lair to a monster without it
 };
 
 /* ON heardRate — a name the party heard.
@@ -177,6 +178,12 @@ function fullObservation(m) {
 }
 
 const SET_FIELDS = ["typeTags", "movement", "senses", "condImmune", "damageDealt", "symptoms"];
+
+/* The symptoms a party reports when the thing acted like a boss. These are the ontology
+   ids that resolve to legendary actions or a lair, and they are the observations a DM's
+   promotion of an ordinary monster would produce. */
+const BOSS_SYMPTOMS = ["it-acted-out-of-turn", "the-room-itself-attacked-us",
+                       "something-happened-at-the-start-of-its-turn"];
 const SCALAR_FIELDS = ["type", "size"];
 
 /* Corrupt one monster into a query. Returns the observation plus a record of what was
@@ -210,6 +217,33 @@ function corrupt(m, r, opts) {
       obs[f] = obs[f].concat([stray]);
       notes.push(`${f}: +${stray} (wrong)`);
     });
+  }
+
+  /* BOSS DRIFT — handoff §7's second open question, made measurable.
+
+     "Should legendary and lair actions be a separate trust tier? They are strong
+      signals but GMs add and remove them freely."
+
+     Removal is already modelled and already free: dropout deletes observations, and
+     F2 charges nothing for a feature the party never mentioned. So a DM who strips
+     legendary actions off a dragon costs this tool nothing.
+
+     ADDITION is the untested half, and it is the one that can hurt. A DM who promotes
+     an ordinary monster to a boss — giving an owlbear legendary actions and a lair —
+     hands the party a true observation of something the statblock does not have. Under
+     missFactor 1.0 that is charged against the real answer at full price, which is
+     exactly the case for asking whether these belong in their own trust tier.
+
+     So: pick a monster that has NEITHER, and report the symptom anyway. Deliberately
+     only for monsters lacking the feature, because a boss that already is one produces
+     no drift — this isolates the addition case rather than diluting it. */
+  if (o.bossDriftRate > 0 && r() < o.bossDriftRate) {
+    const hasBoss = (m.legendary || []).length > 0 || m.hasLair;
+    if (!hasBoss) {
+      const sym = pick(r, BOSS_SYMPTOMS);
+      obs.symptoms = (obs.symptoms || []).concat([sym]);
+      notes.push(`symptoms: +${sym} (the DM made it a boss)`);
+    }
   }
 
   /* Damage interactions are their own dropout: a party tests a few types and learns

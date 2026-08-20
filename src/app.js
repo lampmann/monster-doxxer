@@ -492,6 +492,8 @@
     const ranked = window.rank(S.monsters, obs, S.rarity, {
       sources: spec, numerics: S.numerics, retuned: S.retuned, legacy: S.legacy,
       appearanceScores, nameScores, crPlausibility: crScores,
+      // F3's fourth tier: which symptoms a DM adds and removes freely, from the ontology.
+      volatileSymptoms: S.ontology && S.ontology.volatileIds,
       collapseByName: true, limit: WINDOW, keepMonster: true,
     });
     S.ranked = ranked;

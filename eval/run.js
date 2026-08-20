@@ -35,7 +35,7 @@ const NAMES = require("../src/names.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1 };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0 };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -53,6 +53,7 @@ function parseArgs(argv) {
     else if (a === "--synonyms") out.synonyms = Number(next());
     else if (a === "--heard") out.heard = Number(next());
     else if (a === "--misheard") out.misheard = Number(next());
+    else if (a === "--boss-drift") out.bossDrift = Number(next());
     else if (a === "--quiet") out.quiet = true;
     else if (a === "--help" || a === "-h") { console.log(HELP); process.exit(0); }
   }
@@ -74,6 +75,7 @@ const HELP = `eval/run.js — corrupt real statblocks, measure top-5 recall
   --synonyms <0..1> rate at which they use their own words, not the book's
   --heard <0..1>    rate at which the party caught a name the DM said
   --misheard <0..1> ...of which this share are the WRONG name entirely
+  --boss-drift <0..1> rate at which the DM promoted an ordinary monster to a boss
   --quiet           results only`;
 
 /* ---------- one measurement ----------
@@ -171,11 +173,13 @@ function opts(args, extra) {
                describeRate: args.describe, documents: args.documents,
                synonymRate: args.synonyms,
                heardRate: args.heard, mishearRate: args.misheard, allNames: args.allNames,
+               bossDriftRate: args.bossDrift,
                isColour: w => APP.COLOURS.has(APP.stem(w)),
                isMorphology: w => APP.MORPHOLOGY.has(APP.stem(w)),
                isVisual: APP.isVisual },
     numerics: args.numerics,
-    score: { numerics: args.numerics, numericMode: args.mode || undefined, legacy: args.legacy },
+    score: { numerics: args.numerics, numericMode: args.mode || undefined, legacy: args.legacy,
+             volatileSymptoms: args.volatileSymptoms },
     appearanceIndex: args.appearanceIndex,
     nameIndex: args.nameIndex,
   }, extra || {});
@@ -195,6 +199,7 @@ function sweep(monsters, rarity, args, key) {
     damageCostFactor: [0, 0.1, 0.25, 0.5, 0.75, 1.0],
     nameWeight: [3, 6, 9, 12, 20, 40],
     appearanceCap: [0, 0.1, 0.25, 0.4, 0.6],
+    volatileMissFactor: [0, 0.1, 0.25, 0.5, 0.75, 1.0],
   };
   const grid = GRIDS[key];
   if (!grid) {
@@ -339,6 +344,7 @@ function main() {
   args.numerics = S.buildNumerics(monsters);
   args.legacy = S.buildLegacy(monsters, sourceDates);
   args.ontology = ontology;
+  args.volatileSymptoms = ontology.volatileIds;
   args.appearanceIndex = appearanceIndex;
   args.documents = documents;
   args.nameIndex = NAMES.buildNameIndex(monsters);

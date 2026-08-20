@@ -145,6 +145,7 @@
       aka: asArray(s.aka),
       group: s.group || "",
       testable: !!s.testable,
+      volatile: !!s.volatile,
       candidates: asArray(s.candidates).map(c => {
         const out = {
           mechanic: c.mechanic || "",
@@ -174,7 +175,11 @@
       if (c.badPattern) problems.push(`${s.id}: candidate "${c.mechanic}" has a regex that won't compile`);
       else if (c.dead) problems.push(`${s.id}: candidate "${c.mechanic}" matches nothing`);
     }));
-    return { symptoms, byId, problems, idf: buildIdf(symptoms),
+    /* The ids whose mechanic a GM adds and removes freely (handoff §7). Handed to the
+       scorer as a set so score.js never has to know an ontology id by name — which
+       symptoms are volatile is a data question, and it stays in the data. */
+    const volatileIds = new Set(symptoms.filter(s => s.volatile).map(s => s.id));
+    return { symptoms, byId, problems, idf: buildIdf(symptoms), volatileIds,
              version: (ontology && ontology.version) || 0 };
   }
 

@@ -24,6 +24,7 @@ this file is where it meets reality and where it has been deviated from.
 | `build/embed.py` + `src/embeddings.js` | F9 / F10's semantic half. Built; **index never built here** — below. |
 | Tabs | One per monster, with per-tab evidence and encounter grouping. |
 | No-match floor (§7) | Built, 9 assertions. Threshold measured by `eval/nomatch.js`, not guessed. |
+| Volatile tier (§7) | Built, 7 assertions. Legendary/lair keep full credit, discounted penalty. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
@@ -425,6 +426,69 @@ scratch. The absolute numbers are an upper bound. What is trustworthy is the *or
 tunings, which is all a tuning harness is really for. `eval/corrupt.js` keeps the unmodelled list
 next to the code that would have to model it.
 
+## Legendary and lair actions — F3's fourth tier, handoff §7
+
+> "Should legendary and lair actions be a separate trust tier? They are strong signals but
+> GMs add and remove them freely."
+
+Yes, and the tier is **asymmetric** rather than merely weaker — which is the part the
+question does not anticipate. What one of these observations is worth depends entirely on
+which direction it points:
+
+- **As evidence FOR a candidate**, it is as good as any other symptom and keeps full credit.
+  Legendary actions really are rare (454 of 4,528 monsters, 10.0%; a lair, 294, 6.5%), so a
+  party that watched something act out of turn has genuinely narrowed the field.
+- **As evidence AGAINST a candidate**, it is close to worthless. Promoting an ordinary
+  monster to a boss is one of the commonest things a GM does, and the party's report is then
+  true of the *fight* and false of the *statblock*. Charging the real answer full price for
+  that is the failure the tier exists to prevent.
+
+So `TUNING.volatileMissFactor` scales `missFactor` only, and only for symptoms the ontology
+marks `volatile`. Credit is untouched.
+
+**Which symptoms are volatile is a data question and stays in the data.** `ontology/symptoms.json`
+grows a `volatile` flag, `src/symptoms.js` compiles the marked ids into a set, and the scorer
+receives it as an option — `score.js` never learns an ontology id by name.
+
+### Measuring it
+
+Removal needed no new machinery and turns out to cost nothing: dropout already deletes
+observations, and F2 charges nothing for a feature the party never mentioned. A DM who strips
+legendary actions off a dragon is already free.
+
+Addition is the untested half, so `eval/corrupt.js` gained `bossDriftRate` — pick a monster
+with neither legendary actions nor a lair, and report the symptom anyway.
+
+```
+--boss-drift 0.15, n=400          top-1   top-5   top-20
+  volatileMissFactor = 0          42.3%   66.0%   79.0%
+  volatileMissFactor = 0.1        42.3%   66.0%   78.8%
+  volatileMissFactor = 0.25       42.0%   66.0%   78.5%   <- current
+  volatileMissFactor = 1  (off)   41.5%   65.0%   77.5%
+```
+
+The tier is worth about **+1.0 top-5 and +1.5 top-20** at a realistic drift rate, and the
+direction is monotone at every rate tested (0, 0.15, 0.6).
+
+### Why not 0, when the harness prefers it
+
+At every drift rate the harness rates 0 best or joint-best, and 0.25 sits inside the noise
+band (66.0% at 0, 0.1 and 0.25 alike). The constant is 0.25 anyway, for the same reason
+`damageCostFactor` and `minSymptomConfidence` were overruled: **the control run is blind to
+the case that argues for keeping a penalty.**
+
+With `--boss-drift 0` the sweep is perfectly flat — identical to three decimals at every
+value from 0 to 1. That is not evidence that the penalty is worthless; it is evidence the
+harness cannot see it. When the party's report is honest, the penalty lands uniformly on the
+~4,000 candidates lacking the feature, and a uniform shift barely reorders anything under F7
+normalisation. The information it carries is real (a lair is a 6.5% feature) and shows up in
+the honest case the harness structurally under-samples, because it draws symptoms from each
+monster's own tags.
+
+0.25 keeps a quarter of the penalty for no measurable cost. Setting 0 would assert that a
+party reporting lair actions tells you *nothing* about a candidate with no lair, which is
+false.
+
 ## The no-match confidence floor — handoff §7
 
 > "How should the tool handle a monster the GM built from scratch, where the correct answer
@@ -587,7 +651,6 @@ like", which is worth showing the user directly and is the natural input to F13'
 - A monster the DM built from scratch should rank as "no match". That needs a confidence floor, and
   the harness cannot set the threshold yet: it never generates a query whose answer is absent from
   the corpus. Generating those is a prerequisite for answering this.
-- Legendary and lair actions: strong signals, but DMs add and remove them freely. Own trust tier?
 - Two monsters, one merged set of observations.
 - The `by name` / `by key` gap in the harness output is the reprint rate, and it is small. If it
   grows, duplicate consolidation becomes a real feature rather than a reporting detail.

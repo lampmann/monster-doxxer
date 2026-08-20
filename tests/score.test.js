@@ -10,7 +10,7 @@
 */
 "use strict";
 const S = require("../src/score.js");
-const { assert, assertEqual, section, report } = require("./harness.js");
+const { assert, assertEqual, assertClose, section, report } = require("./harness.js");
 
 /* A small synthetic corpus. Deliberately hand-built rather than sampled from real data:
    the rarity maths is what's under test, and it's only checkable when you know the counts.
@@ -278,6 +278,47 @@ section("the no-match confidence floor");
   // Only the leader decides; a long tail of weak candidates is the normal case.
   assertEqual("only the top score is consulted",
     S.confidence([{ score: 0.9 }, { score: 0.01 }]), "ok");
+}
+
+
+/* ---------- F3's fourth tier: symptoms GMs add and remove freely ---------- */
+section("volatile symptoms (legendary / lair)");
+{
+  // One monster in the fixture has the symptom; the other 99 do not.
+  const volatileSet = new Set(["healed-between-rounds"]);
+  const obs = { symptoms: ["healed-between-rounds"] };
+  const beast = MONS[0];            // lacks it — this is the candidate that gets penalised
+  const delver = MONS[MONS.length - 1];  // has it
+
+  const plainMiss = S.scoreMonster(beast, obs, R, {});
+  const softMiss = S.scoreMonster(beast, obs, R, { volatileSymptoms: volatileSet });
+  assert("a candidate lacking a volatile symptom is penalised less than normally",
+    softMiss.score > plainMiss.score);
+  assert("...but still penalised, not forgiven outright", softMiss.score < 0);
+
+  /* The asymmetry is the whole point of the tier: promoting an ordinary monster to a
+     boss is common, so the absence is weak evidence — but legendary actions really are
+     rare, so seeing one is still worth full credit. */
+  const plainHit = S.scoreMonster(delver, obs, R, {});
+  const softHit = S.scoreMonster(delver, obs, R, { volatileSymptoms: volatileSet });
+  assertClose("credit for HAVING it is completely unchanged",
+    softHit.score, plainHit.score, 1e-9);
+
+  assertClose("the discount is exactly volatileMissFactor",
+    softMiss.raw, plainMiss.raw * S.TUNING.volatileMissFactor, 1e-9);
+
+  // Only symptoms are volatile; the flag must not leak into other facets.
+  const typeObs = { type: "aberration" };
+  assertClose("a non-symptom facet is unaffected by the volatile set",
+    S.scoreMonster(beast, typeObs, R, { volatileSymptoms: new Set(["aberration"]) }).score,
+    S.scoreMonster(beast, typeObs, R, {}).score, 1e-9);
+
+  assertClose("no volatile set at all behaves exactly as before",
+    S.scoreMonster(beast, obs, R, {}).score, plainMiss.score, 1e-9);
+
+  // The explanation should say WHY the penalty is soft, or the user cannot audit it.
+  assert("the reason given names the DM, not just the statblock",
+    /DMs add it freely/.test(softMiss.against[0].why));
 }
 
 report("score");

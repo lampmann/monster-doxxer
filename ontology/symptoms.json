@@ -24,6 +24,12 @@
     "                        dealsdamage.psychic, type.undead, size.huge, lair, legendary,",
     "                        spellcasting, language.common, reach.15",
     "",
+    "`volatile` marks a symptom whose underlying mechanic GMs add and remove freely, so a",
+    "party reporting it is weak evidence AGAINST a candidate that lacks it. Legendary and",
+    "lair actions are the case the handoff names: promoting an ordinary monster to a boss is",
+    "one of the commonest things a GM does, and the observation is true of the fight without",
+    "being true of the statblock. Credit is unchanged; only the miss penalty is discounted.",
+    "",
     "`testable` marks a symptom the party can deliberately provoke in about one round.",
     "F13 prefers those when it suggests a discriminating test — 'hit it with radiant' is",
     "advice; 'wait to see if it rejuvenates in a few days' is not.",
@@ -651,6 +657,7 @@
 
     {
       "id": "something-happened-at-the-start-of-its-turn",
+      "volatile": true,
       "player": "Something happened at the start of its turn that wasn't an attack",
       "aka": ["the room did something on its initiative", "an effect triggered on its turn"],
       "group": "turn",
@@ -662,6 +669,7 @@
     },
     {
       "id": "the-room-itself-attacked-us",
+      "volatile": true,
       "player": "The room itself attacked us",
       "aka": ["the walls moved", "the environment fought us", "the lair was hostile"],
       "group": "turn",
@@ -671,6 +679,7 @@
     },
     {
       "id": "it-acted-out-of-turn",
+      "volatile": true,
       "player": "It acted between our turns",
       "aka": ["it moved on someone else's turn", "it got extra actions", "legendary actions"],
       "group": "turn",

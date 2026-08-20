@@ -130,6 +130,26 @@
        fitting to an artifact. This constant answers only the question the data can
        settle: "is this score unusually low for a genuine match?" */
     noMatchThreshold: 0.46,
+    /* F3, fourth tier — handoff §7's second open question:
+
+         "Should legendary and lair actions be a separate trust tier? They are strong
+          signals but GMs add and remove them freely."
+
+       They should, and the tier is asymmetric rather than merely weaker. What a volatile
+       symptom is worth depends entirely on the direction:
+
+         AS EVIDENCE FOR a candidate it is as good as any other symptom, and keeps full
+         credit. Legendary actions really are rare — 10% of the corpus, lair 6.5% — so a
+         party that saw one has genuinely narrowed the field.
+
+         AS EVIDENCE AGAINST a candidate it is close to worthless, because promoting an
+         ordinary monster to a boss is one of the commonest things a GM does. The party's
+         report is true of the FIGHT and false of the STATBLOCK, and charging the real
+         answer full price for that is the failure this tier exists to prevent.
+
+       This factor scales missFactor for symptoms the ontology marks `volatile`. Measured
+       by eval/run.js --boss-drift; see DESIGN.md for the sweep. */
+    volatileMissFactor: 0.25,
   };
 
   /* Damage-interaction cost matrix (F2). Never compare these as booleans: "resistant" when the
@@ -531,9 +551,16 @@
           if (conf < 1) hit.confidence = +conf.toFixed(2);
           forEvidence.push(hit);
         } else {
-          const cost = w * TUNING.missFactor;
+          /* F3's fourth tier. A volatile symptom (legendary actions, a lair) costs a
+             fraction of the usual miss, because the DM may simply have added it — see
+             TUNING.volatileMissFactor. Credit is untouched; only the penalty bends. */
+          const volatile_ = facet === "symptom" && o.volatileSymptoms
+            && o.volatileSymptoms.has(v);
+          const cost = w * TUNING.missFactor * (volatile_ ? TUNING.volatileMissFactor : 1);
           raw -= cost;
-          against.push({ facet, value: v, weight: -(+cost.toFixed(3)), why: "the statblock doesn't have this" });
+          against.push({ facet, value: v, weight: -(+cost.toFixed(3)),
+                         why: volatile_ ? "the statblock doesn't have this, but DMs add it freely"
+                                        : "the statblock doesn't have this" });
         }
       });
     };
