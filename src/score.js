@@ -108,6 +108,28 @@
        a strong demotion without ever becoming the filter that "rank, never filter"
        forbids. The DM may have renamed it, invented it, or been misheard. */
     nameWeight: 9,
+    /* The no-match confidence floor — handoff §7's first open question. Below this
+       normalised score, the leader is not a good enough explanation to present as an
+       answer, and the tool says so instead of ranking with a straight face.
+
+       WHY THIS EXISTS. The old check flagged "nothing explains this" only when the top
+       score was ~0 — literally zero features matched. A GM's homebrew that happens to
+       breathe fire, fly and sit near CR 5 matches plenty by coincidence and sails past
+       that, so the floor caught an almost-impossible case and missed the real one:
+       measured, it called 99.5% of simulated homebrew confident (eval/nomatch.js).
+
+       WHERE 0.46 COMES FROM. It is the 5th percentile of the score the TRUE answer's
+       winner achieves on real corrupted observations — so ~95% of genuine matches stay
+       above it. Stable across seeds: 0.4615 / 0.4627 / 0.4648 / 0.4708 / 0.4722.
+
+       WHAT IT IS NOT. Not a homebrew detector. eval/nomatch.js also computes the cut
+       that best SEPARATES present from absent, and that number is deliberately not used
+       here: it swings 0.58-0.63 across the same seeds, and the separation it maximises
+       (J ~ 0.15) is weak for a structural reason — leave-one-out removes one monster but
+       leaves its cousins, which explain the query legitimately. Fitting to that would be
+       fitting to an artifact. This constant answers only the question the data can
+       settle: "is this score unusually low for a genuine match?" */
+    noMatchThreshold: 0.46,
   };
 
   /* Damage-interaction cost matrix (F2). Never compare these as booleans: "resistant" when the
@@ -783,6 +805,27 @@
     return o.limit ? out.slice(0, o.limit) : out;
   }
 
+  /* How much the leading candidate should be trusted, as a label rather than a number.
+
+       "none"  — nothing matched at all. Under F7 a candidate explaining no part of the
+                 query scores exactly 0, so this is unambiguous.
+       "low"   — something matched, but the leader explains less of the evidence than
+                 ~95% of genuine matches do. Most often means the creature is not in the
+                 books at all: a GM built it. Could also mean the party misremembered
+                 badly, and the tool cannot tell those apart — so the wording it drives
+                 must not claim to.
+       "ok"    — the leader is in the range real answers occupy.
+
+     Deliberately three coarse buckets and not a percentage. The underlying separation is
+     weak (see TUNING.noMatchThreshold); dressing it as "72% confident" would imply a
+     precision the measurement does not have. */
+  function confidence(ranked) {
+    if (!ranked || !ranked.length) return "none";
+    const top = ranked[0].score;
+    if (!(top > 1e-9)) return "none";
+    return top < TUNING.noMatchThreshold ? "low" : "ok";
+  }
+
   /* True when the user supplied nothing worth ranking on — the UI should say so rather than
      present an arbitrary ordering of 3,000 monsters as if it meant something. */
   function hasEvidence(obs) {
@@ -800,5 +843,5 @@
 
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
            buildRarity, buildNumerics, buildLegacy, scoreNumerics, gaussian, sourceFilter,
-           candidateFeatureSet, scoreMonster, rank, hasEvidence };
+           candidateFeatureSet, scoreMonster, rank, hasEvidence, confidence };
 });

@@ -522,8 +522,16 @@
     /* Ties are the normal case with three or four observations, and saying so is more
        useful than pretending to an order. The tiebreak below the score is a prior, not
        evidence, so a silent list would imply a confidence the ranking doesn't have. */
-    if (!explains.length) {
+    /* The no-match floor. The list is still shown either way — "rank, never filter"
+       applies here too, and a party with a homebrewed monster still wants to see what
+       came closest. What changes is whether the tool presents it as an answer. */
+    const conf = window.confidence(shown);
+    if (conf === "none") {
       notes.push("Nothing in your books explains this. These are the least bad matches, not answers.");
+    } else if (conf === "low") {
+      notes.push("No monster in your books explains this well — the best match here is weaker " +
+        "than a real answer usually is. Your DM may have built this one themselves, or a " +
+        "detail may be misremembered. Treat the list as leads, not an identification.");
     } else if (explains.length <= 3 && ranked.length > explains.length) {
       notes.push(`Only ${explains.length} monster${explains.length === 1 ? "" : "s"} explain${
         explains.length === 1 ? "s" : ""} any of this; the rest are not shown.`);
@@ -565,7 +573,10 @@
        winning, so the label has to follow the ranking it reads — and doing it at the end
        of the one function that re-ranks means every handler updates it for free. */
     const cur = S.tabs.find(x => x.id === S.activeId);
-    if (cur) cur.best = shown.length && shown[0].score > 1e-9 ? shown[0].name : "";
+    /* A tab is labelled by whatever is winning, but a leader below the no-match floor is
+       not something to put a name to on a tab the user reads at a glance — it would be
+       the most confident-looking part of the screen making the least supported claim. */
+    if (cur) cur.best = conf === "ok" ? shown[0].name : "";
     renderTabs();
   }
 

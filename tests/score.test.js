@@ -253,4 +253,31 @@ section("collapsing reprints");
     !tight.find(r => r.name === "Wight").alsoIn);
 }
 
+
+/* ---------- the no-match confidence floor (handoff §7) ---------- */
+section("the no-match confidence floor");
+{
+  const r = s => [{ score: s, name: "X", key: "X|T" }];
+
+  assertEqual("an empty ranking is 'none'", S.confidence([]), "none");
+  assertEqual("...and so is a nonexistent one", S.confidence(null), "none");
+  assertEqual("a leader explaining literally nothing is 'none'",
+    S.confidence(r(0)), "none");
+
+  /* The bug this feature exists for: the OLD check only caught a score of ~0, so a
+     homebrew that coincidentally matches a few ordinary features was answered with
+     full confidence. Measured at 99.5% of simulated homebrew (eval/nomatch.js). */
+  assertEqual("a weak-but-nonzero leader is 'low', not confident",
+    S.confidence(r(0.2)), "low");
+  assertEqual("...right up to the floor", S.confidence(r(S.TUNING.noMatchThreshold - 1e-6)), "low");
+  assertEqual("at the floor it is trusted", S.confidence(r(S.TUNING.noMatchThreshold)), "ok");
+  assertEqual("a strong leader is 'ok'", S.confidence(r(0.9)), "ok");
+
+  assert("the floor sits where genuine matches mostly are, not at zero",
+    S.TUNING.noMatchThreshold > 0.1 && S.TUNING.noMatchThreshold < 1);
+  // Only the leader decides; a long tail of weak candidates is the normal case.
+  assertEqual("only the top score is consulted",
+    S.confidence([{ score: 0.9 }, { score: 0.01 }]), "ok");
+}
+
 report("score");

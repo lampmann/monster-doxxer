@@ -23,6 +23,7 @@ this file is where it meets reality and where it has been deviated from.
 | `src/encounter.js` | Party-plausibility tiebreak from level and fight size; 44 assertions. |
 | `build/embed.py` + `src/embeddings.js` | F9 / F10's semantic half. Built; **index never built here** — below. |
 | Tabs | One per monster, with per-tab evidence and encounter grouping. |
+| No-match floor (§7) | Built, 9 assertions. Threshold measured by `eval/nomatch.js`, not guessed. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
@@ -423,6 +424,54 @@ reflavouring, two monsters merged into one set of observations, or a monster the
 scratch. The absolute numbers are an upper bound. What is trustworthy is the *ordering* between two
 tunings, which is all a tuning harness is really for. `eval/corrupt.js` keeps the unmodelled list
 next to the code that would have to model it.
+
+## The no-match confidence floor — handoff §7
+
+> "How should the tool handle a monster the GM built from scratch, where the correct answer
+> is 'no match'? A confidence floor is needed, and the threshold must come from the harness."
+
+**What was there before.** The UI flagged "nothing explains this" only when the top candidate
+scored at or below 1e-9 — the floor for matching *literally zero* features. A homebrew that
+happens to breathe fire, fly and sit near CR 5 matches plenty by coincidence and sails past
+that. Measured against simulated homebrew, the old check called **99.5% of them confident**.
+It caught an almost-impossible case and missed the real one.
+
+**How the threshold was derived.** `eval/nomatch.js` scores every sampled monster twice
+against the same corrupted observations: once against the full corpus (the answer exists),
+once against the corpus with that monster and all its reprints removed (the answer does not).
+`TUNING.noMatchThreshold = 0.46` is the **5th percentile of the score a true answer's winner
+achieves** — so ~95% of genuine matches stay above it. Stable across seeds: 0.4615, 0.4627,
+0.4648, 0.4708, 0.4722.
+
+**What was deliberately not used.** The same harness computes the cut that best *separates*
+present from absent, and that number is rejected: it swings 0.58–0.63 across those same
+seeds, and the separation it maximises is weak (Youden's J ≈ 0.15). The weakness is
+structural, not a scoring fault — leave-one-out removes one monster but leaves its cousins,
+and a Dire Wolf explaining a Wolf's observations is the tool working, not failing. Fitting a
+threshold to that overlap would be fitting to an artifact of the experiment.
+
+### What this feature is not
+
+It is **not a homebrew detector**, and the numbers say so plainly: at 0.46 it correctly flags
+only about **16%** of simulated homebrew. It cannot do better, because a homebrew assembled
+from ordinary parts is genuinely well explained by the books — "construct, AC 20, 350 hp" is
+the Runic Colossus whether or not your DM wrote it. The floor catches monsters that are
+*unusual in combination*, and nothing else.
+
+What it actually answers is the narrower question the data can settle: **"is this score
+unusually low for a genuine match?"** When it fires, the cause could equally be a homebrewed
+creature or a badly misremembered detail, and the tool cannot distinguish those — so the
+wording it drives says both and claims neither.
+
+The list is still shown when the floor fires. "Rank, never filter" applies here too: a party
+facing a homebrew still wants to see what came closest. What changes is that the tool stops
+presenting it as an identification, and the tab label stops asserting a name.
+
+### Why three buckets and not a percentage
+
+`confidence()` returns `none` / `low` / `ok`. Rendering "72% confident" from a separation this
+weak would imply a precision the measurement does not have — the same discipline the legacy
+and CR priors are held to elsewhere in this file.
 
 ## F13 — what to try next
 
