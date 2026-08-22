@@ -8,9 +8,10 @@ monster explains them.
 
 **Status: early, but usable, and the numbers are measured.** The normalisation pipeline, the
 evidence scorer, the symptom ontology and the browser UI all exist and are tested, and an
-evaluation harness picks the scoring constants instead of leaving them to taste. Every feature in
-the original design is built except the embedding half of appearance matching. See
-[DESIGN.md](DESIGN.md) for what's built, what isn't, and what the numbers rest on.
+evaluation harness picks the scoring constants instead of leaving them to taste. **Every feature
+in the original design is built**, along with two of the three questions its author left open. See
+[DESIGN.md](DESIGN.md) for what's built, what was measured and rejected, and what the numbers
+rest on.
 
 Against the full 4,528-monster corpus, given the observations a party would plausibly have after
 one fight: **the right monster is in the top 5 about 67% of the time**, and 73% if they can also
@@ -45,7 +46,8 @@ browsers block that over `file://`. The launcher does it in one word:
 ```sh
 ./doxx          # start the server (or reuse one) and open the tool
 ./doxx stop     # stop it
-./doxx test     # run the tests
+./doxx test     # run the tests (milliseconds)
+./doxx test-ui  # drive the real page in a browser (needs Playwright)
 ```
 
 On Windows without Git Bash, any static server over this folder does the same job —
@@ -136,8 +138,19 @@ top-5 recall and visibly shrinks the tie.
 No dependencies, no install:
 
 ```sh
-node tests/run.js
+node tests/run.js       # 11 suites, 519 assertions, milliseconds
 ```
+
+The browser suite is separate, because a browser costs forty seconds and the point of the Node
+suites is that they cost nothing:
+
+```sh
+npm install --no-save playwright && npx playwright install chromium
+./doxx test-ui          # 35 assertions, driving the real page
+```
+
+It skips rather than fails if Playwright isn't there — it is a testing tool, not a dependency of
+the thing being tested.
 
 ## Measuring it
 

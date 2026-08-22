@@ -52,7 +52,8 @@ doxx — Monster Doxxer launcher
 
   doxx          start the server (or reuse a running one) and open the tool
   doxx stop     stop the server on port $PORT
-  doxx test     run the test suite (no server needed)
+  doxx test     run the test suite (no server needed, milliseconds)
+  doxx test-ui  drive the real page in a browser (needs Playwright, ~40s)
   doxx help     this
 
   folder: $ROOT
@@ -75,6 +76,13 @@ EOF
 
   test)
     cd "$ROOT" && exec node tests/run.js
+    ;;
+
+  # Kept out of `doxx test` on purpose: the Node suites run in milliseconds and that
+  # is why they get run. This one needs a browser and takes about forty seconds.
+  test-ui)
+    shift
+    cd "$ROOT" && exec node tests/ui.js "$@"
     ;;
 
   start)

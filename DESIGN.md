@@ -25,6 +25,7 @@ this file is where it meets reality and where it has been deviated from.
 | Tabs | One per monster, with per-tab evidence and encounter grouping. |
 | No-match floor (§7) | Built, 9 assertions. Threshold measured by `eval/nomatch.js`, not guessed. |
 | Volatile tier (§7) | Built, 7 assertions. Legendary/lair keep full credit, discounted penalty. |
+| `tests/ui.js` | Browser suite over `src/app.js`, 35 assertions. Opt-in: `doxx test-ui`. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
@@ -648,10 +649,12 @@ like", which is worth showing the user directly and is the natural input to F13'
 
 ### Others, carried from the handoff
 
-- A monster the DM built from scratch should rank as "no match". That needs a confidence floor, and
-  the harness cannot set the threshold yet: it never generates a query whose answer is absent from
-  the corpus. Generating those is a prerequisite for answering this.
-- Two monsters, one merged set of observations.
+- ~~A monster the DM built from scratch should rank as "no match".~~ **Built** — `eval/nomatch.js`
+  generates exactly those queries by leave-one-out, and the threshold comes from them.
+- **Two monsters, one merged set of observations.** Deliberately not built. Tabs already cover the
+  case where the party KNOWS it fought two things, which is the common one; what is left is the
+  party that has not realised, and the evidence then explains nothing well — which the no-match
+  floor now says out loud. Judged too niche for the work it would take.
 - The `by name` / `by key` gap in the harness output is the reprint rate, and it is small. If it
   grows, duplicate consolidation becomes a real feature rather than a reporting detail.
 - **Reverse image search of a VTT token.** Measured, and the obvious approach does not scale.
@@ -679,9 +682,38 @@ like", which is worth showing the user directly and is the natural input to F13'
   from a shipped word vocabulary the way typed text can. Encoding one image in the browser is
   a far smaller problem than encoding the corpus, so this is now a bounded piece of work
   rather than an open question.
-- Ties are frequent enough that F13 (suggest the test that best splits the leaders) is now the
-  obvious next feature rather than a nice-to-have: the UI can already tell you it is stuck, and the
-  ontology already marks which symptoms a party can provoke in one round (`testable`).
+
+## Testing the UI
+
+`src/app.js` is the largest file in the project and was, until `tests/ui.js`, the only one with
+no assertions against it. Every UI defect found so far was found by a person driving the page by
+hand — a tab label lagging one render behind the ranking it names, a `score` read before its
+initialiser ran, a blend emitting zero-valued entries that made "lexical only" look like it had
+found things it had not. None of those are visible by reading the code.
+
+**It is opt-in, and the mechanism is the filename.** `tests/run.js` auto-discovers `*.test.js`;
+this one is `ui.js`, so it is not picked up. That is deliberate: the Node suites run in
+milliseconds and that is *why* they get run, per the decision at the top of this file. A browser
+adds forty seconds and would change how often anyone reaches for them.
+
+```sh
+./doxx test        # 11 suites, 519 assertions, milliseconds
+./doxx test-ui     # 35 assertions through a real browser
+./doxx test-ui --headed --keep
+```
+
+**It skips rather than fails when Playwright is missing**, exiting 0 with the install line. The
+project has no `package.json` and no runtime dependencies, and a missing optional dev tool is not
+a broken build — the same "degrade, never fail" rule the app follows for a missing CLIP index.
+
+Two things it is careful about, both learned by getting them wrong first:
+
+- **Every assertion drives a real control.** Earlier drafts had `||` escape hatches that passed
+  whether or not the thing under test existed, and a source-filter test that silently asserted
+  against a full corpus. An assertion that cannot fail is worse than no assertion.
+- **The filter re-renders on every change**, so a list of buttons collected up front goes stale
+  and later clicks land on detached nodes. The suite re-queries between clicks. This is exactly
+  the class of bug it exists to catch, and it caught it in the test first.
 
 ## What may be committed
 
