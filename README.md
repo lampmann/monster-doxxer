@@ -50,7 +50,27 @@ browsers block that over `file://`. The launcher does it in one word:
 ./doxx test-ui  # drive the real page in a browser (needs Playwright)
 ```
 
-On Windows without Git Bash, any static server over this folder does the same job —
+**On Windows**, `doxx` is a POSIX shell script and won't run in `cmd`. Use `doxxer.cmd`
+instead — same behaviour, and it works from any directory once its folder is on `PATH`:
+
+```bat
+doxxer          :: start the server (or reuse one) and open the tool
+doxxer stop     :: stop it
+doxxer phone    :: print the address to open on your phone, same Wi-Fi
+doxxer test     :: run the test suite
+```
+
+To make `doxxer` work from anywhere, add the repo folder to your user `PATH` once:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\path\to\Monster-Doxxer", "User")
+```
+
+Then open a **new** terminal — `PATH` is read at startup, so the window you ran that in
+won't see it.
+
+Failing all of that, any static server over this folder does the same job:
 `python -m http.server 8932`, then open <http://localhost:8932/index.html>.
 
 Then describe what you saw. The form is ordered by how much each kind of evidence is actually
