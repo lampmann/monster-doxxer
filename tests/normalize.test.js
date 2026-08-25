@@ -227,6 +227,63 @@ section("actions");
   assert("...and it is not an attack", !s.isAttack);
 }
 
+/* ---------- multiattack ---------- */
+section("attacks per turn");
+{
+  /* Every case here is a real statblock that a previous version of the parser got
+     wrong. The count is evidence the party can actually report — they counted the
+     attack rolls — so a wrong number argues against the right monster. */
+  const count = text => N.parseMonster({
+    name: "X", source: "T", action: [{ name: "Multiattack", entries: [text] }],
+  }).attacksPerTurn;
+
+  assertEqual("no Multiattack means no claim, not zero attacks",
+    N.parseMonster({ name: "X", source: "T" }).attacksPerTurn, 0);
+
+  // The bug the playtest found: more than one word between the count and "attacks".
+  assertEqual("a two-word attack name still counts (Mind's Eye Matter Smith)",
+    count("The matter smith makes two Manifested Force attacks."), 2);
+  assertEqual("...and a five-word one (Alhoon)",
+    count("The alhoon makes two Chilling Grasp or Arcane Bolt attacks."), 2);
+
+  // 1. Stated total wins over its own breakdown.
+  assertEqual("a stated total is not added to the breakdown that follows it",
+    count("The knight makes two attacks: one with its bite and one with its claws."), 2);
+  assertEqual("...and 'can make' reads the same as 'makes'",
+    count("The marilith can make seven attacks: six with its longswords and one with its tail."), 7);
+
+  // 2. "or" means alternatives.
+  assertEqual("alternatives are the largest option, not their sum",
+    count("It makes two Branch attacks, two Radiant Pellet attacks, or one of each."), 2);
+
+  // 3. Additive.
+  assertEqual("distinct attacks are summed",
+    count("The beast makes one Bite attack and two Claw attacks."), 3);
+
+  // Sentences that restate rather than extend.
+  assertEqual("a replacement clause does not add attacks",
+    count("The dragon makes three Rend attacks. It can replace one attack with a use of Spellcasting."), 3);
+  assertEqual("...nor an 'Alternatively' sentence",
+    count("The giant makes three Soul Burst attacks. Alternatively, it can make three Reaping Scythe attacks."), 3);
+  assertEqual("...nor a back-reference to attacks already counted (Duergar Despot)",
+    count("The duergar makes two Iron Fist attacks and two Stomping Foot attacks. " +
+          "After one of the attacks, the duergar can move up to half its speed."), 4);
+
+  // 4. The verb form, fallback only.
+  assertEqual("the old verb phrasing is read when there is no noun to anchor on",
+    count("Auril attacks twice with her talons."), 2);
+  assertEqual("...and sums across it (Archduke Zariel)",
+    count("Zariel attacks twice with her flail and once with Matalotok."), 3);
+
+  // Silence, not a guess.
+  assertEqual("a count that depends on the spell slot yields no claim",
+    count("The spirit makes a number of attacks equal to half this spell's level."), 0);
+  assertEqual("...as does one that depends on the creature's own state",
+    count("The hydra makes as many bite attacks as it has heads."), 0);
+  assertEqual("an absurd total is a misparse, and says nothing rather than something wrong",
+    count("It makes nine Bite attacks and nine Claw attacks."), 0);
+}
+
 /* ---------- whole-corpus ingest ---------- */
 section("ingest");
 {

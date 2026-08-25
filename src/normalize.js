@@ -396,20 +396,113 @@
 
   const uniq = list => Array.from(new Set(list));
 
-  /* "makes two claw attacks" / "makes three attacks" -> 2, 3. Deliberately shallow:
-     Multiattack prose is wildly irregular ("makes one bite attack and two claw
-     attacks", "makes a number of attacks equal to half its level"), and a wrong
-     number is worse than none. Only the plain leading count is read; anything the
-     pattern does not fit returns 0 and simply contributes no evidence. */
-  const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  /* How many attack rolls it can make in a turn, read out of Multiattack prose.
+
+     That prose is irregular enough that one pattern cannot cover it, and getting this
+     wrong is worse than saying nothing — a monster wrongly credited with 2 attacks
+     argues AGAINST itself when the party reports 3. So the order below is a priority
+     list, and every rule in it exists because the naive version got a real statblock
+     wrong.
+
+     FIRST, THROW AWAY THE SENTENCES THAT DON'T ADD ATTACKS. Multiattack prose is
+     usually one sentence of substance followed by qualifications, and the
+     qualifications are full of numbers that are not extra attacks:
+
+       "makes three Rend attacks. It can replace one attack with a use of Spellcasting"
+       "makes two Iron Fist attacks and two Stomping Foot attacks. After one of the
+        attacks, the duergar can move up to half its speed"
+       "makes three Soul Burst attacks. Alternatively, ... three Reaping Scythe attacks"
+
+     Summing across those gave the Duergar Despot EIGHT attacks and the Death Giant
+     six. A sentence that replaces, substitutes or offers an alternative describes the
+     same attacks differently; a count that refers back ("one OF THE attacks") is
+     anaphora, not arithmetic. Both are dropped before anything is counted.
+
+     THEN, three shapes in priority order, because they mean different things:
+
+       "makes two attacks: one with its bite and one with its claws"
+           The count is stated up front and then broken down. Summing would give 4.
+           Take the stated total and stop.
+
+       "makes two Branch attacks, two Radiant Pellet attacks, or one of each"
+           Alternatives, not additions. Summing gives 4 for a creature that makes 2.
+           Take the largest single option.
+
+       "makes one Bite attack and two Claw attacks"
+           Genuinely additive. Sum them: 3.
+
+     LAST, THE VERB FORM. Older statblocks write "attacks twice with her flail and
+     once with Matalotok" — no noun "attacks" to anchor on, so the clause pattern sees
+     nothing. Counted only as a fallback, so it can never double-count a statblock the
+     noun form already understood.
+
+     Anything with no count at all — "a number of attacks equal to half this spell's
+     level", "as many bite attacks as it has heads" — yields 0 and simply contributes
+     no evidence, which is the right answer for a number that isn't fixed. */
+  const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+                     seven: 7, eight: 8, nine: 9, ten: 10 };
+  const COUNT = "one|two|three|four|five|six|seven|eight|nine|ten|\\d+";
+  const countWord = w => WORD_NUM[String(w).toLowerCase()] ||
+                         (Number.isFinite(+w) ? +w : 0);
+
+  /* A count, then up to six words of attack name, then "attack"/"attacks". Six
+     because "two Chilling Grasp or Arcane Bolt attacks" is five and the Alhoon is
+     not the longest name in the book. */
+  const ATTACK_CLAUSE =
+    new RegExp("\\b(" + COUNT + ")\\s+(?:[\\w'’-]+\\s+){0,6}?attacks?\\b", "gi");
+  // "one of the attacks", "up to four of these attacks" — refers back, adds nothing.
+  const ANAPHORIC =
+    new RegExp("\\b(?:" + COUNT + ")\\s+of\\s+(?:these|those|the|its|his|her|their)\\s+attacks?\\b", "gi");
+  // Sentences that restate rather than extend.
+  const RESTATES = /\b(?:replace[sd]?|replacing|substitut|instead of|in place of|alternatively)\b/i;
+  // "twice with her flail", "once with Matalotok".
+  const VERB_FORM = /\b(once|twice|thrice|three times|four times|five times)\s+with\b/gi;
+  const TIMES = { once: 1, twice: 2, thrice: 3, "three times": 3, "four times": 4, "five times": 5 };
+
   function multiattackCount(entries) {
     const ma = entries.find(a => /^multiattack$/i.test(String(a.name || "")));
     if (!ma) return 0;
-    const m = String(ma.text || "").match(/makes\s+(\w+)\s+(?:\w+\s+)?attacks/i);
-    if (!m) return 0;
-    const w = m[1].toLowerCase();
-    return WORD_NUM[w] || (Number.isFinite(+w) ? +w : 0);
+
+    /* Split on sentence ends, drop the ones that only rephrase, then blank out the
+       back-references that survive inside the sentences that are left. */
+    const text = String(ma.text || "")
+      .split(/(?<=\.)\s+/)
+      .filter(s => !RESTATES.test(s))
+      .join(" ")
+      .replace(ANAPHORIC, " ");
+
+    // 1. A stated total, followed by a breakdown. "can make seven attacks:" counts.
+    const stated = text.match(new RegExp("\\bmakes?\\s+(" + COUNT + ")\\s+attacks\\s*[:;]", "i"));
+    if (stated) return guard(countWord(stated[1]));
+
+    const counts = [];
+    let m;
+    ATTACK_CLAUSE.lastIndex = 0;
+    while ((m = ATTACK_CLAUSE.exec(text)) !== null) {
+      const n = countWord(m[1]);
+      if (n > 0) counts.push(n);
+    }
+
+    // 4. Fallback only: the verb form, which has no noun to anchor on.
+    if (!counts.length) {
+      VERB_FORM.lastIndex = 0;
+      let v, total = 0;
+      while ((v = VERB_FORM.exec(text)) !== null) total += TIMES[v[1].toLowerCase()] || 0;
+      if (total > 0 && /\battacks?\b/i.test(text)) return guard(total);
+      return 0;
+    }
+
+    // 2. Alternatives — the largest single option, not their sum.
+    if (/\bor\b/i.test(text)) return guard(Math.max.apply(null, counts));
+
+    // 3. Additive.
+    return guard(counts.reduce((a, b) => a + b, 0));
   }
+
+  /* A statblock claiming more than ten attack rolls in a turn has almost certainly
+     been misparsed. Say nothing rather than something absurd: 0 costs the monster no
+     evidence, a wrong 8 actively argues against it. */
+  const guard = n => (n > 10 ? 0 : n);
 
   /* ============================================================
      Whole-corpus ingest. Index every raw record FIRST, then resolve, because
