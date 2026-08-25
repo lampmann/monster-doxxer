@@ -30,6 +30,8 @@
     "one of the commonest things a GM does, and the observation is true of the fight without",
     "being true of the statblock. Credit is unchanged; only the miss penalty is discounted.",
     "",
+    "`collectedBy` names another module that asks for this observation better, and removes the symptom from the \"what did it do?\" list. The ten damage-type symptoms are all \"it burned me\" and its siblings; an attack row asks the same question paired to a single action, which is strictly stronger evidence. The symptom stays here because the tagger still uses it to index the corpus \u2014 only the player-facing list drops it.",
+    "",
     "`testable` marks a symptom the party can deliberately provoke in about one round.",
     "F13 prefers those when it suggests a discriminating test — 'hit it with radiant' is",
     "advice; 'wait to see if it rejuvenates in a few days' is not.",
@@ -912,6 +914,7 @@
       "player": "It burned me",
       "aka": ["fire damage", "it set me alight", "flames"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals fire damage", "p": 0.9, "field": "dealsdamage.fire" }]
     },
     {
@@ -919,6 +922,7 @@
       "player": "It hit me with cold",
       "aka": ["cold damage", "it was freezing", "frost"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals cold damage", "p": 0.9, "field": "dealsdamage.cold" }]
     },
     {
@@ -926,6 +930,7 @@
       "player": "It hit me with lightning",
       "aka": ["lightning damage", "electricity", "a shock"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals lightning damage", "p": 0.9, "field": "dealsdamage.lightning" }]
     },
     {
@@ -933,6 +938,7 @@
       "player": "It sprayed something that burned like acid",
       "aka": ["acid damage", "it dissolved things", "corrosive"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals acid damage", "p": 0.9, "field": "dealsdamage.acid" }]
     },
     {
@@ -940,6 +946,7 @@
       "player": "The wound went black and cold",
       "aka": ["necrotic damage", "it withered me", "the flesh died around it"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals necrotic damage", "p": 0.9, "field": "dealsdamage.necrotic" }]
     },
     {
@@ -947,6 +954,7 @@
       "player": "It hurt without touching me",
       "aka": ["psychic damage", "it attacked my mind", "my head split open"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals psychic damage", "p": 0.9, "field": "dealsdamage.psychic" }]
     },
     {
@@ -954,6 +962,7 @@
       "player": "It burned me with light",
       "aka": ["radiant damage", "holy fire", "a searing brightness"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals radiant damage", "p": 0.9, "field": "dealsdamage.radiant" }]
     },
     {
@@ -961,6 +970,7 @@
       "player": "Something invisible slammed into me",
       "aka": ["force damage", "an unseen impact", "pure force"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals force damage", "p": 0.9, "field": "dealsdamage.force" }]
     },
     {
@@ -968,6 +978,7 @@
       "player": "There was a deafening boom",
       "aka": ["thunder damage", "a concussive blast", "the sound hurt"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals thunder damage", "p": 0.9, "field": "dealsdamage.thunder" }]
     },
     {
@@ -975,6 +986,7 @@
       "player": "The poison itself did damage",
       "aka": ["poison damage", "venom"],
       "group": "damage",
+      "collectedBy": "attacks",
       "candidates": [{ "mechanic": "deals poison damage", "p": 0.9, "field": "dealsdamage.poison" }]
     },
 

@@ -146,6 +146,10 @@
       group: s.group || "",
       testable: !!s.testable,
       volatile: !!s.volatile,
+      /* Another module asks for this observation better — see the ontology's `about`.
+         Carried through compile rather than read off the raw JSON, because the UI only
+         ever sees the compiled ontology. */
+      collectedBy: s.collectedBy || "",
       candidates: asArray(s.candidates).map(c => {
         const out = {
           mechanic: c.mechanic || "",

@@ -344,7 +344,14 @@ async function main() {
         groups: document.querySelectorAll("#sym-results .sym-group").length,
         options: document.querySelectorAll("#sym-results .sym-hit").length,
       }));
-      assert("every symptom is listed before you type anything", b.options > 100);
+      assert("every symptom offered is listed before you type anything", b.options > 90);
+      /* The ten damage-type sentences moved into the attack rows, where the type can be
+         tied to the action that dealt it. Offering both would score the same evidence
+         twice and invite the user to answer in the weaker place. */
+      const dmgSentences = await page.evaluate(() =>
+        [...document.querySelectorAll("#sym-results .sym-hit")]
+          .filter(x => /it burned me|it hit me with cold|deafening boom/i.test(x.textContent)).length);
+      assertEqual("the damage-type sentences are not offered here any more", dmgSentences, 0);
       assert("...grouped, rather than as one wall of sentences", b.groups > 5);
 
       // Searching still narrows it.

@@ -510,6 +510,17 @@
 
      Read straight off the candidate list, so it cannot drift from what the symptom
      really matches. */
+  /* Symptoms another module asks for better. The ten damage-type sentences — "It burned
+     me", "It hit me with cold" — are the same question an attack row's damage-type
+     field asks, except the row pairs it to one action and this does not. Both would be
+     scored, which is the same evidence twice; and offering both invites the user to
+     answer in the weaker place. The ontology says which, via `collectedBy`, so this
+     stays a data decision rather than app.js hardcoding a group name.
+
+     The symptom is NOT deleted: the tagger still uses it to index the corpus, and the
+     rarity table still counts it. Only the player-facing list drops it. */
+  const collectedElsewhere = s => !!(s && s.collectedBy);
+
   function symLabel(s) {
     const mech = window.mechanicsLabel ? window.mechanicsLabel(s) : "";
     return esc(s.player) + (mech ? ` <span class="sym-mech">(${esc(mech)})</span>` : "");
@@ -539,7 +550,7 @@
       const taken = new Set(S.obs.symptoms);
       const groups = new Map();
       S.ontology.symptoms.forEach(s => {
-        if (taken.has(s.id)) return;
+        if (taken.has(s.id) || collectedElsewhere(s)) return;
         const g = s.group || "other";
         if (!groups.has(g)) groups.set(g, []);
         groups.get(g).push(s);
@@ -554,7 +565,8 @@
       return;
     }
 
-    const hits = window.lookup(S.ontology, q, 12).filter(h => !S.obs.symptoms.includes(h.id));
+    const hits = window.lookup(S.ontology, q, 12)
+      .filter(h => !S.obs.symptoms.includes(h.id) && !collectedElsewhere(S.ontology.byId[h.id]));
     box.innerHTML = hits.length
       ? hits.map(h => `<button class="sym-hit" data-sym-add="${esc(h.id)}">` +
           `${symLabel(S.ontology.byId[h.id] || h)}</button>`).join("")
