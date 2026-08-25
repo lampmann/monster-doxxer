@@ -753,25 +753,150 @@ the evidence is worth mid-fight. The UI warns instead.
 
 ## What it did with its turn
 
-The same transcript shows what a GM narrates that the form could not previously accept:
-*"he shoots two bolts of force at you"*, *"make a dex save"*. Three facets now take it,
-and all three were already parsed per action by `normalize.js` — they only needed
-rolling up to the monster and exposing as facets:
+The transcript shows what a GM narrates that the form could not previously accept:
+*"he shoots two bolts of force at you"*, *"make a dex save"*. The first version took
+three facets — `attackKind`, `saveAbility`, `attacksPerTurn` — all rolled up to the
+monster. **That flattening was the bug**, and it took a second round of playtesting to
+see it.
 
-| Facet | Coverage |
+Rolled up to the monster, *"a melee attack that dealt fire damage"* matches any creature
+with a melee attack and, somewhere else entirely, a fire breath weapon. That is most
+dragons. The party did not see a creature with two properties; they saw **one action**
+with both, and all the discriminating power of the observation is in the pairing.
+
+So an observed attack or save is now a **row**, scored against a *single entry* on the
+candidate and taking the best fit across them. The same query returns Azer, Magmin,
+Salamander and Fire Elemental — creatures whose own melee attack burns — where the
+flattened version returned Balor, Solar and Chimera.
+
+### What a row asks, and what it is worth
+
+Mostly numbers the party read off the table and previously had no way to say. Each field
+is independent, blank costs nothing, and rarity comes from the same F1 table as
+everything else wherever a facet exists for it.
+
+| Attack row | Save row |
 |---|---|
-| `attackKind` — melee/ranged × weapon/spell | 3,750 of 4,528 |
-| `saveAbility` — which save it forced | 2,093 |
-| `attacksPerTurn` — from Multiattack | 1,770 |
-| save DC, as a range | 2,508 have a parseable DC |
+| how many it made | which save |
+| what it rolled to hit | the DC |
+| reach or range | the size of the area |
+| damage — totals **or** `2d8+5` | damage, same two forms |
+| damage type | damage type |
+| what it left us with | what it left us with |
 
-`attacksPerTurn` reads only the plain leading count out of Multiattack prose ("makes two
-claw attacks"). That prose is wildly irregular, and a wrong number is worse than none, so
-anything the pattern does not fit contributes nothing rather than a guess.
+Measured in isolation, one attack row against all 4,528 monsters, each field earning its
+place:
 
-A save DC matches against the **best-fitting** of a monster's DCs, not the first or an
-average: the party saw one save and cannot say which action it came from, so a creature
-with a wide repertoire must not be penalised for having one.
+| Fields given | top-1 | top-5 | top-20 |
+|---|---|---|---|
+| kind only | 0.4% | 0.4% | 1.2% |
+| + damage type | 1.2% | 4.0% | 10.0% |
+| + damage amount | 2.4% | 8.8% | 21.2% |
+| + reach | 8.4% | 20.0% | 32.8% |
+| + attack rolls | 9.2% | 21.2% | 33.6% |
+| + condition | 11.2% | 24.0% | 44.4% |
+
+Kind alone is worth essentially nothing, which is the flattened version's epitaph: it
+was three facets and the strongest of them was noise. Reach is the biggest single jump,
+because "how far away was it" is both highly discriminating and something a party can
+always answer.
+
+In the full harness, `--combat 1` against the same control (n=300, seed 1):
+
+| | top-1 | top-5 | top-20 |
+|---|---|---|---|
+| control | 36.0% | 64.0% | 81.3% |
+| with a combat row | 46.3% | 73.0% | 86.0% |
+
+**An upper bound**, and it matters why: the harness generates a row from one real entry
+and thins it, so it models a party *forgetting* half of an action. It never models them
+misattributing damage from one attack to another, which is the mistake the pairing is
+most vulnerable to.
+
+### Two things deliberately not asked
+
+**Number of targets.** The statblocks say "one target" for essentially every attack roll
+in the game, so the field would be a box that never discriminates. Area effects do vary
+and *"it caught three of us"* is answerable, so the area's size is taken instead.
+
+**Attack rolls per turn, as its own question.** It is derived from the row counts.
+Asking twice invites the two answers to disagree, and the rows already know: two claws
+and a bite is three attack rolls. The derived total is echoed back, because a wrong
+total here is what the playtest reported.
+
+### The data this needed
+
+`normalize.js` previously carried damage types only per monster, via 5e.tools'
+`damageTags`. Matching a row needs them per entry, paired with the dice that dealt them.
+
+| Per entry | Coverage |
+|---|---|
+| damage rolls parsed as dice | 99.5% of 8,998 |
+| ...carrying a damage type | 98.0% |
+| attacks with a damage type | 97.9% of 5,990 |
+| saves naming a condition | 56.2% of 3,204 |
+| `attacksPerTurn` from Multiattack | 96.8% of 2,721 |
+
+The dice parse has an independent check available and it was worth taking: the statblock
+prints its own average next to the expression, and the parsed dice agree with it **99.2%**
+of the time.
+
+### Multiattack, which needed three rules and not a looser pattern
+
+`attacksPerTurn` used to read 65% of Multiattack entries, because the pattern allowed
+exactly one word between the count and "attacks" — so "makes two **Manifested Force**
+attacks" read as zero, and the Mind's Eye Matter Smith's real 2 was scored as a mismatch
+against a party that counted 2.
+
+Widening the gap alone made the tail worse. Multiattack prose is one sentence of
+substance followed by qualifications, and the qualifications are full of numbers that are
+not extra attacks:
+
+> "makes three Rend attacks. **It can replace one attack** with a use of Spellcasting"
+> "makes two Iron Fist attacks and two Stomping Foot attacks. **After one of the attacks**, the duergar can move"
+
+Summing across those gave the Duergar Despot eight attacks. A sentence that replaces,
+substitutes or offers an alternative restates; a count that refers back is anaphora, not
+arithmetic. Both are dropped, then: a stated total with a colon wins outright, "or" means
+alternatives so take the max, otherwise sum. The remaining 87 are genuinely uncountable —
+*"equal to half this spell's level"*, *"as many bite attacks as it has heads"* — and
+yield 0, which costs the monster no evidence rather than inventing a number that argues
+against it.
+
+## What it cast, and how
+
+Two facts about a caster, and **they age differently**. Which spells it has prepared is
+the most-edited line on any statblock; a GM swapping fireball for lightning bolt has
+changed Tuesday, not the monster. Whether it casts innately or from slots, off which
+ability, from whose list, comes from what the creature *is*.
+
+So spell names are priced as **volatile evidence** — full credit for a match, a quarter
+penalty for a miss — reusing F3's fourth tier, the same asymmetry the legendary and lair
+symptoms get. `castingKind`, `castingAbility` and `castingClass` are ordinary evidence at
+full weight in both directions.
+
+This is the rare case where the harness fully supports the design decision, and both
+halves needed measuring — a discount that is lenient to wrong candidates could cost more
+in the good case than it buys in the bad one:
+
+| re-prep rate | volatile | full price | difference |
+|---|---|---|---|
+| 0 | 51.7 / 75.0 | 51.7 / 75.0 | **identical** |
+| 0.6 | 41.7 / 70.0 | 39.7 / 69.0 | **+2.0 / +1.0** |
+
+Free when the GM has not re-prepared, worth two points of top-1 when they have.
+
+Extraction reaches 1,399 of the 1,401 casters and 398 distinct spells, with the rarity
+spread F1 needs (*mage hand* 447, plenty of singletons). Classifying *how* it casts
+needed two phrasings rather than one: older blocks say "can innately cast", newer ones
+say "casts one of the following spells, requiring no material components", which is the
+same claim in different words. Keying on "innate" alone dumped 668 blocks — the largest
+group — into a catch-all bucket that meant nothing.
+
+The spell list offered in the UI is built from the loaded corpus rather than hardcoded,
+unlike every other picker vocabulary in the tool. There is no fixed set of spells a
+monster might cast, only the set the loaded books use, and offering one no monster has
+would be offering a guaranteed dead end.
 
 ## Testing the UI
 

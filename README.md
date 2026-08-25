@@ -15,7 +15,9 @@ rest on.
 
 Against the full 4,528-monster corpus, given the observations a party would plausibly have after
 one fight: **the right monster is in the top 5 about 67% of the time**, and 73% if they can also
-say what it looked like. Median rank 2.
+say what it looked like. Median rank 2. Describing one attack it made in any detail is worth
+another **9 points of top-5**, and 10 of top-1 — the single most valuable thing you can add
+after the symptoms themselves.
 
 ## The one idea
 
@@ -82,6 +84,34 @@ match. Every result shows what argued for it and what argued against.
 when you know which books your DM owns. Exclude to stop an adventure you're halfway through from
 spoiling itself — which is why exclude exists separately rather than being &ldquo;include
 everything else&rdquo;: nobody should have to click 106 books to hide one.
+
+## How it fought
+
+One row per thing it did. Each row is matched against a **single action** on the
+statblock, which is the whole point: *"a melee attack that burned me"* finds creatures
+whose claw deals fire, not every dragon that happens to own a breath weapon. Say how many
+it made, what it rolled to hit, how far away it was, how much damage and of what type,
+and what it left you with; saves ask the ability, the DC and the size of the area. Fill
+in what you remember and leave the rest blank.
+
+Measured, one attack row on its own is worth **+10 points of top-1 recall** and finds the
+monster in the top 20 nearly half the time from that alone. Reach turns out to be the
+single most useful field &mdash; "how far away was it" is both highly discriminating and
+something a party can always answer.
+
+Attack rolls per turn is worked out from the rows rather than asked for separately, and
+echoed back, so you can see what the tool concluded.
+
+## If it cast anything
+
+Name the spells you recognised. These are held **loosely on purpose**: a GM re-preparing
+a caster's spells is the most ordinary thing in the game, so a spell the statblock lacks
+barely counts against it &mdash; the tool says so on the line rather than leaving you to
+wonder. *How* it cast is a different matter. Innate, prepared or psionic, and off which
+ability, comes from what the creature is rather than from what the GM felt like today, so
+that is weighed in full.
+
+## The numbers
 
 **The dice are better evidence than anyone's memory**, so the Numbers box takes them
 directly. Type the attack totals that hit and the ones that missed, and the tool works out
@@ -174,7 +204,7 @@ top-5 recall and visibly shrinks the tie.
 No dependencies, no install:
 
 ```sh
-node tests/run.js       # 11 suites, 519 assertions, milliseconds
+node tests/run.js       # 12 suites, milliseconds
 ```
 
 The browser suite is separate, because a browser costs forty seconds and the point of the Node
@@ -182,7 +212,7 @@ suites is that they cost nothing:
 
 ```sh
 npm install --no-save playwright && npx playwright install chromium
-./doxx test-ui          # 35 assertions, driving the real page
+./doxx test-ui          # 72 assertions, driving the real page
 ```
 
 It skips rather than fails if Playwright isn't there — it is a testing tool, not a dependency of
@@ -201,6 +231,8 @@ node eval/run.js --show 10           # the worst failures, with reasons
 node eval/run.js --cr-shift 4        # what if the DM rebuilt it four CRs up?
 node eval/run.js --suggest           # does F13's advice actually beat guessing?
 node eval/run.js --heard 1           # what a name the party caught is worth
+node eval/run.js --combat 1          # what one described attack is worth
+node eval/run.js --spells 1 --reprep 0.6   # spells, and the GM re-prepping them
 node eval/appearance.js              # 16 hand-written descriptions, known answers
 node eval/coverage.js                # how the symptom ontology lands on real prose
 ```
