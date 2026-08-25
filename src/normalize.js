@@ -434,6 +434,23 @@
         name: sc.name || "Spellcasting",
         text: stripTags(flattenEntries(sc.headerEntries)),
       })),
+      /* ---- what it cast, and how ----
+
+         TWO KINDS OF FACT, AND THEY AGE DIFFERENTLY. Which spells a caster has
+         prepared is the single most-changed thing on any statblock — a GM swapping
+         fireball for lightning bolt has not changed the monster, they have changed
+         Tuesday. But WHETHER it casts innately or from prepared slots, off which
+         ability, from which class list, is structural: it comes from what the creature
+         IS, and a GM who changes it has built a different monster.
+
+         So they are separated here and priced differently by the scorer: spell names
+         are volatile evidence (full credit, discounted miss), the shape of the
+         spellcasting is ordinary evidence. */
+      spells: spellNames(raw.spellcasting),
+      castingKind: castingKinds(raw.spellcasting),
+      castingAbility: uniq(asArray(raw.spellcasting)
+        .map(sc => String(sc.ability || "").toLowerCase()).filter(Boolean)),
+      castingClass: castingClasses(raw.spellcasting),
       environment: raw.environment || [],
       // 5e.tools' own curated mechanic labels. A free head start on the symptom ontology (F8):
       // "Regeneration", "Pack Tactics", "Undead Fortitude" are already named here, so a symptom can
@@ -474,6 +491,67 @@
   }
 
   const uniq = list => Array.from(new Set(list));
+
+  /* Every spell it can cast, from wherever the statblock keeps them: at-will, daily,
+     per-rest, on a recharge, out of slots, or as a legendary action. All flattened to
+     one list, because a player reports "it cast counterspell", not "it cast counterspell
+     from its third-level slots". */
+  const SPELL_BUCKETS = ["will", "rest", "restLong", "daily", "recharge", "charges", "legendary", "ritual"];
+  function spellNames(spellcasting) {
+    const out = [];
+    const take = v => {
+      if (v == null) return;
+      if (Array.isArray(v)) { v.forEach(take); return; }
+      if (typeof v === "object") { Object.keys(v).forEach(k => take(v[k])); return; }
+      /* "{@spell invisibility} (self only)" -> "invisibility". The parenthetical is a
+         rider on how it is cast, not part of the name. */
+      const m = /\{@spell ([^}|]+)/i.exec(String(v));
+      const name = (m ? m[1] : stripTags(String(v))).trim().toLowerCase()
+        .replace(/\s*\(.*$/, "").replace(/\*+$/, "").trim();
+      if (name) out.push(name);
+    };
+    asArray(spellcasting).forEach(sc => {
+      SPELL_BUCKETS.forEach(k => take(sc[k]));
+      if (sc.spells) Object.keys(sc.spells).forEach(lvl => take((sc.spells[lvl] || {}).spells));
+    });
+    return uniq(out);
+  }
+
+  /* Innate or prepared, and whether it was psionic — which is the one a party notices
+     without being told, because nothing was said and nothing was waved.
+
+     Two phrasings mean innate and only one of them says so. The older statblocks write
+     "can innately cast the following spells"; the newer ones write "casts one of the
+     following spells, requiring no material components", which is the same claim in
+     different words and was landing in a useless catch-all bucket of 668. */
+  function castingKinds(spellcasting) {
+    const out = [];
+    asArray(spellcasting).forEach(sc => {
+      const name = String(sc.name || "");
+      const hay = name + " " + stripTags(flattenEntries(sc.headerEntries));
+      if (/\bpsionic/i.test(hay)) out.push("psionic");
+      if (/innate|requiring no (?:material|spell|verbal|somatic|components)/i.test(hay)) out.push("innate");
+      else out.push("prepared");
+    });
+    return uniq(out);
+  }
+
+  /* "the following cleric spells prepared" -> cleric. A party cannot name the class,
+     but they can often say what the spells FELT like, and the tool can work backwards. */
+  const CASTER_CLASSES = ["artificer", "bard", "cleric", "druid", "paladin",
+                          "ranger", "sorcerer", "warlock", "wizard"];
+  const CLASS_RE = new RegExp("\\b(" + CASTER_CLASSES.join("|") + ")\\b", "gi");
+  function castingClasses(spellcasting) {
+    const out = [];
+    asArray(spellcasting).forEach(sc => {
+      const hay = stripTags(flattenEntries(sc.headerEntries));
+      let m; CLASS_RE.lastIndex = 0;
+      while ((m = CLASS_RE.exec(hay)) !== null) out.push(m[1].toLowerCase());
+    });
+    return uniq(out);
+  }
+
+
 
   /* How many attack rolls it can make in a turn, read out of Multiattack prose.
 

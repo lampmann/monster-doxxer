@@ -88,6 +88,21 @@
     </div>
 
     <div class="module">
+      <h2>Did it cast anything?</h2>
+      <span class="hint block">Name the spells you recognised. These are held loosely on purpose:
+        a GM re-preparing a caster's spells is the most ordinary thing in the game, so a spell the
+        statblock lacks barely counts against it. <em>How</em> it cast is a different matter &mdash;
+        that comes from what the creature is, and it is weighed in full.</span>
+      <input type="text" class="txt" id="in-spell" list="spell-list"
+             placeholder="counterspell, cone of cold&hellip;" autocomplete="off">
+      <datalist id="spell-list"></datalist>
+      <div class="sym-chosen" id="spell-chosen"></div>
+      <div class="chiprow"><span class="hint">How it cast</span><br><span id="pick-castingKind"></span></div>
+      <div class="chiprow"><span class="hint">Off which ability, if the GM said</span><br><span id="pick-castingAbility"></span></div>
+      <div class="chiprow"><span class="hint">Whose spell list it felt like</span><br><span id="pick-castingClass"></span></div>
+    </div>
+
+    <div class="module">
       <h2>Numbers</h2>
       <span class="hint block">Rough is fine. These are scored on a tolerance curve, never matched exactly.</span>
       <label>Armour Class <input type="number" class="num" id="in-ac" min="1" max="40"></label>

@@ -70,6 +70,9 @@
        because the fields have to be true OF THE SAME ACTION to mean anything — see
        scoreCombat. Rows are created empty and an empty row is not an observation. */
     attacks: [], saves: [],
+    /* What it cast, and how. Spell names are held loosely — see VOLATILE_FACETS in
+       score.js — while the shape of the spellcasting is weighed in full. */
+    spells: [], castingKind: [], castingAbility: "", castingClass: [],
     // The bounds the party's dice established.
     acHit: "", acMiss: "", dcPass: "", dcFail: "", hpLived: "", hpDied: "" });
   const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -105,6 +108,12 @@
     senses: { multi: true, opts: ["darkvision", "blindsight", "truesight", "tremorsense"] },
     condImmune: { multi: true, opts: ["charmed", "frightened", "poisoned", "paralyzed", "petrified",
       "stunned", "grappled", "restrained", "prone", "exhaustion"] },
+    /* How it cast, which the party can usually say even when they cannot name a spell:
+       whether it spoke and gestured, and whether it did neither. */
+    castingKind: { multi: true, opts: ["innate", "prepared", "psionic"] },
+    castingAbility: { multi: false, opts: ["int", "wis", "cha"] },
+    castingClass: { multi: true, opts: ["wizard", "cleric", "druid", "bard", "sorcerer",
+      "warlock", "paladin", "ranger", "artificer"] },
   };
 
   /* The vocabularies a combat row draws on. Same principle as PICKERS: fixed lists, so
@@ -190,6 +199,20 @@
 
     S.rarity = window.buildRarity(S.monsters);
     S.numerics = window.buildNumerics(S.monsters);
+
+    /* The spell vocabulary, out of the corpus rather than out of a hardcoded list —
+       unlike the picker vocabularies, which are fixed on purpose. There is no fixed set
+       of spells a monster might cast, only the set the loaded books actually use, and
+       offering a spell no monster has would be offering a guaranteed dead end. Commonest
+       first so the autocomplete's first suggestions are the ones you are likeliest to
+       have seen. */
+    const spellCount = new Map();
+    S.monsters.forEach(m => (m.spells || []).forEach(sp =>
+      spellCount.set(sp, (spellCount.get(sp) || 0) + 1)));
+    S.spellVocab = [...spellCount.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([sp]) => sp);
+    const dl = $("spell-list");
+    if (dl) dl.innerHTML = S.spellVocab.map(sp => `<option value="${esc(sp)}">`).join("");
 
     const [books, adventures] = await Promise.all([
       getJsonOptional("data/books.json"), getJsonOptional("data/adventures.json"),
@@ -307,6 +330,7 @@
     $("in-retuned").checked = S.retuned;
     $("in-appearance").value = S.obs.appearance || "";
     $("in-name").value = S.obs.heardName || "";
+    { const el = $("in-spell"); if (el) el.value = ""; }
     $("sym-search").value = "";
     $("in-count").value = t.count || 1;
     // The roll boxes belong to the monster, so they follow a tab switch like everything
@@ -430,6 +454,15 @@
         `style="width:${f.w || "5rem"}" placeholder="${esc(f.ph || "")}" value="${esc(val)}" autocomplete="off">`;
     return `<label class="rowfield"><span class="hint">${esc(f.label)}</span>${inner}` +
            (f.suffix ? `<span class="hint">${esc(f.suffix)}</span>` : "") + `</label>`;
+  }
+
+  /* The spells the party named, as removable chips. Same shape as the symptom chips
+     because it is the same interaction: a growing list of things you saw. */
+  function renderSpells() {
+    const el = $("spell-chosen");
+    if (!el) return;
+    el.innerHTML = (S.obs.spells || []).map(sp =>
+      `<button class="chip on" data-spell-remove="${esc(sp)}" title="remove">${esc(sp)}</button>`).join("");
   }
 
   function renderCombatRows() {
@@ -643,6 +676,12 @@
       const total = counts.reduce((a, b) => a + b, 0);
       if (total > 0 && total <= 10) obs.attacksPerTurn = String(total);
     }
+
+    // What it cast. Spell names go in loosely priced; the shape of the casting does not.
+    if (S.obs.spells.length) obs.spells = S.obs.spells.slice();
+    if (S.obs.castingKind.length) obs.castingKind = S.obs.castingKind.slice();
+    if (S.obs.castingClass.length) obs.castingClass = S.obs.castingClass.slice();
+    if (S.obs.castingAbility) obs.castingAbility = S.obs.castingAbility;
 
     /* Bounds from the dice. Derived here rather than stored, so editing a box
        re-derives rather than leaving a stale range behind — and so a contradiction
@@ -903,7 +942,8 @@
 
   function renderAll() {
     applyProseSize(); renderNameRead(); renderFightPicker(); renderBand();
-    renderPickers(); renderDamage(); renderCombatRows(); renderSymptoms(); renderSources();
+    renderPickers(); renderDamage(); renderCombatRows(); renderSpells();
+    renderSymptoms(); renderSources();
     renderCrHint(); renderResults(); renderSuggestions(); renderDetail();
   }
 
@@ -936,6 +976,14 @@
       // Nothing to re-rank: an empty row is not an observation.
       return;
     }
+    const spellRm = t.closest("[data-spell-remove]");
+    if (spellRm) {
+      e.preventDefault();
+      toggleIn(S.obs.spells, spellRm.dataset.spellRemove);
+      persist(); renderSpells(); renderResults(); renderSuggestions();
+      return;
+    }
+
     const rowdel = t.closest("[data-rowdel]");
     if (rowdel) {
       e.preventDefault();
@@ -1149,8 +1197,39 @@
     return true;
   }
 
+  /* Commit a spell name. Accepted whether or not the corpus has it: a spell nobody in
+     your books casts still scores — as a miss against everything, which is honest —
+     and refusing the input would mean arguing with a player about what they saw.
+     Matched case-insensitively against the vocabulary so the stored value is the
+     canonical one and two spellings cannot become two chips. */
+  function addSpell(text) {
+    const raw = String(text || "").trim().toLowerCase();
+    if (!raw) return false;
+    const canon = (S.spellVocab || []).find(sp => sp === raw) || raw;
+    if (S.obs.spells.includes(canon)) return false;
+    S.obs.spells.push(canon);
+    persist(); renderSpells(); renderResults(); renderSuggestions();
+    return true;
+  }
+
+  document.addEventListener("keydown", e => {
+    if (e.target.id === "in-spell" && e.key === "Enter") {
+      e.preventDefault();
+      if (addSpell(e.target.value)) e.target.value = "";
+    }
+  });
+
   document.addEventListener("input", e => {
     if (e.target.id === "sym-search") { renderSymptoms(); return; }
+    /* Picking from the datalist fires `input`, not `change`, and there is no event that
+       distinguishes a click on a suggestion from typing the same letters. Committing on
+       an exact vocabulary match handles both: the moment what is typed IS a spell, it
+       becomes a chip. Enter covers everything else. */
+    if (e.target.id === "in-spell") {
+      const v = e.target.value.trim().toLowerCase();
+      if (v && (S.spellVocab || []).includes(v) && addSpell(v)) e.target.value = "";
+      return;
+    }
     if (e.target.dataset && e.target.dataset.row) { editRow(e.target); return; }
     if (ROLL_FIELDS[e.target.id]) {
       S.obs[ROLL_FIELDS[e.target.id]] = e.target.value;

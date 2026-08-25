@@ -203,6 +203,13 @@
     attackKind:   m => (m.attackKinds || []).map(str),
     // Conditions it puts ON you. The one thing a player never fails to notice.
     inflicts:     m => (m.inflicts || []).map(str),
+    /* What it cast, and how. Split because the two age differently: a GM re-preps
+       spells constantly and almost never rebuilds how the creature casts. `spell` is
+       priced as volatile evidence in VOLATILE_FACETS below; the other three are not. */
+    spell:        m => (m.spells || []).map(str),
+    castingKind:  m => (m.castingKind || []).map(str),
+    castingAbility: m => (m.castingAbility || []).map(str),
+    castingClass: m => (m.castingClass || []).map(str),
     attacksPerTurn: m => (m.attacksPerTurn ? [String(m.attacksPerTurn)] : []),
     symptom:     m => (m.symptoms || []),          // attached at index time by symptoms.js (F8)
     /* Damage interactions are facets so that the rarity table COUNTS them. They are
@@ -217,6 +224,19 @@
   const FACET_KEYS = Object.keys(FACETS);
 
   const featureKey = (facet, value) => facet + ":" + value;
+
+  /* F3's fourth tier, applied to a whole facet rather than to individual symptoms.
+
+     A GM swapping fireball for lightning bolt has not changed the monster, they have
+     changed Tuesday — spell preparation is the most-edited line on any statblock. So a
+     spell the party watched being cast that the candidate does not have is weak
+     evidence against it, while a spell it DOES have is ordinary evidence for it. Same
+     asymmetry the legendary/lair symptoms get, and for the same reason.
+
+     Deliberately not extended to castingKind, castingAbility or castingClass: those
+     come from what the creature is, and a GM who changes them has built a different
+     monster. */
+  const VOLATILE_FACETS = new Set(["spell"]);
 
   /* ============================================================
      F1 — the rarity table
@@ -878,8 +898,10 @@
     movement: "movement", senses: "sense", condImmune: "condImmune",
     symptoms: "symptom", typeTags: "typeTag", damageDealt: "damageDealt",
     saveAbilities: "saveAbility", attackKinds: "attackKind",
+    spells: "spell", castingKind: "castingKind", castingClass: "castingClass",
   };
-  const SCALAR_FIELDS = { type: "type", size: "size", attacksPerTurn: "attacksPerTurn" };
+  const SCALAR_FIELDS = { type: "type", size: "size", attacksPerTurn: "attacksPerTurn",
+    castingAbility: "castingAbility" };
 
   const asList = v => (v == null ? [] : Array.isArray(v) ? v : [v]);
   const norm = v => String(v).trim().toLowerCase();
@@ -942,13 +964,15 @@
           /* F3's fourth tier. A volatile symptom (legendary actions, a lair) costs a
              fraction of the usual miss, because the DM may simply have added it — see
              TUNING.volatileMissFactor. Credit is untouched; only the penalty bends. */
-          const volatile_ = facet === "symptom" && o.volatileSymptoms
-            && o.volatileSymptoms.has(v);
+          const volatile_ = VOLATILE_FACETS.has(facet)
+            || (facet === "symptom" && o.volatileSymptoms && o.volatileSymptoms.has(v));
           const cost = w * TUNING.missFactor * (volatile_ ? TUNING.volatileMissFactor : 1);
           raw -= cost;
           against.push({ facet, value: v, weight: -(+cost.toFixed(3)),
-                         why: volatile_ ? "the statblock doesn't have this, but DMs add it freely"
-                                        : "the statblock doesn't have this" });
+                         why: facet === "spell"
+                           ? "not on its list, though DMs re-prepare spells constantly"
+                           : volatile_ ? "the statblock doesn't have this, but DMs add it freely"
+                                       : "the statblock doesn't have this" });
         }
       });
     };
@@ -1286,5 +1310,5 @@
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
            buildRarity, buildNumerics, buildLegacy, scoreNumerics, gaussian, sourceFilter,
            candidateFeatureSet, scoreMonster, rank, hasEvidence, confidence,
-           COMBAT, scoreCombat, parseDamageField };
+           COMBAT, scoreCombat, parseDamageField, VOLATILE_FACETS };
 });

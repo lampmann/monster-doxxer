@@ -516,6 +516,43 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("playtest feedback: what it cast");
+    {
+      const { ctx, page } = await fresh(browser);
+
+      const vocab = await page.evaluate(() =>
+        document.querySelectorAll("#spell-list option").length);
+      assert("the spell list is built from the loaded books, not hardcoded", vocab > 200);
+
+      await page.fill("#in-spell", "counterspell");
+      await page.waitForTimeout(1200);
+      const chosen = await page.$eval("#spell-chosen", el => el.textContent);
+      assert("a recognised spell becomes a chip", /counterspell/i.test(chosen));
+      const box = await page.$eval("#in-spell", el => el.value);
+      assertEqual("...and the box clears, ready for the next one", box, "");
+
+      const txt = await resultsText(page);
+      assert("a spell alone ranks something", /1\./.test(txt));
+
+      /* THE POINT OF THE MODULE. GMs re-prepare spells constantly, so a spell the
+         statblock lacks is weak evidence against it — and the page has to SAY that,
+         or a user reading "against: cure wounds" concludes the tool ruled it out. */
+      await page.fill("#in-spell", "cure wounds");
+      await page.waitForTimeout(1400);
+      const withMiss = await resultsText(page);
+      assert("a spell the statblock lacks is shown as weak, with the reason why",
+        /re-prepare/i.test(withMiss));
+
+      // How it cast is a different question, asked separately and weighed in full.
+      const clicked = await pickChip(page, "pick-castingKind", "innate");
+      assert("how it cast is asked separately from what it cast", clicked);
+      await page.waitForTimeout(800);
+      assert("...and ranks on its own", /1\./.test(await resultsText(page)));
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);
