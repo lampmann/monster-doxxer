@@ -400,6 +400,66 @@ async function main() {
       await ctx.close();
     }
 
+
+    /* ---------------------------------------------------------- */
+    section("playtest feedback: bounds from the dice");
+    {
+      const { ctx, page } = await fresh(browser);
+
+      // The transcript: "16, 8, 13, which hit?" / "16 hits, the rest miss".
+      await page.fill("#in-ac-hit", "16");
+      await page.fill("#in-ac-miss", "8, 13");
+      await page.waitForTimeout(900);
+      const acRead = await page.$eval("#ac-range-read", e => e.textContent);
+      assert("the AC bound reads back in words, so a typo is visible",
+        /between 14 and 16/.test(acRead));
+
+      // "I'll only tell you if you pass or fail." Rolled 18, passed.
+      await page.fill("#in-dc-pass", "18");
+      await page.waitForTimeout(700);
+      assert("a passed save caps the DC",
+        /at most 18/.test(await page.$eval("#dc-range-read", e => e.textContent)));
+
+      /* Impossible input has to LOOK impossible. Silently reconciling it would mean
+         inventing evidence, and the user would never know. */
+      await page.fill("#in-ac-hit", "13");
+      await page.fill("#in-ac-miss", "16");
+      await page.waitForTimeout(800);
+      const bad = await page.$eval("#ac-range-read", e => e.textContent);
+      const flagged = await page.$eval("#ac-range-read", e => e.className.includes("bad"));
+      assert("a contradiction says so", /can't both be true/.test(bad));
+      assertEqual("...and is styled as a problem, not a hint", flagged, true);
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("playtest feedback: how it fought");
+    {
+      const { ctx, page } = await fresh(browser);
+      const picked = await page.evaluate(() => {
+        const pick = (g, l) => {
+          const b = [...document.querySelectorAll(`#${g} button`)]
+            .find(x => x.textContent.trim().toLowerCase() === l);
+          if (b) { b.click(); return true; }
+          return false;
+        };
+        return [pick("pick-attackKinds", "ranged spell"),
+                pick("pick-saveAbilities", "dex"),
+                pick("pick-attacksPerTurn", "2")];
+      });
+      assertEqual("all three fight pickers exist and take a click", picked, [true, true, true]);
+      await page.waitForTimeout(1400);
+
+      const txt = await resultsText(page);
+      assert("something ranks on how it fought alone", /1\./.test(txt));
+      assert("...and the reasons name what was reported",
+        /ranged spell/i.test(txt) || /dex/i.test(txt));
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
     /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {

@@ -163,3 +163,14 @@ th, td { text-align: left; padding: 1px 4px; }
 
 .loading { font-size: .85rem; color: var(--muted-fg); }
 .error { border: 1px solid var(--danger-border); color: var(--danger); padding: .4rem .6rem; margin-bottom: .75rem; }
+
+/* ----- bounds from the dice (src/ranges.js) ----- */
+.rolls { margin-top: .6rem; border-top: 1px solid var(--border-hair); padding-top: .5rem; }
+.rolls-head { font-size: .8rem; font-weight: 600; margin-bottom: .15rem; }
+.rollrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem; margin-bottom: .3rem; }
+.rolllabel { font-size: .8rem; color: var(--muted-fg); }
+input.roll { width: 7rem; }
+/* The read-back is the safety net for a mistyped total, so a contradiction has to
+   look like one rather than reading as ordinary help text. */
+#ac-range-read, #dc-range-read, #hp-range-read { flex-basis: 100%; }
+.hint.bad { color: var(--danger); }

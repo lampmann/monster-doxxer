@@ -25,7 +25,9 @@ this file is where it meets reality and where it has been deviated from.
 | Tabs | One per monster, with per-tab evidence and encounter grouping. |
 | No-match floor (§7) | Built, 9 assertions. Threshold measured by `eval/nomatch.js`, not guessed. |
 | Volatile tier (§7) | Built, 7 assertions. Legendary/lair keep full credit, discounted penalty. |
-| `tests/ui.js` | Browser suite over `src/app.js`, 35 assertions. Opt-in: `doxx test-ui`. |
+| `src/ranges.js` | Bounds from dice the party rolled — AC, save DC, HP. 56 assertions. |
+| Attack evidence | Save ability, attack kind, attacks per turn, save DC range. |
+| `tests/ui.js` | Browser suite over `src/app.js`, 56 assertions. Opt-in: `doxx test-ui`. |
 
 Current measurement, 500 sampled monsters against the full 4,528-record corpus:
 
@@ -682,6 +684,94 @@ like", which is worth showing the user directly and is the natural input to F13'
   from a shipped word vocabulary the way typed text can. Encoding one image in the browser is
   a far smaller problem than encoding the corpus, so this is now a bounded piece of work
   rather than an open question.
+
+## Bounds from the dice, and why they beat memory
+
+The first playtest transcript made the case better than any design note could:
+
+> **Lamp:** we shoot with ebarb and rof — 16, 8, 13, which hit?
+> **GM:** 16 hits. The rest miss.
+
+The party does not know the Armour Class and never will. But they know exactly what
+they rolled and exactly which rolls landed, and that pins AC to **(13, 16]** — no
+estimating, no remembering, and nothing the GM can fudge after the fact.
+
+`src/ranges.js` exists because the same shape shows up three times:
+
+| Evidence | Bound |
+|---|---|
+| hit at 16, missed at 13 | AC ∈ (13, 16] |
+| passed a save on 18, failed on 12 | DC ∈ (12, 18] |
+| survived 40 damage, dropped at 55 | HP ∈ (40, 55] |
+
+Successes give an **inclusive upper** bound, failures an **exclusive lower** one, every
+time. One function, three uses, and the off-by-one that would otherwise be invisible is
+pinned by tests at every boundary.
+
+### It is measured, and it is worth a lot
+
+`eval/corrupt.js --rolls` generates d20 totals around each monster's real AC and splits
+them into hits and misses, which is what a table actually produces:
+
+```
+                     top-1    top-5   top-20
+  remembered AC      41.0%    64.3%    81.7%
+  rolled bounds      48.0%    68.7%    88.0%
+```
+
+**+7 points of top-1 and +6 of top-20.** The honest reading is not that intervals are
+magically better than point estimates — it is that *dice do not lie and memory does*.
+The remembered path carries `acShift` noise because players misremember; the rolled path
+does not, because the table watched it happen. That asymmetry is real, not an artefact.
+
+### Still not a filter
+
+A monster outside the range is scored by how far outside it sits, never removed. The
+bounds are only as good as the assumption that every roll was against the same target
+with constant modifiers, and real tables break that constantly — bless, cover, a
+different attacker's bonus, a total typed into the wrong box. "Rank, never filter"
+applies here more than anywhere, because this is the most confident-looking evidence the
+tool accepts.
+
+Inside the range, every value scores identically. A range is **a hard region with a soft
+outside**, not a tolerance curve with a flat top: there is no reason to prefer the middle
+of an interval the dice permit to its edge.
+
+### Contradictions are reported, never reconciled
+
+A lower bound at or above the upper bound cannot happen for one target with constant
+modifiers, so the tool was told something untrue. It says so, in red, naming both
+numbers — and contributes *no* evidence rather than picking an end to trust. Guessing
+which half to believe would be inventing evidence.
+
+### The natural 20 problem, unsolved on purpose
+
+A 20 always hits and a 1 always misses whatever the AC, so those rolls bound nothing —
+but the user types a **total** and the die is not recoverable from it. Fixing this
+properly means asking for the die and the modifier separately, which is more typing than
+the evidence is worth mid-fight. The UI warns instead.
+
+## What it did with its turn
+
+The same transcript shows what a GM narrates that the form could not previously accept:
+*"he shoots two bolts of force at you"*, *"make a dex save"*. Three facets now take it,
+and all three were already parsed per action by `normalize.js` — they only needed
+rolling up to the monster and exposing as facets:
+
+| Facet | Coverage |
+|---|---|
+| `attackKind` — melee/ranged × weapon/spell | 3,750 of 4,528 |
+| `saveAbility` — which save it forced | 2,093 |
+| `attacksPerTurn` — from Multiattack | 1,770 |
+| save DC, as a range | 2,508 have a parseable DC |
+
+`attacksPerTurn` reads only the plain leading count out of Multiattack prose ("makes two
+claw attacks"). That prose is wildly irregular, and a wrong number is worse than none, so
+anything the pattern does not fit contributes nothing rather than a guess.
+
+A save DC matches against the **best-fitting** of a monster's DCs, not the first or an
+average: the party saw one save and cannot say which action it came from, so a creature
+with a wide repertoire must not be penalised for having one.
 
 ## Testing the UI
 

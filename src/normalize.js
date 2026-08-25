@@ -319,6 +319,14 @@
     const imm = dmgTypes(raw.immune, "immune");
     const vul = dmgTypes(raw.vulnerable, "vulnerable");
     const actions = parseActionList(raw.action, "action");
+    const traits = parseActionList(raw.trait, "trait");
+    const bonusActions = parseActionList(raw.bonus, "bonus");
+    const reactions = parseActionList(raw.reaction, "reaction");
+    const legendary = parseActionList(raw.legendary, "legendary");
+    /* Everything the creature can visibly DO, in one list. A player reports "it forced
+       a Dex save" about the monster, not about which block the save lived in — and
+       cannot tell which block it was anyway. */
+    const everyEntry = [].concat(traits, actions, bonusActions, reactions, legendary);
     return {
       name: raw.name, source: raw.source || "", page: raw.page || null,
       key: raw.name + "|" + (raw.source || ""),
@@ -339,11 +347,11 @@
       immuneText: imm.text, immune: imm.flat,
       vulnerableText: vul.text, vulnerable: vul.flat,
       conditionImmune: dmgTypes(raw.conditionImmune, "conditionImmune").flat,
-      traits: parseActionList(raw.trait, "trait"),
+      traits,
       actions,
-      bonusActions: parseActionList(raw.bonus, "bonus"),
-      reactions: parseActionList(raw.reaction, "reaction"),
-      legendary: parseActionList(raw.legendary, "legendary"),
+      bonusActions,
+      reactions,
+      legendary,
       hasLair: !!(raw.legendaryGroup || (typeof raw.cr === "object" && raw.cr && raw.cr.lair)),
       /* 5e.tools marks unique adventure NPCs — Sandesyl Morgia, Jim Darkmagic, a named
          cultist from one module. 1,220 of 4,528 records, 27% of the corpus. They are
@@ -364,7 +372,43 @@
       srd: !!raw.srd || !!raw.basicRules,
       partial: !!raw._partialCopy, copiedFrom: raw._copiedFrom || "",
       hasAttacks: actions.some(a => a.isAttack),
+
+      /* ---- what the party can SEE it do, aggregated to the monster ----
+
+         Every one of these is already parsed per entry; the scorer needs them rolled
+         up, because a player reports "it forced a Dex save" about the creature, not
+         about one of its four actions. Traits, actions, bonus actions, reactions and
+         legendary actions all count: a save is a save whichever block it came from,
+         and the party cannot tell which block it came from anyway. */
+      saveAbilities: uniq(everyEntry.map(a => String(a.saveAbil || "").toLowerCase())
+        .filter(Boolean)),
+      // "Melee Weapon Attack" -> "melee weapon". The distinctions that survive at a
+      // table are melee/ranged and weapon/spell; the rest is phrasing.
+      attackKinds: uniq(everyEntry.reduce((acc, a) => acc.concat(
+        (a.atkKinds || []).map(k => String(k).toLowerCase()
+          .replace(/\s*attack\s*$/, "").trim())), []).filter(k => k.length > 2)),
+      // Every save DC it can impose, so a DC range can be matched against any of them.
+      saveDcs: uniq(everyEntry.map(a => a.dc).filter(n => typeof n === "number" && n > 0)),
+      // How many attack rolls it can make in a turn, when the statblock says so.
+      attacksPerTurn: multiattackCount(everyEntry),
     };
+  }
+
+  const uniq = list => Array.from(new Set(list));
+
+  /* "makes two claw attacks" / "makes three attacks" -> 2, 3. Deliberately shallow:
+     Multiattack prose is wildly irregular ("makes one bite attack and two claw
+     attacks", "makes a number of attacks equal to half its level"), and a wrong
+     number is worse than none. Only the plain leading count is read; anything the
+     pattern does not fit returns 0 and simply contributes no evidence. */
+  const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  function multiattackCount(entries) {
+    const ma = entries.find(a => /^multiattack$/i.test(String(a.name || "")));
+    if (!ma) return 0;
+    const m = String(ma.text || "").match(/makes\s+(\w+)\s+(?:\w+\s+)?attacks/i);
+    if (!m) return 0;
+    const w = m[1].toLowerCase();
+    return WORD_NUM[w] || (Number.isFinite(+w) ? +w : 0);
   }
 
   /* ============================================================

@@ -321,4 +321,67 @@ section("volatile symptoms (legendary / lair)");
     /DMs add it freely/.test(softMiss.against[0].why));
 }
 
+
+/* ---------- bounds the party established by rolling ---------- */
+section("AC, HP and save DC as ranges");
+{
+  const R = require("../src/ranges.js");
+  const N = S.buildNumerics(MONS);
+  const beast = MONS[0];               // AC 12, 20 hp
+  const opts = r => Object.assign({ numerics: N }, r);
+
+  /* THE CROSS-CHECK THAT MATTERS. score.js reimplements the (lo, hi] arithmetic
+     because it must run in a browser with no dependencies, so the two copies are
+     pinned against each other here. If someone changes one and not the other, this
+     fails instead of the corpus quietly re-ranking. */
+  const range = R.rollBounds([16], [13]);
+  for (let v = 10; v <= 20; v++) {
+    const m = Object.assign({}, beast, { ac: v });
+    const scored = S.scoreNumerics(m, { acRange: range }, N, {});
+    const insideByRanges = R.inRange(v, range);
+    const creditedFully = scored.hits.length > 0 && scored.hits[0].fit === 1;
+    assertEqual(`AC ${v}: score.js and ranges.js agree on inside/outside`,
+      creditedFully, insideByRanges);
+  }
+
+  // Inside the range is full credit everywhere, not a curve peaking in the middle.
+  const at14 = S.scoreNumerics(Object.assign({}, beast, { ac: 14 }), { acRange: range }, N, {});
+  const at16 = S.scoreNumerics(Object.assign({}, beast, { ac: 16 }), { acRange: range }, N, {});
+  assertClose("every AC the dice permit scores the same", at14.credit, at16.credit, 1e-9);
+
+  // Outside is penalised by distance, never eliminated.
+  const at20 = S.scoreNumerics(Object.assign({}, beast, { ac: 20 }), { acRange: range }, N, {});
+  assert("an AC outside the range still scores something", at20.credit > 0);
+  assert("...but less than one inside", at20.credit < at14.credit);
+
+  // A range replaces a remembered number rather than adding to it.
+  const both = S.scoreNumerics(Object.assign({}, beast, { ac: 14 }),
+    { ac: 9, acRange: range }, N, {});
+  assertClose("a rolled range overrides a typed AC", both.credit, at14.credit, 1e-9);
+
+  // A contradiction is refused outright rather than half-believed.
+  const bad = R.rollBounds([13], [16]);
+  const onBad = S.scoreNumerics(Object.assign({}, beast, { ac: 14 }), { acRange: bad }, N, {});
+  assertEqual("impossible bounds contribute no evidence at all", onBad.supplied, 0);
+
+  // HP, in log space.
+  const hpR = R.rollBounds([55], [40]);
+  const hpIn = S.scoreNumerics(Object.assign({}, beast, { hpAvg: 50 }), { hpRange: hpR }, N, {});
+  const hpOut = S.scoreNumerics(Object.assign({}, beast, { hpAvg: 400 }), { hpRange: hpR }, N, {});
+  assert("hit points inside the range score fully", hpIn.hits[0].fit === 1);
+  assert("...and far outside scores much less", hpOut.hits[0].fit < 0.5);
+
+  /* A save DC matches against ANY of the monster's DCs: the party saw one save and
+     cannot say which action it came from, so a wide repertoire must not be a penalty. */
+  const dcR = R.rollBounds([18], [12]);
+  const many = Object.assign({}, beast, { saveDcs: [11, 15, 22] });
+  const one = Object.assign({}, beast, { saveDcs: [15] });
+  const mScored = S.scoreNumerics(many, { dcRange: dcR }, N, {});
+  const oScored = S.scoreNumerics(one, { dcRange: dcR }, N, {});
+  assertClose("the best-fitting DC is the one that counts", mScored.credit, oScored.credit, 1e-9);
+  const none = S.scoreNumerics(Object.assign({}, beast, { saveDcs: [] }), { dcRange: dcR }, N, {});
+  assertEqual("a monster with no saves at all is not charged for the observation",
+    none.supplied, 0);
+}
+
 report("score");

@@ -85,6 +85,7 @@ const DEFAULTS = {
   garbleRate: 0.4,        // ...and wrote down wrong, having heard it rather than read it
   mishearRate: 0.1,       // ...or got completely wrong. See below.
   bossDriftRate: 0,       // probability the DM added legendary/lair to a monster without it
+  rollRate: 0,            // probability the party reports DICE instead of remembered numbers
 };
 
 /* ON heardRate — a name the party heard.
@@ -217,6 +218,36 @@ function corrupt(m, r, opts) {
       obs[f] = obs[f].concat([stray]);
       notes.push(`${f}: +${stray} (wrong)`);
     });
+  }
+
+  /* ROLLS INSTEAD OF MEMORY.
+
+     The party usually does not know a monster's AC — but they know what they rolled and
+     whether it hit, which bounds the AC exactly and cannot be misremembered. This
+     generates that: a handful of d20 totals either side of the true value, split into
+     hits and misses, exactly as the tool asks for them.
+
+     Note what this does NOT corrupt. The bounds are derived from the monster's REAL AC,
+     because that is what actually happens at a table: the dice do not lie even when the
+     players do. So this is the one observation the DM cannot fudge and the party cannot
+     misremember, and measuring it against the remembered-number path is the point —
+     `--rolls 1 --numeric-noise` would be the comparison if the numbers were also
+     perturbed, which acShift already does for the point-estimate path. */
+  if (o.rollRate > 0 && r() < o.rollRate && typeof m.ac === "number" && m.ac > 0) {
+    const hits = [], misses = [];
+    const swings = 3 + Math.floor(r() * 3);
+    for (let i = 0; i < swings; i++) {
+      // A d20 total in the neighbourhood of the AC, so the bounds actually bracket it.
+      const total = m.ac - 4 + Math.floor(r() * 9);
+      if (total >= m.ac) hits.push(total); else misses.push(total);
+    }
+    if (hits.length || misses.length) {
+      obs.acRange = { lo: misses.length ? Math.max.apply(null, misses) : null,
+                      hi: hits.length ? Math.min.apply(null, hits) : null,
+                      contradiction: false };
+      delete obs.ac;               // the dice replace the memory, they do not join it
+      notes.push(`ac: rolled bounds ${obs.acRange.lo}-${obs.acRange.hi}`);
+    }
   }
 
   /* BOSS DRIFT — handoff §7's second open question, made measurable.

@@ -83,6 +83,22 @@ when you know which books your DM owns. Exclude to stop an adventure you're half
 spoiling itself — which is why exclude exists separately rather than being &ldquo;include
 everything else&rdquo;: nobody should have to click 106 books to hide one.
 
+**The dice are better evidence than anyone's memory**, so the Numbers box takes them
+directly. Type the attack totals that hit and the ones that missed, and the tool works out
+the Armour Class exactly:
+
+> *"16, 8, 13, which hit?"* — *"16 hits, the rest miss."* → **AC is between 14 and 16.**
+
+The same two boxes appear for save DCs (saves you passed and failed) and hit points
+(damage it survived, damage that dropped it). Measured, this is worth **+7 points of top-1
+recall** over a remembered number — not because ranges are clever, but because dice don't
+lie and memory does.
+
+It never becomes a filter. A monster outside the range is scored by how far outside, not
+removed: someone had bless up, the GM applied cover, a total went in the wrong box. And if
+the bounds contradict each other, the tool says so in red rather than quietly picking a
+half to believe.
+
 Observations persist across a reload, so you can keep adding to them as the fight goes on.
 
 ## Several monsters at once

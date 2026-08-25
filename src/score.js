@@ -186,6 +186,12 @@
     traitTag:    m => (m.traitTags || []).map(str),
     actionTag:   m => (m.actionTags || []).map(str),
     damageDealt: m => (m.damageTags || []).map(str),
+    /* What the party watched it DO with its turn. All three are already parsed per
+       entry by normalize.js and rolled up per monster there — a player reports "it
+       made us save against Dex" about the creature, not about action block three. */
+    saveAbility:  m => (m.saveAbilities || []).map(str),
+    attackKind:   m => (m.attackKinds || []).map(str),
+    attacksPerTurn: m => (m.attacksPerTurn ? [String(m.attacksPerTurn)] : []),
     symptom:     m => (m.symptoms || []),          // attached at index time by symptoms.js (F8)
     /* Damage interactions are facets so that the rarity table COUNTS them. They are
        scored through the cost matrix below rather than by set membership, but a weight
@@ -263,6 +269,10 @@
        best rather than the one that wins the easy case. (n=400.) */
     acWeight: 3.2,
     hpWeight: 3.2,
+    /* A save DC the party bounded by passing and failing. Same weight as AC and HP,
+       for the same reason — it is a number the DM can retune, and F6 scales it too. */
+    dcWeight: 3.2,
+    dcSigma: 2.5,        // DC points, same shape as AC: both are d20 targets
     retunedFactor: 0.05, // F6: the "assume this was rebuilt" toggle
     minPerCr: 8,         // below this a CR bucket is too thin to trust alone
     /* "raw" | "residual" | "joint" | "off". raw is the default and F5 is off; the
@@ -271,6 +281,35 @@
   };
 
   const gaussian = (delta, sigma) => Math.exp(-(delta * delta) / (2 * sigma * sigma));
+
+  /* How far a candidate's number sits outside a bound the party established by rolling.
+
+     THE RULE IS (lo, hi] AND src/ranges.js OWNS IT. That module parses what the user
+     typed and derives the bounds; this reimplements only the six lines of arithmetic,
+     because score.js has no dependencies by design and must run in a browser with
+     nothing loaded but itself. tests/score.test.js pins the two against each other on
+     a grid, so a change to one that is not made to the other fails a test rather than
+     quietly re-ranking the corpus.
+
+     Zero when inside, and that matters: every value the dice permit is equally good.
+     There is no reason to prefer the middle of the interval to its edge, so a range is
+     NOT a tolerance curve with a flat top bolted on — it is a hard region with a soft
+     outside. A monster outside is never dropped, only scored by how far out it is,
+     which is "rank, never filter" applied to the strongest evidence in the tool. */
+  function rangeMiss(value, range) {
+    if (!range || typeof value !== "number" || !Number.isFinite(value)) return null;
+    if (range.contradiction) return null;          // the party told us two untrue things
+    if (range.lo != null && value <= range.lo) return range.lo - value + 1;
+    if (range.hi != null && value > range.hi) return value - range.hi;
+    return 0;
+  }
+
+  // The bound a value missed, for expressing an HP miss as a ratio rather than a count.
+  function nearestBound(value, range) {
+    if (range.hi != null && value > range.hi) return range.hi;
+    if (range.lo != null && value <= range.lo) return range.lo + 1;
+    return value;
+  }
 
   /* CR → expected AC and expected log-HP, measured off the corpus rather than taken
      from the DMG's table. The corpus is what we are ranking against, and where the
@@ -400,7 +439,12 @@
 
     const hasAc = typeof obs.ac === "number" && obs.ac > 0;
     const hasHp = typeof obs.hp === "number" && obs.hp > 0;
-    if (!hasAc && !hasHp) return out;
+    /* Bounds the party established by rolling — see src/ranges.js. A contradictory
+       range is dropped here rather than scored: it says two things that cannot both be
+       true, and acting on either half would be inventing evidence. */
+    const live = r => (r && !r.contradiction && (r.lo != null || r.hi != null)) ? r : null;
+    const acRange = live(obs.acRange), hpRange = live(obs.hpRange), dcRange = live(obs.dcRange);
+    if (!hasAc && !hasHp && !acRange && !hpRange && !dcRange) return out;
 
     // F6 — the user says the DM rebuilds statblocks, so the numbers barely count.
     const scale = o.retuned ? NUMERIC.retunedFactor : 1;
@@ -429,7 +473,22 @@
     const usesResidual = mode === "residual" || mode === "joint";
     const implied = usesResidual ? numerics.inferCr(obs) : null;
 
-    if (hasAc) {
+    if (acRange) {
+      /* A range beats a remembered number and replaces it. The party did not estimate
+         this; they watched a 16 hit and a 13 miss, and the DM cannot have misremembered
+         what the dice did. No CR residual either — the bound is on the raw AC. */
+      const w = NUMERIC.acWeight * scale;
+      out.supplied += w;
+      if (typeof m.ac === "number" && m.ac > 0) {
+        const miss = rangeMiss(m.ac, acRange);
+        if (miss != null) {
+          const fit = gaussian(miss, NUMERIC.acSigma);
+          out.credit += w * fit;
+          out.hits.push({ facet: "ac", value: rangeLabel(acRange, "AC"),
+                          weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
+        }
+      }
+    } else if (hasAc) {
       const w = NUMERIC.acWeight * scale;
       out.supplied += w;
       if (typeof m.ac === "number" && m.ac > 0) {
@@ -446,7 +505,25 @@
       }
     }
 
-    if (hasHp) {
+    if (hpRange) {
+      /* Same idea, but HP's tolerance lives in log space (±57% is one sigma), so a
+         miss is expressed as a log RATIO against the bound it missed rather than as a
+         count of hit points. Being 20 over on a 30 hp creature and 20 over on a 300 hp
+         one are not the same mistake. */
+      const w = NUMERIC.hpWeight * scale;
+      out.supplied += w;
+      if (typeof m.hpAvg === "number" && m.hpAvg > 0) {
+        const miss = rangeMiss(m.hpAvg, hpRange);
+        if (miss != null) {
+          const delta = miss === 0 ? 0
+            : Math.log(m.hpAvg) - Math.log(nearestBound(m.hpAvg, hpRange));
+          const fit = gaussian(delta, NUMERIC.hpLogSigma);
+          out.credit += w * fit;
+          out.hits.push({ facet: "hp", value: rangeLabel(hpRange, "hp"),
+                          weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
+        }
+      }
+    } else if (hasHp) {
       const w = NUMERIC.hpWeight * scale;
       out.supplied += w;
       if (typeof m.hpAvg === "number" && m.hpAvg > 0) {
@@ -468,7 +545,43 @@
         out.hits.push({ facet: "hp", value: `${obs.hp} hp`, weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
       }
     }
+
+    /* The save DC the party bounded by passing and failing.
+
+       Scored against the BEST of the monster's DCs rather than an average or the
+       first: a creature with three different saves is consistent with the observation
+       if ANY of them fits, because the party saw one save and cannot say which action
+       it came from. Taking the closest is the only reading that does not punish a
+       monster for having a wide repertoire. */
+    if (dcRange && Array.isArray(m.saveDcs) && m.saveDcs.length) {
+      const w = NUMERIC.dcWeight * scale;
+      out.supplied += w;
+      let best = null;
+      m.saveDcs.forEach(dc => {
+        const miss = rangeMiss(dc, dcRange);
+        if (miss != null && (best == null || miss < best)) best = miss;
+      });
+      if (best != null) {
+        const fit = gaussian(best, NUMERIC.dcSigma);
+        out.credit += w * fit;
+        out.hits.push({ facet: "dc", value: rangeLabel(dcRange, "save DC"),
+                        weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
+      }
+    }
     return out;
+  }
+
+  /* How a bound reads back in the explanation, so the user can audit what the tool
+     thinks they said. Mirrors ranges.js's describe() but terser, because this appears
+     inline in a list of reasons rather than as a sentence of its own. */
+  function rangeLabel(range, noun) {
+    if (!range) return String(noun);
+    if (range.lo != null && range.hi != null) {
+      return range.hi - range.lo === 1 ? `${noun} ${range.hi}`
+                                       : `${noun} ${range.lo + 1}-${range.hi}`;
+    }
+    if (range.hi != null) return `${noun} at most ${range.hi}`;
+    return `${noun} at least ${range.lo + 1}`;
   }
 
   /* ============================================================
@@ -490,8 +603,9 @@
   const SET_FIELDS = {                 // observation field -> facet it scores against
     movement: "movement", senses: "sense", condImmune: "condImmune",
     symptoms: "symptom", typeTags: "typeTag", damageDealt: "damageDealt",
+    saveAbilities: "saveAbility", attackKinds: "attackKind",
   };
-  const SCALAR_FIELDS = { type: "type", size: "size" };
+  const SCALAR_FIELDS = { type: "type", size: "size", attacksPerTurn: "attacksPerTurn" };
 
   const asList = v => (v == null ? [] : Array.isArray(v) ? v : [v]);
   const norm = v => String(v).trim().toLowerCase();

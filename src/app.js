@@ -65,7 +65,10 @@
      start. Everything else — which books your DM owns, how big your party is — is a fact
      about the TABLE and is shared, because retyping it per monster would be absurd. */
   const blankObs = () => ({ symptoms: [], type: "", size: "", movement: [], senses: [],
-    condImmune: [], damage: {}, appearance: "", heardName: "" });
+    condImmune: [], damage: {}, appearance: "", heardName: "",
+    // What it did with its turn, and the bounds the party's dice established.
+    attackKinds: [], saveAbilities: [], attacksPerTurn: "",
+    acHit: "", acMiss: "", dcPass: "", dcFail: "", hpLived: "", hpDied: "" });
   const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     label: "", best: "", obs: blankObs(), ac: null, hp: null, retuned: false,
     // Which fight this creature was in, and how many of it there were. Both feed the
@@ -99,8 +102,21 @@
     senses: { multi: true, opts: ["darkvision", "blindsight", "truesight", "tremorsense"] },
     condImmune: { multi: true, opts: ["charmed", "frightened", "poisoned", "paralyzed", "petrified",
       "stunned", "grappled", "restrained", "prone", "exhaustion"] },
+    /* What the party watched it do with its turn. The attack kinds are 5e's four, which
+       is what a GM's narration distinguishes: whether it closed to touch you and whether
+       it was casting. "It shoots two bolts of force" is a ranged spell attack, twice. */
+    attackKinds: { multi: true, opts: ["melee weapon", "ranged weapon", "melee spell", "ranged spell"] },
+    saveAbilities: { multi: true, opts: ["str", "dex", "con", "int", "wis", "cha"] },
+    attacksPerTurn: { multi: false, opts: ["1", "2", "3", "4", "5"] },
   };
   const CONDIMMUNE_LABEL = { exhaustion: "exhausted" };
+
+  /* The six roll boxes, input id -> observation field. Text inputs, so they answer to
+     `input` rather than `change`: the derived range reads back as you type, which is the
+     point — a mistyped total is visible before it silently moves the ranking. */
+  const ROLL_FIELDS = { "in-ac-hit": "acHit", "in-ac-miss": "acMiss",
+    "in-dc-pass": "dcPass", "in-dc-fail": "dcFail",
+    "in-hp-lived": "hpLived", "in-hp-died": "hpDied" };
 
   const DAMAGE_TYPES = ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic",
     "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
@@ -279,6 +295,12 @@
     $("in-name").value = S.obs.heardName || "";
     $("sym-search").value = "";
     $("in-count").value = t.count || 1;
+    // The roll boxes belong to the monster, so they follow a tab switch like everything
+    // else in `obs` — otherwise one creature's dice would score another.
+    Object.entries(ROLL_FIELDS).forEach(([id, key]) => {
+      const el = $(id); if (el) el.value = S.obs[key] || "";
+    });
+    renderRanges();
     renderFightPicker();
   }
 
@@ -475,7 +497,36 @@
     if (S.obs.heardName) obs.heardName = S.obs.heardName;
     if (typeof S.ac === "number") obs.ac = S.ac;
     if (typeof S.hp === "number") obs.hp = S.hp;
+
+    // What it did with its turn.
+    if (S.obs.attackKinds.length) obs.attackKinds = S.obs.attackKinds.slice();
+    if (S.obs.saveAbilities.length) obs.saveAbilities = S.obs.saveAbilities.slice();
+    if (S.obs.attacksPerTurn) obs.attacksPerTurn = S.obs.attacksPerTurn;
+
+    /* Bounds from the dice. Derived here rather than stored, so editing a box
+       re-derives rather than leaving a stale range behind — and so a contradiction
+       stays visible as one instead of being quietly resolved at save time. */
+    const ac = window.fromFields(S.obs.acHit, S.obs.acMiss);
+    const dc = window.fromFields(S.obs.dcPass, S.obs.dcFail);
+    const hp = window.fromFields(S.obs.hpDied, S.obs.hpLived);   // died = upper, lived = lower
+    if (ac) obs.acRange = ac;
+    if (dc) obs.dcRange = dc;
+    if (hp) obs.hpRange = hp;
     return obs;
+  }
+
+  /* Echo each bound back in words. A mistyped roll is otherwise invisible: it does not
+     error, it just silently moves the ranking. */
+  function renderRanges() {
+    const show = (id, range, noun) => {
+      const el = $(id);
+      if (!el) return;
+      el.textContent = range ? window.describeRange(range, noun) : "";
+      el.classList.toggle("bad", !!(range && range.contradiction));
+    };
+    show("ac-range-read", window.fromFields(S.obs.acHit, S.obs.acMiss), "Its AC");
+    show("dc-range-read", window.fromFields(S.obs.dcPass, S.obs.dcFail), "The DC");
+    show("hp-range-read", window.fromFields(S.obs.hpDied, S.obs.hpLived), "Its hit points");
   }
 
   function renderCrHint() {
@@ -921,6 +972,11 @@
 
   document.addEventListener("input", e => {
     if (e.target.id === "sym-search") { renderSymptoms(); return; }
+    if (ROLL_FIELDS[e.target.id]) {
+      S.obs[ROLL_FIELDS[e.target.id]] = e.target.value;
+      persist(); renderRanges(); renderResults(); renderSuggestions();
+      return;
+    }
     if (e.target.id === "in-name") {
       S.obs.heardName = e.target.value;
       renderNameRead();
