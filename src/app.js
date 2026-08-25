@@ -66,8 +66,11 @@
      about the TABLE and is shared, because retyping it per monster would be absurd. */
   const blankObs = () => ({ symptoms: [], type: "", size: "", movement: [], senses: [],
     condImmune: [], damage: {}, appearance: "", heardName: "",
-    // What it did with its turn, and the bounds the party's dice established.
-    attackKinds: [], saveAbilities: [], attacksPerTurn: "",
+    /* What it did with its turn. One row per action rather than three bags of chips,
+       because the fields have to be true OF THE SAME ACTION to mean anything — see
+       scoreCombat. Rows are created empty and an empty row is not an observation. */
+    attacks: [], saves: [],
+    // The bounds the party's dice established.
     acHit: "", acMiss: "", dcPass: "", dcFail: "", hpLived: "", hpDied: "" });
   const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     label: "", best: "", obs: blankObs(), ac: null, hp: null, retuned: false,
@@ -102,13 +105,24 @@
     senses: { multi: true, opts: ["darkvision", "blindsight", "truesight", "tremorsense"] },
     condImmune: { multi: true, opts: ["charmed", "frightened", "poisoned", "paralyzed", "petrified",
       "stunned", "grappled", "restrained", "prone", "exhaustion"] },
-    /* What the party watched it do with its turn. The attack kinds are 5e's four, which
-       is what a GM's narration distinguishes: whether it closed to touch you and whether
-       it was casting. "It shoots two bolts of force" is a ranged spell attack, twice. */
-    attackKinds: { multi: true, opts: ["melee weapon", "ranged weapon", "melee spell", "ranged spell"] },
-    saveAbilities: { multi: true, opts: ["str", "dex", "con", "int", "wis", "cha"] },
-    attacksPerTurn: { multi: false, opts: ["1", "2", "3", "4", "5"] },
   };
+
+  /* The vocabularies a combat row draws on. Same principle as PICKERS: fixed lists, so
+     the options do not change shape because of which books happen to be loaded.
+
+     The attack kinds are 5e's four, which is what a GM's narration distinguishes:
+     whether it closed to touch you, and whether it was casting. */
+  const ATTACK_KINDS = ["melee weapon", "ranged weapon", "melee spell", "ranged spell"];
+  const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
+  /* Damage types come from DAMAGE_TYPES below, which the damage-interaction table
+     already owns — one list, so a type can never be offered in one place and not the
+     other.
+
+     The conditions a player would name having had one put on them. Not 5e's full list:
+     "incapacitated" is a consequence of paralysis nobody reports separately. */
+  const CONDITIONS = ["blinded", "charmed", "deafened", "frightened", "grappled",
+    "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned",
+    "unconscious", "exhaustion"];
   const CONDIMMUNE_LABEL = { exhaustion: "exhausted" };
 
   /* The six roll boxes, input id -> observation field. Text inputs, so they answer to
@@ -373,6 +387,90 @@
     });
   }
 
+  /* ============================================================
+     Combat rows — the attacks and saves the party watched.
+
+     Every field is optional and every field is a text or select input rather than a
+     chip, because the interesting ones are numbers the party read off the table: what
+     it rolled, how far away it was, how much it hurt. Chips were what the old version
+     offered and the answer to all three was "you can't say".
+
+     A row you opened and did not fill in is not an observation — buildObs drops it —
+     so adding a row costs nothing until you put something in it.
+     ============================================================ */
+  const ATTACK_FIELDS = [
+    { key: "count",  label: "how many",   ph: "2",       w: "4rem",   type: "number" },
+    { key: "kind",   label: "what kind",  opts: () => ATTACK_KINDS },
+    { key: "rolls",  label: "it rolled",  ph: "22, 17",  w: "6rem" },
+    { key: "reach",  label: "how far",    ph: "10",      w: "4.5rem", type: "number", suffix: "ft." },
+    { key: "dmg",    label: "damage",     ph: "14, 9 or 2d8+5", w: "8rem" },
+    { key: "dmgType", label: "of what",   opts: () => DAMAGE_TYPES },
+    { key: "condition", label: "and left us", opts: () => CONDITIONS },
+  ];
+  const SAVE_FIELDS = [
+    { key: "abil",   label: "save",       opts: () => ABILITIES },
+    { key: "dc",     label: "DC",         ph: "18",      w: "4.5rem" },
+    { key: "area",   label: "area",       ph: "30",      w: "4.5rem", type: "number", suffix: "ft." },
+    { key: "dmg",    label: "damage",     ph: "56 or 16d6", w: "7rem" },
+    { key: "dmgType", label: "of what",   opts: () => DAMAGE_TYPES },
+    { key: "condition", label: "and left us", opts: () => CONDITIONS },
+  ];
+
+  const rowHasContent = r => !!r && Object.keys(r)
+    .some(k => r[k] !== "" && r[k] != null);
+
+  function renderRowField(f, row, list, i) {
+    const val = row[f.key] == null ? "" : String(row[f.key]);
+    const attrs = `data-row="${list}" data-idx="${i}" data-field="${esc(f.key)}"`;
+    const inner = f.opts
+      ? `<select class="rowsel" ${attrs}><option value=""></option>` +
+        f.opts().map(o => `<option value="${esc(o)}"${o === val ? " selected" : ""}>${esc(o)}</option>`).join("") +
+        `</select>`
+      : `<input type="${f.type || "text"}" class="txt rowin" ${attrs} ` +
+        `style="width:${f.w || "5rem"}" placeholder="${esc(f.ph || "")}" value="${esc(val)}" autocomplete="off">`;
+    return `<label class="rowfield"><span class="hint">${esc(f.label)}</span>${inner}` +
+           (f.suffix ? `<span class="hint">${esc(f.suffix)}</span>` : "") + `</label>`;
+  }
+
+  function renderCombatRows() {
+    const draw = (list, fields, verb) => {
+      const rows = S.obs[list] || [];
+      $(list === "attacks" ? "atk-rows" : "sav-rows").innerHTML = rows.map((row, i) =>
+        `<div class="combatrow">` +
+        fields.map(f => renderRowField(f, row, list, i)).join("") +
+        `<button class="rowdel" data-rowdel="${list}" data-idx="${i}" ` +
+        `title="remove this ${verb}">&times;</button></div>`).join("");
+    };
+    draw("attacks", ATTACK_FIELDS, "attack");
+    draw("saves", SAVE_FIELDS, "save");
+    renderAttackTotal();
+  }
+
+  /* SEPARATE FROM renderCombatRows ON PURPOSE. Redrawing the rows replaces the very
+     input the user is typing in, which loses the caret and — because the browser is
+     still delivering blur to a node that no longer exists — throws NotFoundError. The
+     derived total lives outside the rows precisely so it can be refreshed on every
+     keystroke without touching them. */
+  function renderAttackTotal() {
+    /* Echo the derived attack count back. It is derived rather than asked for, so the
+       user has no other way to see what the tool concluded — and a wrong total here is
+       exactly the mismatch the playtest reported. */
+    const el = $("atk-total");
+    if (!el) return;
+    const filled = (S.obs.attacks || []).filter(rowHasContent);
+    const counts = filled.map(r => parseInt(r.count, 10)).filter(n => Number.isFinite(n) && n > 0);
+    if (filled.length && counts.length === filled.length) {
+      const total = counts.reduce((a, b) => a + b, 0);
+      el.textContent = total > 10
+        ? `That is ${total} attack rolls a turn — more than any statblock claims, so it is not being used.`
+        : `That is ${total} attack roll${total === 1 ? "" : "s"} a turn.`;
+    } else if (filled.length) {
+      el.textContent = "Say how many of each it made and the total becomes evidence too.";
+    } else {
+      el.textContent = "";
+    }
+  }
+
   function renderDamage() {
     $("dmg-body").innerHTML = DAMAGE_TYPES.map(d => {
       const cur = S.obs.damage[d] || "";
@@ -516,10 +614,23 @@
     if (typeof S.ac === "number") obs.ac = S.ac;
     if (typeof S.hp === "number") obs.hp = S.hp;
 
-    // What it did with its turn.
-    if (S.obs.attackKinds.length) obs.attackKinds = S.obs.attackKinds.slice();
-    if (S.obs.saveAbilities.length) obs.saveAbilities = S.obs.saveAbilities.slice();
-    if (S.obs.attacksPerTurn) obs.attacksPerTurn = S.obs.attacksPerTurn;
+    /* Combat rows. Empty rows are dropped rather than passed through: a row the user
+       opened and did not fill in is not an observation, and scoring it as one would
+       penalise every monster for a blank. */
+    const attacks = (S.obs.attacks || []).filter(rowHasContent);
+    const saves = (S.obs.saves || []).filter(rowHasContent);
+    if (attacks.length) obs.attacks = attacks.map(r => Object.assign({}, r));
+    if (saves.length) obs.saves = saves.map(r => Object.assign({}, r));
+
+    /* Attacks per turn is DERIVED from the rows rather than asked for separately.
+       Asking twice invites the two answers to disagree, and the rows already know:
+       two claws and a bite is three attack rolls. Only counted when every attack row
+       says how many it made, since a partial sum is worse than no claim at all. */
+    const counts = attacks.map(r => parseInt(r.count, 10)).filter(n => Number.isFinite(n) && n > 0);
+    if (attacks.length && counts.length === attacks.length) {
+      const total = counts.reduce((a, b) => a + b, 0);
+      if (total > 0 && total <= 10) obs.attacksPerTurn = String(total);
+    }
 
     /* Bounds from the dice. Derived here rather than stored, so editing a box
        re-derives rather than leaving a stale range behind — and so a contradiction
@@ -780,7 +891,7 @@
 
   function renderAll() {
     applyProseSize(); renderNameRead(); renderFightPicker(); renderBand();
-    renderPickers(); renderDamage(); renderSymptoms(); renderSources();
+    renderPickers(); renderDamage(); renderCombatRows(); renderSymptoms(); renderSources();
     renderCrHint(); renderResults(); renderSuggestions(); renderDetail();
   }
 
@@ -803,6 +914,24 @@
       // A size the user clicked is theirs; stop F11 overwriting it on the next keystroke.
       if (field === "size") { S.sizeFromProse = ""; applyProseSize(); }
       persist(); renderPickers(); renderResults(); renderSuggestions();
+      return;
+    }
+
+    if (t.id === "atk-add" || t.id === "sav-add") {
+      e.preventDefault();
+      S.obs[t.id === "atk-add" ? "attacks" : "saves"].push({});
+      persist(); renderCombatRows();
+      // Nothing to re-rank: an empty row is not an observation.
+      return;
+    }
+    const rowdel = t.closest("[data-rowdel]");
+    if (rowdel) {
+      e.preventDefault();
+      const list = S.obs[rowdel.dataset.rowdel];
+      const gone = list.splice(Number(rowdel.dataset.idx), 1)[0];
+      persist(); renderCombatRows();
+      // Only worth re-ranking if the row said anything.
+      if (rowHasContent(gone)) { renderResults(); renderSuggestions(); }
       return;
     }
 
@@ -915,6 +1044,8 @@
   }
 
   document.addEventListener("change", e => {
+    // The selects in a combat row. Text inputs are handled on `input` instead.
+    if (e.target.dataset && e.target.dataset.row) { editRow(e.target); return; }
     if (e.target.id === "in-fight") {
       const t = S.tabs.find(x => x.id === S.activeId);
       if (!t) return;
@@ -988,8 +1119,27 @@
       : `Closest name is “${hit.name}”. Ranked accordingly, not filtered to it.`;
   }
 
+  /* One handler for every field of every combat row, addressed by data attributes
+     rather than by id — rows come and go, and an id per field per row would have to be
+     kept unique by hand. Text inputs answer to `input` so the ranking follows typing;
+     the selects are caught by the `change` handler below. */
+  function editRow(t) {
+    const list = S.obs[t.dataset.row];
+    const row = list && list[Number(t.dataset.idx)];
+    if (!row) return false;
+    const v = t.value.trim();
+    if (v === "") delete row[t.dataset.field]; else row[t.dataset.field] = v;
+    persist();
+    renderResults(); renderSuggestions();
+    /* The total, but never the rows — see renderAttackTotal. The row the user is
+       typing in must survive its own keystroke. */
+    renderAttackTotal();
+    return true;
+  }
+
   document.addEventListener("input", e => {
     if (e.target.id === "sym-search") { renderSymptoms(); return; }
+    if (e.target.dataset && e.target.dataset.row) { editRow(e.target); return; }
     if (ROLL_FIELDS[e.target.id]) {
       S.obs[ROLL_FIELDS[e.target.id]] = e.target.value;
       persist(); renderRanges(); renderResults(); renderSuggestions();

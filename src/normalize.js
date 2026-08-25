@@ -270,6 +270,49 @@
       .replace(/\{@recharge (\d+)\}/gi, (m, n) => (n === "6" ? "(Recharge 6)" : `(Recharge ${n}-6)`))
       .replace(/\{@recharge\}/gi, "(Recharge 6)"));
   }
+  /* ---------- what one action does, in numbers ----------
+
+     The party does not report "it has a Melee Weapon Attack" — they report "it hit
+     Ana for 14 slashing and knocked her prone". Matching that needs the damage TYPE,
+     the damage DICE and the CONDITION per entry, not rolled up to the monster: a
+     creature with a fire breath weapon and a slashing claw is not a creature whose
+     claw deals fire, and monster-level tags cannot tell those apart.
+
+     "{@damage 2d8 + 5} slashing damage" — the type is the word after the tag, so the
+     dice and the type are read together and stay paired. */
+  const DMG_TYPES = ["acid", "bludgeoning", "cold", "fire", "force", "lightning",
+                     "necrotic", "piercing", "poison", "psychic", "radiant",
+                     "slashing", "thunder"];
+  const DMG_TYPE_RE = new RegExp("(" + DMG_TYPES.join("|") + ")", "i");
+
+  /* "2d8 + 5" -> { n: 2, sides: 8, mod: 5, min: 7, max: 21, avg: 14 }. Returns null for
+     anything that is not plain dice — "half the damage taken" and similar exist and
+     should contribute nothing rather than a made-up number. */
+  function parseDice(expr) {
+    const m = /^\s*(\d+)\s*d\s*(\d+)\s*(?:([+-])\s*(\d+))?\s*$/i.exec(String(expr || ""));
+    if (!m) {
+      const flat = /^\s*(\d+)\s*$/.exec(String(expr || ""));
+      return flat ? { n: 0, sides: 0, mod: +flat[1], min: +flat[1], max: +flat[1], avg: +flat[1] } : null;
+    }
+    const n = +m[1], sides = +m[2];
+    const mod = m[4] ? (m[3] === "-" ? -(+m[4]) : +m[4]) : 0;
+    if (!n || !sides) return null;
+    return { n, sides, mod, min: n + mod, max: n * sides + mod, avg: n * (sides + 1) / 2 + mod };
+  }
+
+  /* The conditions a player would name having been on the receiving end of. Deliberately
+     not 5e's full list: "incapacitated" is a consequence of paralysis nobody reports
+     separately, and "unconscious" at zero hit points is not something the monster did. */
+  const CONDITIONS = ["blinded", "charmed", "deafened", "frightened", "grappled",
+                      "invisible", "paralyzed", "petrified", "poisoned", "prone",
+                      "restrained", "stunned", "unconscious", "exhaustion"];
+  const COND_RE = new RegExp("\\b(" + CONDITIONS.join("|") + "|paralysed|petrified)\\b", "gi");
+
+  /* Area effects, because "how many of us did it catch" is the question a party can
+     answer and "how many targets" is not. A 20-foot cone caught three of us; a claw
+     caught one. */
+  const AREA_RE = /(\d+)[- ]foot\s+(cone|line|cube|sphere|radius|square|cylinder)/i;
+
   function parseAction(a, kind) {
     const raw = flattenEntries(a.entries);
     const plain = stripTags(raw);
@@ -282,6 +325,30 @@
     const saveM = /(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw/i.exec(plain);
     const reachM = /reach (\d+)\s*ft/i.exec(plain);
     const rangeM = /range (\d+)(?:\/(\d+))?\s*ft/i.exec(plain);
+
+    /* Each damage roll paired with the type that follows it. The window is short on
+       purpose — "2d6 fire damage, and the target must make a Dex save or take 2d6
+       cold" would otherwise credit the first roll with both types. */
+    const damages = [];
+    const seenTypes = [];
+    let dm;
+    const DMG_RE = /\{@damage ([^}|]+)(?:\|[^}]*)?\}([^.;]{0,40})/gi;
+    while ((dm = DMG_RE.exec(raw)) !== null) {
+      const tm = DMG_TYPE_RE.exec(stripTags(dm[2] || ""));
+      const type = tm ? tm[1].toLowerCase() : "";
+      if (type && seenTypes.indexOf(type) < 0) seenTypes.push(type);
+      damages.push({ expr: dm[1].trim(), type, dice: parseDice(dm[1].trim()) });
+    }
+
+    const conds = [];
+    let cm;
+    COND_RE.lastIndex = 0;
+    while ((cm = COND_RE.exec(plain)) !== null) {
+      const c = cm[1].toLowerCase().replace("paralysed", "paralyzed");
+      if (conds.indexOf(c) < 0) conds.push(c);
+    }
+    const areaM = AREA_RE.exec(plain);
+
     return {
       name: actionName(a.name), kind,
       text: plain,
@@ -289,6 +356,10 @@
       atkKinds: kinds.map(k => ATK_KIND[k] || k),
       hit: hitM ? Number(hitM[1]) : null,
       dmg,
+      damages,                                   // [{ expr, type, dice }]
+      dmgTypes: seenTypes,
+      conditions: conds,
+      area: areaM ? { size: Number(areaM[1]), shape: areaM[2].toLowerCase() } : null,
       dc: dcM ? Number(dcM[1]) : null,
       saveAbil: saveM ? saveM[1].slice(0, 3) : "",
       reach: reachM ? Number(reachM[1]) : null,
@@ -391,6 +462,14 @@
       saveDcs: uniq(everyEntry.map(a => a.dc).filter(n => typeof n === "number" && n > 0)),
       // How many attack rolls it can make in a turn, when the statblock says so.
       attacksPerTurn: multiattackCount(everyEntry),
+      // Every condition it can put on you — the one thing a player never fails to notice.
+      inflicts: uniq(everyEntry.reduce((acc, a) => acc.concat(a.conditions || []), [])),
+      /* Every entry in one list, in the order a player would meet them. The combat
+         scorer matches an observed attack against ONE of these rather than against the
+         monster's rolled-up tags, so it needs them whole and not flattened. Built here
+         rather than re-concatenated per candidate at rank time, because ranking walks
+         4,528 monsters and does it for every keystroke. */
+      everyEntry,
     };
   }
 

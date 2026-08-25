@@ -74,11 +74,15 @@
 
     <div class="module">
       <h2>How did it fight?</h2>
-      <span class="hint block">What the GM narrated on its turn. Every one of these is
-        ordinary evidence: reporting nothing here costs a monster nothing.</span>
-      <div class="chiprow"><span class="hint">Attacks it made</span><br><span id="pick-attackKinds"></span></div>
-      <div class="chiprow"><span class="hint">Saves it forced on us</span><br><span id="pick-saveAbilities"></span></div>
-      <div class="chiprow"><span class="hint">Attack rolls per turn</span><br><span id="pick-attacksPerTurn"></span></div>
+      <span class="hint block">One row per thing it did &mdash; each row is matched against a
+        <em>single</em> action on the statblock, so &ldquo;a melee attack that burned me&rdquo; finds
+        creatures whose claw deals fire, not every dragon with a breath weapon. Fill in what you
+        remember and leave the rest blank; a blank field costs a monster nothing.</span>
+      <div id="atk-rows"></div>
+      <button id="atk-add" class="addrow">+ another attack</button>
+      <div class="hint block" id="atk-total"></div>
+      <div id="sav-rows"></div>
+      <button id="sav-add" class="addrow">+ a saving throw it forced</button>
     </div>
 
     <div class="module">

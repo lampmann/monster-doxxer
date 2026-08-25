@@ -86,6 +86,16 @@
        ~0.5 points. If a later harness still says 0, delete the penalty rather than keeping
        a constant nothing supports. */
     damageCostFactor: 0.1,
+    /* THE PAIRING BONUS. A combat row is worth more than the sum of its fields, because
+       the fields have to be true OF THE SAME ACTION. "A melee attack that dealt fire"
+       matched a creature with a claw and, separately, a fire breath — which is most
+       dragons — as long as the two facts were scored against the monster. Scored against
+       one entry it matches almost nothing, and that is the point.
+
+       Multiplies the credit a row earns when its best entry explains every field the
+       party filled in. Below 1 it would punish complete rows, which is backwards; much
+       above 1 and one lucky entry outvotes the rest of the query. */
+    pairingBonus: 1.25,
     /* The ceiling on F10's appearance bonus, on the same 0..1 scale as the score itself.
        A cap is what makes tier 3 safe: a perfect prose match is worth a good shove up the
        list, never enough to outrank a monster that matches the mechanics. Swept — see
@@ -191,6 +201,8 @@
        made us save against Dex" about the creature, not about action block three. */
     saveAbility:  m => (m.saveAbilities || []).map(str),
     attackKind:   m => (m.attackKinds || []).map(str),
+    // Conditions it puts ON you. The one thing a player never fails to notice.
+    inflicts:     m => (m.inflicts || []).map(str),
     attacksPerTurn: m => (m.attacksPerTurn ? [String(m.attacksPerTurn)] : []),
     symptom:     m => (m.symptoms || []),          // attached at index time by symptoms.js (F8)
     /* Damage interactions are facets so that the rarity table COUNTS them. They are
@@ -585,6 +597,268 @@
   }
 
   /* ============================================================
+     COMBAT ROWS — one observed action matched against one entry.
+
+     THE BUG THIS EXISTS TO FIX. Every combat facet used to be rolled up to the
+     monster: attackKinds, saveAbilities, damageTags, all flattened into one bag. So
+     "a melee attack that dealt fire damage" matched any creature with a melee attack
+     and, somewhere else entirely, a fire breath weapon. That is most dragons. The
+     party did not see a creature with those two properties; they saw ONE ACTION with
+     both, and the whole discriminating power of the observation is in the pairing.
+
+     So a row is scored against a single entry and takes the best fit across all of
+     them. Fields the party left blank cost nothing (F2). Fields they filled in that
+     the best entry cannot explain cost missFactor, the same as anywhere else — the
+     row is evidence, not a filter, and a monster whose claw does 2d6 instead of 2d8
+     is still very much a candidate.
+
+     Rarity weights come from the same F1 table as everything else wherever a facet
+     exists for the field, so a fire attack and a bludgeoning one are not worth the
+     same. Where no facet exists — reach, attack bonus, damage amount — the weight is
+     a constant in COMBAT below, in nats, on the same scale.
+
+     WHAT IS DELIBERATELY NOT HERE. The number of targets an attack had: the statblocks
+     say "one target" for essentially every attack roll in the game, so the field would
+     be a box that never discriminates. Area effects DO vary, and "it caught three of
+     us in a 30-foot cone" is answerable, so the area's size is taken instead.
+     ============================================================ */
+  const COMBAT = {
+    /* Nats. Below the 3.2 of AC and HP, because every one of these is softer: the
+       party is reporting a number from memory in the middle of a fight, and the DM may
+       have adjusted the action as freely as they adjust the statblock. */
+    reachWeight: 1.6,
+    bonusWeight: 2.2,       // from the rolls, so better evidence than the rest
+    damageWeight: 2.4,
+    areaWeight: 1.6,
+    reachSigma: 8,          // feet. 5 vs 10 should separate; 10 vs 15 barely.
+    bonusSigma: 2.0,        // to-hit points
+    damageLogSigma: 0.5,    // natural-log damage, like HP: ±65% is one sigma
+    areaSigma: 15,          // feet
+  };
+
+  const gauss = (miss, sigma) => Math.exp(-(miss * miss) / (2 * sigma * sigma));
+
+  /* "14, 9" -> totals the party watched land. "2d8+5" -> the expression, if the DM read
+     it out or they worked it out. Told apart by the 'd', which is the only thing that
+     could not appear in a list of totals. */
+  function parseDamageField(text) {
+    const t = String(text == null ? "" : text).trim();
+    if (!t) return null;
+    if (/\d\s*d\s*\d/i.test(t)) {
+      const m = /(\d+)\s*d\s*(\d+)\s*(?:([+-])\s*(\d+))?/i.exec(t);
+      if (!m) return null;
+      const n = +m[1], sides = +m[2];
+      const mod = m[4] ? (m[3] === "-" ? -(+m[4]) : +m[4]) : 0;
+      if (!n || !sides) return null;
+      return { kind: "dice", n, sides, mod,
+               min: n + mod, max: n * sides + mod, avg: n * (sides + 1) / 2 + mod };
+    }
+    const totals = t.split(/[^0-9]+/).map(x => parseInt(x, 10)).filter(Number.isFinite);
+    return totals.length ? { kind: "totals", totals } : null;
+  }
+
+  /* How well one entry's damage explains what the party reported.
+     Returns 0..1, or null when there is nothing to compare. */
+  function damageFit(observed, entryDamages, type) {
+    if (!observed || !entryDamages || !entryDamages.length) return null;
+    /* Only damages of the reported type, when a type was reported. A breath weapon and
+       a bite on the same statblock are different rolls and must not be crossed. */
+    const pool = type
+      ? entryDamages.filter(d => d.type === type)
+      : entryDamages;
+    const dice = pool.map(d => d.dice).filter(Boolean);
+    if (!dice.length) return null;
+
+    return Math.max.apply(null, dice.map(d => {
+      if (observed.kind === "dice") {
+        // An exact expression match is certainty; otherwise judge by the average.
+        if (observed.n === d.n && observed.sides === d.sides && observed.mod === d.mod) return 1;
+        return gauss(Math.log(Math.max(1, observed.avg)) - Math.log(Math.max(1, d.avg)),
+                     COMBAT.damageLogSigma);
+      }
+      /* Totals. A total the dice cannot produce at all is the strong signal — 31 from
+         2d8+5 did not come from that action. Beyond possibility, judge the mean, which
+         is what a handful of samples actually tells you. */
+      const possible = observed.totals.filter(x => x >= d.min && x <= d.max).length;
+      const share = possible / observed.totals.length;
+      const mean = observed.totals.reduce((a, b) => a + b, 0) / observed.totals.length;
+      const central = gauss(Math.log(Math.max(1, mean)) - Math.log(Math.max(1, d.avg)),
+                            COMBAT.damageLogSigma);
+      return share * 0.5 + central * 0.5;
+    }));
+  }
+
+  /* Reach and range both answer "how far away were we", so they are compared as one
+     number. "10/60" (a thrown weapon) is matched on its short range, which is the one
+     a party in melee would report. */
+  function entryDistance(e) {
+    if (typeof e.reach === "number") return e.reach;
+    if (e.range) {
+      const n = parseInt(String(e.range).split("/")[0], 10);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  }
+
+  /* One row, one entry: what fraction of the row this entry explains, and the weight
+     of the row's fields. Every field is independent — a row is a conjunction of claims
+     about one action, and each claim is worth its own rarity. */
+  function fitRow(row, e, rarity, isSave) {
+    let earned = 0, total = 0, complete = true;
+    const parts = [];
+    const claim = (weight, fit, label) => {
+      if (weight <= 0) return;
+      total += weight;
+      const f = fit == null ? 0 : fit;
+      earned += weight * f;
+      if (f < 0.5) complete = false;
+      if (f > 0) parts.push({ label, fit: f });
+    };
+
+    if (isSave) {
+      if (row.abil) {
+        const w = rarity.weight(featureKey("saveAbility", norm(row.abil)));
+        claim(w, norm(e.saveAbil) === norm(row.abil) ? 1 : 0, `${row.abil} save`);
+      }
+      const dcs = String(row.dc == null ? "" : row.dc)
+        .split(/[^0-9]+/).map(x => parseInt(x, 10)).filter(Number.isFinite);
+      if (dcs.length && typeof e.dc === "number") {
+        const best = Math.min.apply(null, dcs.map(d => Math.abs(d - e.dc)));
+        claim(NUMERIC.dcWeight, gauss(best, NUMERIC.dcSigma), `DC ${dcs.join("/")}`);
+      } else if (dcs.length) {
+        claim(NUMERIC.dcWeight, 0, `DC ${dcs.join("/")}`);
+      }
+      if (row.area) {
+        const size = Number(row.area);
+        claim(COMBAT.areaWeight, e.area ? gauss(e.area.size - size, COMBAT.areaSigma) : 0,
+              `${size} ft. area`);
+      }
+    } else {
+      if (row.kind) {
+        const k = norm(row.kind);
+        const w = rarity.weight(featureKey("attackKind", k));
+        const kinds = (e.atkKinds || []).map(x => norm(String(x).replace(/\s*attack\s*$/i, "")));
+        claim(w, kinds.indexOf(k) >= 0 ? 1 : 0, row.kind);
+      }
+      const rolls = String(row.rolls == null ? "" : row.rolls)
+        .split(/[^0-9-]+/).map(x => parseInt(x, 10)).filter(Number.isFinite);
+      if (rolls.length && typeof e.hit === "number") {
+        /* The rolls bound the bonus; the entry either sits inside that window or it
+           does not. Inside is inside — there is no reason to prefer the middle. */
+        const lo = Math.max.apply(null, rolls) - 21, hi = Math.min.apply(null, rolls) - 1;
+        const miss = lo >= hi ? null                     // an impossible spread: say nothing
+          : e.hit <= lo ? lo - e.hit + 1
+          : e.hit > hi ? e.hit - hi : 0;
+        if (miss != null) claim(COMBAT.bonusWeight, gauss(miss, COMBAT.bonusSigma),
+                                `rolled ${rolls.join(", ")}`);
+      } else if (rolls.length) {
+        claim(COMBAT.bonusWeight, 0, `rolled ${rolls.join(", ")}`);
+      }
+      if (row.reach) {
+        const d = entryDistance(e);
+        claim(COMBAT.reachWeight, d == null ? 0 : gauss(d - Number(row.reach), COMBAT.reachSigma),
+              `${row.reach} ft.`);
+      }
+    }
+
+    // Damage type and amount are asked the same way of attacks and of saves.
+    if (row.dmgType) {
+      const t = norm(row.dmgType);
+      const w = rarity.weight(featureKey("damageDealt", t));
+      claim(w, (e.dmgTypes || []).indexOf(t) >= 0 ? 1 : 0, `${t} damage`);
+    }
+    const dmg = parseDamageField(row.dmg);
+    if (dmg) {
+      const fit = damageFit(dmg, e.damages, row.dmgType ? norm(row.dmgType) : "");
+      claim(COMBAT.damageWeight, fit, dmg.kind === "dice"
+        ? `${dmg.n}d${dmg.sides}${dmg.mod ? (dmg.mod > 0 ? "+" : "") + dmg.mod : ""}`
+        : `${dmg.totals.join(", ")} damage`);
+    }
+    if (row.condition) {
+      const c = norm(row.condition);
+      const w = rarity.weight(featureKey("inflicts", c));
+      claim(w, (e.conditions || []).indexOf(c) >= 0 ? 1 : 0, c);
+    }
+
+    return { earned, total, complete, parts, entry: e };
+  }
+
+  /* Score every combat row the party filled in. Returns credit and supplied in nats, to
+     be folded into the same F7 denominator as everything else. */
+  function scoreCombat(m, obs, rarity) {
+    const out = { credit: 0, supplied: 0, hits: [], misses: [] };
+    const rows = [].concat(
+      (obs.attacks || []).map(r => ({ row: r, isSave: false })),
+      (obs.saves || []).map(r => ({ row: r, isSave: true })));
+    if (!rows.length) return out;
+
+    const entries = m.everyEntry || [];
+
+    rows.forEach(({ row, isSave }) => {
+      /* An empty row is a row the user opened and did not fill in. It is not an
+         observation and must not become one. */
+      const probe = fitRow(row, {}, rarity, isSave);
+      if (probe.total <= 0) return;
+      out.supplied += probe.total;
+
+      if (!entries.length) {
+        out.misses.push({ facet: isSave ? "save" : "attack", value: rowLabel(row, isSave),
+                          weight: -(+(probe.total * TUNING.missFactor).toFixed(3)),
+                          why: "this statblock has no actions to compare" });
+        out.credit -= probe.total * TUNING.missFactor;
+        return;
+      }
+
+      let best = null;
+      entries.forEach(e => {
+        const f = fitRow(row, e, rarity, isSave);
+        if (!best || f.earned > best.earned) best = f;
+      });
+
+      /* THE PAIRING BONUS. Everything in the row was true of ONE action, which is a
+         much rarer coincidence than the same facts scattered across a statblock. */
+      const credit = best.complete && best.parts.length > 1
+        ? Math.min(best.total, best.earned * TUNING.pairingBonus)
+        : best.earned;
+      const shortfall = (best.total - best.earned) * TUNING.missFactor;
+      out.credit += credit - shortfall;
+
+      if (credit > 0) {
+        out.hits.push({ facet: isSave ? "save" : "attack",
+                        value: `${rowLabel(row, isSave)} — ${best.entry.name || "an action"}`,
+                        weight: +credit.toFixed(3) });
+      }
+      if (shortfall > 0) {
+        out.misses.push({ facet: isSave ? "save" : "attack", value: rowLabel(row, isSave),
+                          weight: -(+shortfall.toFixed(3)),
+                          why: best.parts.length
+                            ? `the closest is ${best.entry.name || "an action"}, which doesn't match all of it`
+                            : "nothing on this statblock does that" });
+      }
+    });
+    return out;
+  }
+
+  /* What the row said, for the explanation. Only the fields that were filled in. */
+  function rowLabel(row, isSave) {
+    const bits = [];
+    if (isSave) {
+      if (row.abil) bits.push(`${row.abil} save`);
+      if (row.dc) bits.push(`DC ${row.dc}`);
+      if (row.area) bits.push(`${row.area} ft.`);
+    } else {
+      if (row.count > 1) bits.push(`${row.count}×`);
+      if (row.kind) bits.push(String(row.kind));
+      if (row.rolls) bits.push(`rolled ${row.rolls}`);
+      if (row.reach) bits.push(`${row.reach} ft.`);
+    }
+    if (row.dmg) bits.push(String(row.dmg));
+    if (row.dmgType) bits.push(String(row.dmgType));
+    if (row.condition) bits.push(String(row.condition));
+    return bits.join(", ") || "an action";
+  }
+
+  /* ============================================================
      Observations
      -----------
      Everything is optional. A field the user did not supply contributes nothing at all,
@@ -728,6 +1002,17 @@
       raw += num.credit;
       supplied += num.supplied;
       num.hits.forEach(h => forEvidence.push(h));
+    }
+
+    /* Combat rows — the attacks and saves the party watched, each matched against one
+       entry rather than against the monster's rolled-up tags. Same units, same F7
+       denominator; it is ordinary evidence and gets no special treatment. */
+    const cmb = scoreCombat(m, obs, rarity);
+    if (cmb.supplied) {
+      raw += cmb.credit;
+      supplied += cmb.supplied;
+      cmb.hits.forEach(h => forEvidence.push(h));
+      cmb.misses.forEach(h => against.push(h));
     }
 
     if (m.partial) raw *= TUNING.partialPenalty;
@@ -984,6 +1269,13 @@
     if (fields.some(f => asList(obs[f]).filter(Boolean).length)) return true;
     if (obs.damage && Object.keys(obs.damage).length) return true;
     if (typeof obs.ac === "number" || typeof obs.hp === "number") return true;
+    /* Bounds from the dice, and the attacks and saves the party watched. Both are
+       evidence on their own — "16 hit, 13 missed" is a complete observation and
+       someone who types only that must not be told they have said nothing. */
+    if (["acRange", "hpRange", "dcRange"].some(k => obs[k] &&
+        (obs[k].lo != null || obs[k].hi != null))) return true;
+    if ([].concat(obs.attacks || [], obs.saves || [])
+        .some(r => r && Object.keys(r).some(k => r[k] !== "" && r[k] != null))) return true;
     // Appearance alone is thin evidence, but it is evidence — and it is what someone
     // with nothing but "it was a big hairy ape thing" has to offer. A heard name is
     // better evidence than that and often all a player has.
@@ -993,5 +1285,6 @@
 
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
            buildRarity, buildNumerics, buildLegacy, scoreNumerics, gaussian, sourceFilter,
-           candidateFeatureSet, scoreMonster, rank, hasEvidence, confidence };
+           candidateFeatureSet, scoreMonster, rank, hasEvidence, confidence,
+           COMBAT, scoreCombat, parseDamageField };
 });

@@ -454,24 +454,56 @@ async function main() {
     section("playtest feedback: how it fought");
     {
       const { ctx, page } = await fresh(browser);
-      const picked = await page.evaluate(() => {
-        const pick = (g, l) => {
-          const b = [...document.querySelectorAll(`#${g} button`)]
-            .find(x => x.textContent.trim().toLowerCase() === l);
-          if (b) { b.click(); return true; }
-          return false;
-        };
-        return [pick("pick-attackKinds", "ranged spell"),
-                pick("pick-saveAbilities", "dex"),
-                pick("pick-attacksPerTurn", "2")];
-      });
-      assertEqual("all three fight pickers exist and take a click", picked, [true, true, true]);
+
+      /* One row per action. The whole point is that the fields are true of the SAME
+         action, which the old three-bags-of-chips version could not express. */
+      await page.click("#atk-add");
+      const fields = await page.evaluate(() =>
+        [...document.querySelectorAll('#atk-rows [data-field]')].map(x => x.dataset.field));
+      assert("an attack row asks how many, what kind, what it rolled, how far, and what damage",
+        ["count", "kind", "rolls", "reach", "dmg", "dmgType", "condition"]
+          .every(f => fields.includes(f)));
+
+      await page.selectOption('#atk-rows [data-field="kind"]', "melee weapon");
+      await page.selectOption('#atk-rows [data-field="dmgType"]', "fire");
       await page.waitForTimeout(1400);
 
-      const txt = await resultsText(page);
-      assert("something ranks on how it fought alone", /1\./.test(txt));
-      assert("...and the reasons name what was reported",
-        /ranged spell/i.test(txt) || /dex/i.test(txt));
+      const paired = await resultsText(page);
+      assert("a filled row ranks something", /1\./.test(paired));
+      /* THE BUG THIS FEATURE EXISTS TO FIX. Scored against the monster, "a melee
+         attack" and "fire damage" matched every dragon. Scored against one entry it
+         has to be a creature whose melee attack itself deals fire. */
+      assert("...and the reason names the single action that explains both",
+        /melee weapon/i.test(paired) && /fire/i.test(paired));
+      const top = await page.evaluate(() =>
+        (document.querySelector("#results .result .name, #results .result") || {}).textContent || "");
+      assert("a creature whose own melee attack burns, not merely one with a breath weapon",
+        /azer|magmin|salamander|elemental|hell|fire/i.test(top + paired));
+
+      // Counts add up to attack rolls per turn, rather than being asked for twice.
+      await page.fill('#atk-rows [data-field="count"]', "2");
+      await page.waitForTimeout(900);
+      const total = await page.$eval("#atk-total", el => el.textContent);
+      assert("the attack total is derived from the rows and shown back", /2 attack rolls/.test(total));
+
+      // A save row is a different shape and gets different questions.
+      await page.click("#sav-add");
+      const saveFields = await page.evaluate(() =>
+        [...document.querySelectorAll('#sav-rows [data-field]')].map(x => x.dataset.field));
+      assert("a save row asks which save, the DC, the area and what it left us with",
+        ["abil", "dc", "area", "condition"].every(f => saveFields.includes(f)));
+
+      await page.selectOption('#sav-rows [data-field="abil"]', "dex");
+      await page.fill('#sav-rows [data-field="dc"]', "18");
+      await page.waitForTimeout(1200);
+      assert("the save row ranks too", /dex save/i.test(await resultsText(page)));
+
+      // Rows are removable, and removing the last one leaves no residue.
+      await page.click('#sav-rows .rowdel');
+      await page.waitForTimeout(600);
+      const gone = await page.evaluate(() => document.querySelectorAll("#sav-rows .combatrow").length);
+      assertEqual("a row can be removed again", gone, 0);
+
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
     }

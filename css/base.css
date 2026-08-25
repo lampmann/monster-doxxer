@@ -111,6 +111,25 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .sym-chosen .chip::after { content: " \00d7"; color: var(--muted-fg); }
 .sym-chosen .chip.on::after { color: #fff; }
 
+/* ----- combat rows: one observed action per row -----
+   Wraps rather than scrolls, because on a narrow window a row that scrolls sideways
+   hides the fields nobody thought to look for. Each field carries its own label so a
+   wrapped row still reads. */
+.combatrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .3rem .5rem;
+             border-top: 1px solid var(--border-hair); padding: .35rem .1rem; }
+.combatrow:first-child { border-top: 0; }
+.rowfield { display: inline-flex; flex-direction: column; gap: .05rem; }
+.rowfield .hint { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; }
+.rowfield > .hint + .hint { display: none; }        /* the suffix, folded into the label row */
+.combatrow .txt, .combatrow .rowsel { font-size: .85rem; padding: .1rem .2rem; }
+.rowdel { margin-left: auto; align-self: center; border: 0; background: none;
+          color: var(--muted-fg); font-size: 1.1rem; line-height: 1; padding: 0 .3rem; }
+.rowdel:hover { color: var(--danger); }
+.addrow { border: 1px dashed var(--btn-border); background: none; color: var(--muted-fg);
+          font: inherit; font-size: .8rem; padding: .15rem .5rem; margin: .3rem .1rem;
+          border-radius: var(--radius); }
+.addrow:hover { color: var(--btn-fg); border-style: solid; }
+
 /* ----- tri-state source filter (F16), lifted from pmcrwf's filter idiom ----- */
 .fgroup { display: grid; grid-template-columns: 5.5rem 1fr; gap: .3rem; align-items: start;
           padding: 2px 0; border-top: 1px solid var(--border-hair); }

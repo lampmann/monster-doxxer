@@ -101,6 +101,14 @@
     const n = noun || "it";
     if (!range) return "";
     if (range.contradiction) {
+      /* Both shapes contradict for the same underlying reason — one target, one set of
+         modifiers, and the numbers say otherwise — but they are contradicted by
+         different things, and a message about hits and misses is nonsense when the
+         user never mentioned either. */
+      if (range.kind === "spread") {
+        return `Those can't all be one attack — ${range.spread} apart is more than a ` +
+               `d20 can swing. Two different attacks, or a typo?`;
+      }
       return `Those can't both be true — something at ${range.lo} failed but ` +
              `something at ${range.hi} succeeded. Different attackers, cover, or a typo?`;
     }
@@ -111,6 +119,40 @@
     }
     if (range.hi != null) return `${n} is at most ${range.hi}.`;
     return `${n} is at least ${range.lo + 1}.`;
+  }
+
+  /* BOUNDS FROM A SPREAD, not from successes and failures.
+
+     The other three numbers here are read off which rolls beat a target. An attack
+     BONUS is read off the totals themselves, with no target involved: a d20 total is
+     the bonus plus something in 1..20, so
+
+         total - 20 <= bonus <= total - 1
+
+     for every total, and n totals intersect to
+
+         max(totals) - 20 <= bonus <= min(totals) - 1.
+
+     One roll leaves a 20-wide window, which is honest rather than useful. Two rolls
+     eleven apart leave nine. It narrows fast because it is driven by the SPREAD, and a
+     party that reports "it rolled a 22 and a 9 at us" has pinned the bonus to +2..+8
+     without anyone having noticed a number they weren't told.
+
+     Reported in the same (lo, hi] shape as everything else so one distance function
+     covers all four, hence the extra -1 on the lower bound: bonus > max-21 is the same
+     claim as bonus >= max-20, and keeping the convention matters more than saving a
+     subtraction.
+
+     A spread of 20 or more on one d20 with a constant modifier is impossible, so it is
+     reported as a contradiction — usually two different attacks with different bonuses
+     typed into one box, which is worth saying out loud. */
+  function spreadBounds(totals, sides) {
+    const t = (totals || []).filter(Number.isFinite);
+    if (!t.length) return null;
+    const d = sides || 20;
+    const lo = Math.max.apply(null, t) - d - 1;   // exclusive
+    const hi = Math.min.apply(null, t) - 1;       // inclusive
+    return { lo, hi, contradiction: lo >= hi, kind: "spread", spread: Math.max.apply(null, t) - Math.min.apply(null, t) };
   }
 
   /* The two text boxes a user fills in, straight to a range. Kept here rather than in
@@ -132,6 +174,7 @@
     inRange: inside,
     rangeWidth: width,
     describeRange: describe,
+    spreadBounds,
     fromFields,
   };
 });
