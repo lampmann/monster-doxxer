@@ -35,7 +35,7 @@ const NAMES = require("../src/names.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0 };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0, combat: 0, spells: 0, reprep: 0 };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -54,6 +54,9 @@ function parseArgs(argv) {
     else if (a === "--heard") out.heard = Number(next());
     else if (a === "--misheard") out.misheard = Number(next());
     else if (a === "--boss-drift") out.bossDrift = Number(next());
+    else if (a === "--combat") out.combat = Number(next());
+    else if (a === "--spells") out.spells = Number(next());
+    else if (a === "--reprep") out.reprep = Number(next());
     else if (a === "--rolls") out.rolls = Number(next());
     else if (a === "--quiet") out.quiet = true;
     else if (a === "--help" || a === "-h") { console.log(HELP); process.exit(0); }
@@ -77,6 +80,9 @@ const HELP = `eval/run.js — corrupt real statblocks, measure top-5 recall
   --heard <0..1>    rate at which the party caught a name the DM said
   --misheard <0..1> ...of which this share are the WRONG name entirely
   --boss-drift <0..1> rate at which the DM promoted an ordinary monster to a boss
+  --combat <0..1>     rate at which the party describes one action it watched
+  --spells <0..1>     rate at which the party names spells it saw cast
+  --reprep <0..1>     ...and rate at which the DM had swapped one of those out
   --rolls <0..1>    rate at which AC is given as dice rolled, not remembered
   --quiet           results only`;
 
@@ -176,6 +182,7 @@ function opts(args, extra) {
                synonymRate: args.synonyms,
                heardRate: args.heard, mishearRate: args.misheard, allNames: args.allNames,
                bossDriftRate: args.bossDrift, rollRate: args.rolls,
+               combatRate: args.combat, spellRate: args.spells, reprepRate: args.reprep,
                isColour: w => APP.COLOURS.has(APP.stem(w)),
                isMorphology: w => APP.MORPHOLOGY.has(APP.stem(w)),
                isVisual: APP.isVisual },

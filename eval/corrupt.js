@@ -86,6 +86,11 @@ const DEFAULTS = {
   mishearRate: 0.1,       // ...or got completely wrong. See below.
   bossDriftRate: 0,       // probability the DM added legendary/lair to a monster without it
   rollRate: 0,            // probability the party reports DICE instead of remembered numbers
+  combatRate: 0,          // probability the party describes one action it watched — see below
+  combatRecall: 0.6,      // ...and how much of that action they can actually say
+  spellRate: 0,           // probability the party names spells it cast
+  spellRecall: 0.4,       // ...and what fraction of its list they caught
+  reprepRate: 0,          // probability the DM had swapped one of those spells out
 };
 
 /* ON heardRate — a name the party heard.
@@ -250,6 +255,85 @@ function corrupt(m, r, opts) {
     }
   }
 
+  /* ONE ACTION, AS THE PARTY WATCHED IT.
+
+     The combat rows exist because the fields have to be true of the SAME action, so
+     the harness has to generate them that way too: pick one real entry off the
+     statblock and report a subset of what it does. Generating each field from a
+     different action would test the flattened version the rows replaced, and would
+     score better than the feature deserves.
+
+     Everything reported is TRUE — the dice and the damage come from the entry's own
+     numbers — and thinned by combatRecall, because a party at a table remembers some
+     of an action and not all of it. What they cannot do is invent a pairing, which is
+     why there is no stray-rate here: the failure mode this models is forgetting, and
+     misremembering is already modelled everywhere else. */
+  if (o.combatRate > 0 && r() < o.combatRate) {
+    const usable = (m.everyEntry || []).filter(e =>
+      (e.isAttack && e.atkKinds.length) || e.saveAbil);
+    if (usable.length) {
+      const e = pick(r, usable);
+      const keep = () => r() < o.combatRecall;
+      const dmg = e.damages.filter(d => d.dice && d.type);
+      const d = dmg.length ? pick(r, dmg) : null;
+      const row = {};
+      if (e.isAttack) {
+        if (keep() && e.atkKinds.length)
+          row.kind = String(e.atkKinds[0]).replace(/\s*attack\s*$/i, "").toLowerCase();
+        if (keep() && typeof e.hit === "number")
+          row.rolls = [1 + Math.floor(r() * 20) + e.hit, 1 + Math.floor(r() * 20) + e.hit].join(", ");
+        const dist = e.reach != null ? e.reach : (e.range ? parseInt(e.range, 10) : null);
+        if (keep() && dist) row.reach = dist;
+      } else {
+        if (keep() && e.saveAbil) row.abil = String(e.saveAbil).toLowerCase();
+        if (keep() && typeof e.dc === "number") row.dc = String(e.dc);
+        if (keep() && e.area) row.area = e.area.size;
+      }
+      if (d && keep()) {
+        let total = d.dice.mod;
+        for (let i = 0; i < d.dice.n; i++) total += 1 + Math.floor(r() * d.dice.sides);
+        row.dmg = String(total);
+      }
+      if (d && keep()) row.dmgType = d.type;
+      if (keep() && e.conditions.length) row.condition = pick(r, e.conditions);
+      if (Object.keys(row).length) {
+        obs[e.isAttack ? "attacks" : "saves"] = [row];
+        notes.push(`${e.isAttack ? "attack" : "save"}: ${e.name || "an action"}`);
+      }
+    }
+  }
+
+  /* SPELLS, AND THE DM RE-PREPARING THEM.
+
+     Two things to model and they pull opposite ways. The party catches some fraction
+     of what was cast (spellRecall), which is ordinary dropout. But a DM who re-prepped
+     the caster hands them a spell the statblock does not list, and THAT is the case
+     the volatile discount exists for — the same shape as boss drift. reprepRate
+     generates it: swap one reported spell for one the monster does not have. */
+  if (o.spellRate > 0 && r() < o.spellRate && (m.spells || []).length) {
+    const caught = m.spells.filter(() => r() < o.spellRecall);
+    if (caught.length) {
+      obs.spells = caught.slice(0, 5);
+      /* PER SPELL, not per query. A GM who re-prepares a caster does not swap one
+         spell — they rebuild the list, and each thing the party names is independently
+         likely to be gone. Applied per-spell so `--reprep 0.5` means half of what they
+         report is no longer on the sheet, which is the scenario the volatile discount
+         is actually for. */
+      if (o.reprepRate > 0 && o.vocab && (o.vocab.spells || []).length) {
+        obs.spells = obs.spells.map(sp => {
+          if (r() >= o.reprepRate) return sp;
+          const swap = pick(r, o.vocab.spells);
+          if (m.spells.includes(swap)) return sp;          // must be false to be a lie
+          notes.push(`spells: ${sp} -> ${swap} (the DM re-prepped it)`);
+          return swap;
+        });
+      }
+      // How it casts is structural, so the party's read on it is not corrupted here.
+      if (r() < o.keepRate && (m.castingKind || []).length) obs.castingKind = m.castingKind.slice();
+      if (r() < o.keepRate && (m.castingAbility || []).length) obs.castingAbility = m.castingAbility[0];
+    }
+  }
+
   /* BOSS DRIFT — handoff §7's second open question, made measurable.
 
      "Should legendary and lair actions be a separate trust tier? They are strong
@@ -400,6 +484,12 @@ function buildVocab(monsters) {
     SET_FIELDS.forEach(f => full[f].forEach(v => vocab[f].add(v)));
   });
   SET_FIELDS.forEach(f => { vocab[f] = [...vocab[f]]; });
+  /* Spells the corpus actually uses, for the re-prep case. Drawn from the corpus so a
+     swapped spell is one some creature really casts — an invented spell would be a
+     miss against every candidate equally and would measure nothing. */
+  const spells = new Set();
+  monsters.forEach(m => (m.spells || []).forEach(sp => spells.add(sp)));
+  vocab.spells = [...spells];
   return vocab;
 }
 
