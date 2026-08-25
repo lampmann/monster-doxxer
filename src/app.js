@@ -81,6 +81,10 @@
     tabs: [], activeId: "",
     sources: {},              // { CODE: "ignore" | "include" | "exclude" } — shared
     party: { level: null, size: 4 },   // a fact about the table, so shared across tabs
+    /* Whether to drop unique adventure NPCs. A fact about the TABLE — which module you
+       are in — so shared across tabs like the book filter, and off by default because a
+       named NPC really can be what you fought. */
+    hideNamed: false,
     ranked: [], selected: null,
   };
 
@@ -227,6 +231,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         tabs: S.tabs, activeId: S.activeId, sources: S.sources, party: S.party,
+        hideNamed: S.hideNamed,
       }));
     } catch (e) { /* private browsing, quota — not worth interrupting a fight over */ }
   }
@@ -247,8 +252,10 @@
     }
     if (d) {
       S.sources = d.sources || {};
+      S.hideNamed = !!d.hideNamed;
       if (d.party) S.party = Object.assign({ level: null, size: 4 }, d.party);
     }
+    $("in-hide-named").checked = S.hideNamed;
     $("in-level").value = S.party.level == null ? "" : S.party.level;
     $("in-party").value = S.party.size == null ? "" : S.party.size;
     loadActive();
@@ -350,11 +357,28 @@
       const cells = DMG_STATES.map(([state]) =>
         `<td class="opt"><input type="radio" name="dmg-${d}" data-dmg="${d}" value="${state}"` +
         `${cur === state ? " checked" : ""} title="${esc(state)}"></td>`).join("");
-      return `<tr><td class="dt">${esc(d)}</td>${cells}` +
-             `<td class="opt"><button class="fctrl-btn" data-dmg-clear="${d}"` +
-             `${cur ? "" : " disabled"} title="we never tested this">clear</button></td></tr>`;
+      // No clear button: clicking the selected option again unselects it, which is
+      // what people try first anyway. Unselected means "we never tested this", and
+      // costs the candidate nothing (F2).
+      return `<tr><td class="dt">${esc(d)}</td>${cells}</tr>`;
     }).join("");
   }
+
+  /* Clicking the selected damage option again unselects it.
+
+     This has to hang off `click` rather than `change`, because clicking an already-
+     checked radio fires no change event at all — the browser sees no change. So the
+     comparison is against our own state, not the DOM's: if the option clicked is the
+     one already recorded, the click means "undo that", and preventDefault stops the
+     radio from staying visually checked before the re-render catches up. */
+  document.addEventListener("click", e => {
+    const dmg = e.target.closest && e.target.closest("[data-dmg]");
+    if (!dmg) return;
+    if (S.obs.damage[dmg.dataset.dmg] !== dmg.value) return;   // a change: let `change` have it
+    e.preventDefault();
+    delete S.obs.damage[dmg.dataset.dmg];
+    persist(); renderDamage(); renderResults(); renderSuggestions();
+  });
 
   function renderSymptoms() {
     const chosen = S.obs.symptoms.map(id => {
@@ -366,16 +390,57 @@
 
     const q = $("sym-search").value.trim();
     const box = $("sym-results");
-    if (!q) { box.innerHTML = ""; return; }
+
+    /* WITH AN EMPTY BOX, SHOW EVERYTHING, GROUPED.
+
+       This used to render nothing at all until you typed something that happened to
+       match, which made the single most valuable input in the tool — worth four times
+       what any other facet is — look like an empty text field that does nothing. You
+       cannot search a list of 111 sentences you have never seen. Browsing is the
+       default; searching narrows it. */
+    if (!q) {
+      const taken = new Set(S.obs.symptoms);
+      const groups = new Map();
+      S.ontology.symptoms.forEach(s => {
+        if (taken.has(s.id)) return;
+        const g = s.group || "other";
+        if (!groups.has(g)) groups.set(g, []);
+        groups.get(g).push(s);
+      });
+      if (!groups.size) { box.innerHTML = `<span class="hint">Everything is already picked.</span>`; return; }
+      box.innerHTML = [...groups.entries()]
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([g, list]) =>
+          `<div class="sym-group"><div class="sym-group-label">${esc(GROUP_LABELS[g] || g)}</div>` +
+          list.map(s => `<button class="sym-hit" data-sym-add="${esc(s.id)}">${esc(s.player)}</button>`).join("") +
+          `</div>`).join("");
+      return;
+    }
+
     const hits = window.lookup(S.ontology, q, 12).filter(h => !S.obs.symptoms.includes(h.id));
     box.innerHTML = hits.length
       ? hits.map(h => `<button class="sym-hit" data-sym-add="${esc(h.id)}">${esc(h.player)}</button>`).join("")
-      : `<span class="hint">Nothing in the ontology matches that yet. Try plainer words &mdash; ` +
-        `&ldquo;it vanished&rdquo;, &ldquo;my sword bounced off&rdquo;.</span>`;
+      : `<span class="hint">Nothing matches that yet. Try plainer words &mdash; ` +
+        `&ldquo;it vanished&rdquo;, &ldquo;my sword bounced off&rdquo; &mdash; or clear the box ` +
+        `to browse all ${S.ontology.symptoms.length}.</span>`;
   }
+
+  /* The ontology's group keys are terse because they are data. These are what a player
+     reads above each block. An unknown group falls through to its own key. */
+  const GROUP_LABELS = {
+    durability: "Staying alive", damage: "Damage it dealt", condition: "What it did to us",
+    movement: "How it moved", senses: "What it noticed", turn: "Its turn",
+    reaction: "When we hit it", offence: "How it fought", disguise: "Before we knew",
+    multiply: "When it was hurt", meta: "Odder things",
+  };
 
   /* F16's tri-state filter, grouped Books / Adventures / Other. */
   function renderSources() {
+    const named = S.monsters.reduce((n, m) => n + (m.isNamed ? 1 : 0), 0);
+    const el = $("named-count");
+    if (el) el.textContent = named
+      ? ` \u2014 ${named} unique adventure NPCs, e.g. Acererak. Off by default: one of them really might be what you fought.`
+      : "";
     const groups = window.groupRows(S.srcRows);
     if (!groups.length) { $("src-filter").innerHTML = `<span class="hint">no sources loaded</span>`; return; }
     $("src-filter").innerHTML = groups.map(g => {
@@ -494,6 +559,7 @@
       appearanceScores, nameScores, crPlausibility: crScores,
       // F3's fourth tier: which symptoms a DM adds and removes freely, from the ontology.
       volatileSymptoms: S.ontology && S.ontology.volatileIds,
+      hideNamed: S.hideNamed,
       collapseByName: true, limit: WINDOW, keepMonster: true,
     });
     S.ranked = ranked;
@@ -685,13 +751,6 @@
       return;
     }
 
-    const dclear = t.closest("[data-dmg-clear]");
-    if (dclear) {
-      delete S.obs.damage[dclear.dataset.dmgClear];
-      persist(); renderDamage(); renderResults(); renderSuggestions();
-      return;
-    }
-
     const src = t.closest("[data-src]");
     if (src) {
       const code = src.dataset.src;
@@ -802,6 +861,12 @@
     if (dmg) {
       S.obs.damage[dmg.dataset.dmg] = dmg.value;
       persist(); renderDamage(); renderResults(); renderSuggestions();
+      return;
+    }
+
+    if (e.target.id === "in-hide-named") {
+      S.hideNamed = e.target.checked;
+      persist(); renderResults(); renderSuggestions();
       return;
     }
     if (e.target.id === "in-retuned") {

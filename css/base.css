@@ -96,6 +96,12 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 #sym-results .sym-hit { display: block; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--border-hair);
                         background: none; padding: .15rem .2rem; font-size: .85rem; }
 #sym-results .sym-hit:hover { background: var(--hover-bg); }
+/* Browsing all 111 needs more room than a search's dozen hits, and a heading per
+   group so the list reads as a menu rather than a wall. */
+#sym-results:not(.searching) { max-height: 22rem; }
+.sym-group + .sym-group { margin-top: .5rem; }
+.sym-group-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+                   color: var(--muted-fg); padding: .15rem .2rem; }
 .sym-chosen { margin-bottom: .3rem; }
 .sym-chosen .chip { display: inline-block; }
 .sym-chosen .chip::after { content: " \00d7"; color: var(--muted-fg); }

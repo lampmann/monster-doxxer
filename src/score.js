@@ -789,8 +789,17 @@
     const o = opts || {};
     const allowed = sourceFilter(o.sources);
     const legacy = o.legacy || FALLBACK_LEGACY;
-    let out = (allowed ? monsters.filter(m => allowed(m.source)) : monsters)
-      .map(m => scoreMonster(m, obs, rarity, o));
+
+    /* The second and last legitimate filter, and it is the same argument as F16's.
+       5e.tools marks unique adventure NPCs — 1,220 of 4,528 records, 27% of the corpus.
+       They are real statblocks and can be exactly what you fought, so this is OFF by
+       default and never inferred. But a party that knows it is not playing that module
+       is carrying a quarter of the bestiary as noise, and no amount of evidence removes
+       a candidate the evidence cannot distinguish. Like the source filter, it is a fact
+       about the TABLE that the tool cannot know and the user can. */
+    let pool = allowed ? monsters.filter(m => allowed(m.source)) : monsters;
+    if (o.hideNamed) pool = pool.filter(m => !m.isNamed);
+    let out = pool.map(m => scoreMonster(m, obs, rarity, o));
 
     /* Score first; the priors only ever settle an EXACT tie.
 

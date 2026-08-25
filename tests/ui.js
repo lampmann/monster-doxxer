@@ -333,6 +333,73 @@ async function main() {
       await ctx.close();
     }
 
+
+    /* ---------------------------------------------------------- */
+    section("playtest feedback: the symptom list is browsable");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* It used to render nothing until you typed a matching term, which made the
+         highest-value input in the tool look like a text box that did nothing. */
+      const b = await page.evaluate(() => ({
+        groups: document.querySelectorAll("#sym-results .sym-group").length,
+        options: document.querySelectorAll("#sym-results .sym-hit").length,
+      }));
+      assert("every symptom is listed before you type anything", b.options > 100);
+      assert("...grouped, rather than as one wall of sentences", b.groups > 5);
+
+      // Searching still narrows it.
+      await page.fill("#sym-search", "healed between");
+      await page.waitForTimeout(600);
+      const narrowed = await page.evaluate(() =>
+        document.querySelectorAll("#sym-results .sym-hit").length);
+      assert("typing narrows the list", narrowed > 0 && narrowed < b.options);
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("playtest feedback: damage options toggle off");
+    {
+      const { ctx, page } = await fresh(browser);
+      assertEqual("the clear buttons are gone",
+        await page.evaluate(() => document.querySelectorAll("[data-dmg-clear]").length), 0);
+
+      const click = () => page.evaluate(() =>
+        document.querySelector('input[data-dmg="fire"][value="immune"]').click());
+      const checked = () => page.evaluate(() =>
+        document.querySelector('input[data-dmg="fire"][value="immune"]').checked);
+
+      await click(); await page.waitForTimeout(500);
+      assertEqual("clicking an option selects it", await checked(), true);
+      await click(); await page.waitForTimeout(500);
+      assertEqual("clicking it again unselects it", await checked(), false);
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("playtest feedback: named NPCs can be hidden");
+    {
+      const { ctx, page } = await fresh(browser);
+      await pickSymptom(page, "healed between", "It healed between rounds");
+      const names = () => page.evaluate(() =>
+        [...document.querySelectorAll("#results .result-name button")].map(x => x.textContent.trim()));
+
+      const before = await names();
+      await page.evaluate(() => document.getElementById("in-hide-named").click());
+      await page.waitForTimeout(1200);
+      const after = await names();
+
+      assert("the filter is off by default — a named NPC can be what you fought",
+        before.length > 0);
+      assert("turning it on removes at least one candidate", 
+        before.some(n => !after.includes(n)));
+      assert("...and backfills rather than shortening the list",
+        after.length >= Math.min(before.length, 10));
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
     /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {

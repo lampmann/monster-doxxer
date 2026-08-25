@@ -345,6 +345,12 @@
       reactions: parseActionList(raw.reaction, "reaction"),
       legendary: parseActionList(raw.legendary, "legendary"),
       hasLair: !!(raw.legendaryGroup || (typeof raw.cr === "object" && raw.cr && raw.cr.lair)),
+      /* 5e.tools marks unique adventure NPCs — Sandesyl Morgia, Jim Darkmagic, a named
+         cultist from one module. 1,220 of 4,528 records, 27% of the corpus. They are
+         real statblocks and can genuinely be what you fought, so they are never dropped;
+         but a party that knows it is not in that adventure wants them out of the way.
+         See F16's filter, which this feeds. */
+      isNamed: !!raw.isNamedCreature,
       spellcasting: asArray(raw.spellcasting).map(sc => ({
         name: sc.name || "Spellcasting",
         text: stripTags(flattenEntries(sc.headerEntries)),
