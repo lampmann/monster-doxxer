@@ -402,10 +402,27 @@
     persist(); renderDamage(); renderResults(); renderSuggestions();
   });
 
+  /* THE SENTENCE, THEN THE MECHANIC IT MEANS.
+
+     Eleven sentences in the offence group read as near-synonyms of each other, because
+     the ontology deliberately never says "Pack Tactics" — the players never heard the
+     name. That is right for the sentence and wrong for the person choosing between
+     them, who has no way to tell what any of them will actually look for. The bracket
+     restores it without putting the jargon in the player's mouth.
+
+     Read straight off the candidate list, so it cannot drift from what the symptom
+     really matches. */
+  function symLabel(s) {
+    const mech = window.mechanicsLabel ? window.mechanicsLabel(s) : "";
+    return esc(s.player) + (mech ? ` <span class="sym-mech">(${esc(mech)})</span>` : "");
+  }
+
   function renderSymptoms() {
     const chosen = S.obs.symptoms.map(id => {
       const s = S.ontology.byId[id];
-      return `<button class="chip on" data-sym-remove="${esc(id)}" title="remove">` +
+      const mech = s && window.mechanicsLabel ? window.mechanicsLabel(s) : "";
+      return `<button class="chip on" data-sym-remove="${esc(id)}" ` +
+             `title="${esc(mech ? "looks for: " + mech : "remove")}">` +
              `${esc(s ? s.player : id)}</button>`;
     }).join("");
     $("sym-chosen").innerHTML = chosen;
@@ -434,14 +451,15 @@
         .sort((a, b) => b[1].length - a[1].length)
         .map(([g, list]) =>
           `<div class="sym-group"><div class="sym-group-label">${esc(GROUP_LABELS[g] || g)}</div>` +
-          list.map(s => `<button class="sym-hit" data-sym-add="${esc(s.id)}">${esc(s.player)}</button>`).join("") +
+          list.map(s => `<button class="sym-hit" data-sym-add="${esc(s.id)}">${symLabel(s)}</button>`).join("") +
           `</div>`).join("");
       return;
     }
 
     const hits = window.lookup(S.ontology, q, 12).filter(h => !S.obs.symptoms.includes(h.id));
     box.innerHTML = hits.length
-      ? hits.map(h => `<button class="sym-hit" data-sym-add="${esc(h.id)}">${esc(h.player)}</button>`).join("")
+      ? hits.map(h => `<button class="sym-hit" data-sym-add="${esc(h.id)}">` +
+          `${symLabel(S.ontology.byId[h.id] || h)}</button>`).join("")
       : `<span class="hint">Nothing matches that yet. Try plainer words &mdash; ` +
         `&ldquo;it vanished&rdquo;, &ldquo;my sword bounced off&rdquo; &mdash; or clear the box ` +
         `to browse all ${S.ontology.symptoms.length}.</span>`;

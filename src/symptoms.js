@@ -336,6 +336,44 @@
     return limit ? scored.slice(0, limit) : scored;
   }
 
+  /* THE MECHANICS A SYMPTOM IS ACTUALLY LOOKING FOR, named.
+
+     A player picking "It was much more dangerous when its friends were nearby" cannot
+     tell whether the tool understood them, because the sentence deliberately avoids
+     saying "Pack Tactics" — that is the whole point of the ontology. The cost is that
+     eleven sentences in the offence group read as vague near-synonyms of each other,
+     and picking between them is guesswork.
+
+     So the UI shows the mechanic names in brackets. Derived here rather than written
+     into the JSON as a label field, because a hand-written label is a second copy of
+     the candidate list and would silently stop matching it the first time someone adds
+     a candidate.
+
+     Ordered by p — the strongest explanation first, since that is the one most likely
+     to be what the party actually met. */
+  function mechanicsOf(symptom, limit) {
+    const seen = new Set();
+    const names = (symptom && symptom.candidates || [])
+      .slice()
+      .sort((a, b) => (b.p || 0) - (a.p || 0))
+      .map(c => String(c.mechanic || "").trim())
+      .filter(m => {
+        if (!m || seen.has(m.toLowerCase())) return false;
+        seen.add(m.toLowerCase());
+        return true;
+      });
+    const n = limit == null ? 3 : limit;
+    return { shown: names.slice(0, n), more: Math.max(0, names.length - n) };
+  }
+
+  /* "Pack Tactics", or "charm, domination, possession +1". Empty string when the
+     symptom has no candidates at all, so callers can concatenate it unconditionally. */
+  function mechanicsLabel(symptom, limit) {
+    const { shown, more } = mechanicsOf(symptom, limit);
+    if (!shown.length) return "";
+    return shown.join(", ") + (more ? ` +${more}` : "");
+  }
+
   /* Corpus-wide coverage report. Used by the ontology's own test: a symptom that
      matches nothing is dead weight, and one that matches nearly everything is
      worse than dead — it dilutes the rarity table it feeds. */
@@ -359,5 +397,6 @@
     };
   }
 
-  return { ENTRY_KINDS, ALL_KINDS, FIELD_TESTS, testField, compile, tagMonster, tagAll, lookup, coverage };
+  return { ENTRY_KINDS, ALL_KINDS, FIELD_TESTS, testField, compile, tagMonster, tagAll, lookup,
+           mechanicsOf, mechanicsLabel, coverage };
 });

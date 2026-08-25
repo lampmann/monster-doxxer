@@ -102,6 +102,10 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .sym-group + .sym-group { margin-top: .5rem; }
 .sym-group-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
                    color: var(--muted-fg); padding: .15rem .2rem; }
+/* The mechanic name, subordinate to the sentence: it is there to confirm the tool
+   understood you, not to become the thing you read first. */
+.sym-mech { color: var(--muted-fg); font-size: .78rem; }
+#sym-results .sym-hit:hover .sym-mech { color: inherit; }
 .sym-chosen { margin-bottom: .3rem; }
 .sym-chosen .chip { display: inline-block; }
 .sym-chosen .chip::after { content: " \00d7"; color: var(--muted-fg); }

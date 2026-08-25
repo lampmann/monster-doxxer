@@ -353,6 +353,22 @@ async function main() {
       const narrowed = await page.evaluate(() =>
         document.querySelectorAll("#sym-results .sym-hit").length);
       assert("typing narrows the list", narrowed > 0 && narrowed < b.options);
+
+      /* The sentences avoid naming the mechanic on purpose, which leaves eleven of
+         them in one group reading as near-synonyms. The bracket is how you tell
+         which is which. */
+      await page.fill("#sym-search", "friends were nearby");
+      await page.waitForTimeout(600);
+      const packTactics = await page.evaluate(() => {
+        const b = [...document.querySelectorAll("#sym-results .sym-hit")]
+          .find(x => /friends were nearby/.test(x.textContent));
+        return b ? { text: b.textContent, mech: (b.querySelector(".sym-mech") || {}).textContent } : null;
+      });
+      assert("a symptom names the mechanic it looks for", packTactics &&
+        /\(Pack Tactics\)/.test(packTactics.mech || ""));
+      assert("...after the player's own words, not instead of them",
+        packTactics && /friends were nearby/.test(packTactics.text));
+
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
     }
