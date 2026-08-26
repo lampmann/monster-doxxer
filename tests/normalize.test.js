@@ -227,6 +227,37 @@ section("actions");
   assert("...and it is not an attack", !s.isAttack);
 }
 
+/* ---------- attack markup ---------- */
+section("attack tags read as prose");
+{
+  /* The tag name carries meaning the payload does not, so three tags cannot be
+     stripped generically. Taking the payload of {@atk ms,rs} gave the literal string
+     "ms,rs", which is what the page showed a reader AND what every symptom regex in
+     the ontology had to match against. */
+  const act = entry => N.parseMonster({ name: "X", source: "T", action: [{ name: "A", entries: [entry] }] }).actions[0];
+
+  assertEqual("a melee weapon attack reads as the book prints it",
+    act("{@atk mw} {@hit 8} to hit, reach 5 ft.").text,
+    "Melee Weapon Attack: +8 to hit, reach 5 ft.");
+  assertEqual("...and a combined one says the shared half once (Mind's Eye Matter Smith)",
+    act("{@atk ms,rs} {@hit 5} to hit, range 120 ft.").text,
+    "Melee or Ranged Spell Attack: +5 to hit, range 120 ft.");
+  assertEqual("a to-hit bonus is signed, since it is not a target number",
+    act("{@atk mw} {@hit -1} to hit.").text, "Melee Weapon Attack: -1 to hit.");
+  assertEqual("a save DC keeps the letters that make it one",
+    act("must make a {@dc 15} Constitution saving throw.").text,
+    "must make a DC 15 Constitution saving throw.");
+
+  /* The 2014 and 2024 statblocks use DIFFERENT TAGS. Reading only the older one left
+     every attack in the newer books with no parsed kind at all. */
+  const modern = act("{@atkr m,r} {@hit 5}, reach 5 ft. or range 30/120 ft.");
+  assertEqual("the 2024 tag is read too", modern.atkKinds, ["Melee Attack", "Ranged Attack"]);
+  assertEqual("...and renders without a weapon/spell distinction the 2024 rules dropped",
+    modern.text, "Melee or Ranged Attack: +5, reach 5 ft. or range 30/120 ft.");
+  assertEqual("a purely ranged 2024 attack is recognised as ranged",
+    act("{@atkr r} {@hit 6}, range 150/600 ft.").atkKinds, ["Ranged Attack"]);
+}
+
 /* ---------- multiattack ---------- */
 section("attacks per turn");
 {

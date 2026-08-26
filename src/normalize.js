@@ -51,7 +51,9 @@
   const ABIL_KEYS = ["str", "dex", "con", "int", "wis", "cha"];
   const ATK_KIND = {
     mw: "Melee Weapon Attack", rw: "Ranged Weapon Attack",
-    ms: "Melee Spell Attack", rs: "Ranged Spell Attack", m: "Melee Attack",
+    ms: "Melee Spell Attack", rs: "Ranged Spell Attack",
+    // The 2024 tag's values, which carry no weapon/spell distinction.
+    m: "Melee Attack", r: "Ranged Attack",
   };
 
   const capWord = s => (s ? String(s)[0].toUpperCase() + String(s).slice(1) : "");
@@ -67,9 +69,47 @@
     });
     return out.join("\n");
   }
-  function stripTags(s) {   // {@tag ...} markup -> plain text
+  /* {@tag ...} markup -> plain text.
+
+     THREE TAGS CANNOT BE STRIPPED GENERICALLY, because the tag name carries meaning
+     that the payload alone does not. Taking the payload of {@atk ms,rs} gives the
+     literal string "ms,rs", which is what the statblock display showed and what every
+     symptom regex in the ontology had to match against. Both were wrong: a reader saw
+     "ms,rs 5 to hit" where the book says "Melee or Ranged Spell Attack: +5 to hit",
+     and a regex looking for a ranged attack in honest prose found nothing.
+
+     Everything else really is generic — {@damage 2d6 + 3} is its own payload — so the
+     general rule stays, and the three exceptions run first. */
+  /* TWO TAGS, TEN YEARS APART. The 2014 statblocks write {@atk mw} and encode the
+     weapon/spell distinction; the 2024 ones write {@atkr m} and dropped it, because the
+     rules no longer care. Both have to be read: XMM alone has 651 attacks tagged the new
+     way, and every one of them had NO parsed attack kind at all until this. */
+  const ATK_PART = { m: "Melee", r: "Ranged", mw: "Melee", rw: "Ranged", ms: "Melee", rs: "Ranged" };
+  const ATK_SUFFIX = { m: "", r: "", mw: "Weapon", rw: "Weapon", ms: "Spell", rs: "Spell" };
+  function attackPhrase(spec) {
+    const parts = String(spec).split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+    const known = parts.filter(p => ATK_PART[p]);
+    if (!known.length) return String(spec);
+    /* "mw,rw" is one attack that can be made either way, so it reads "Melee or Ranged
+       Weapon Attack" — the shared suffix is said once, at the end, exactly as the books
+       print it. A mixed pair with different suffixes has no such shorthand; spell it out. */
+    const suffixes = [...new Set(known.map(p => ATK_SUFFIX[p]))];
+    if (suffixes.length === 1) {
+      const kinds = [...new Set(known.map(p => ATK_PART[p]))];
+      return kinds.join(" or ") + (suffixes[0] ? " " + suffixes[0] : "") + " Attack:";
+    }
+    return known.map(p => (ATK_PART[p] + (ATK_SUFFIX[p] ? " " + ATK_SUFFIX[p] : "") + " Attack"))
+      .join(" or ") + ":";
+  }
+
+  function stripTags(s) {
     return (s || "")
       .replace(/{@(?:h|hit)}/gi, "Hit: ")
+      .replace(/{@atkr? ([^}|]+)(?:\|[^}]*)?}/gi, (m, spec) => attackPhrase(spec))
+      // A to-hit bonus is signed. "5 to hit" reads as a target number, which it is not.
+      .replace(/{@hit ([^}|]+)(?:\|[^}]*)?}/gi, (m, n) =>
+        (/^-/.test(n.trim()) ? n.trim() : "+" + n.trim()))
+      .replace(/{@dc ([^}|]+)(?:\|[^}]*)?}/gi, (m, n) => "DC " + n.trim())
       .replace(/{@\w+ ([^}]+)}/g, (m, p) => { const a = p.split("|"); return (a.length > 2 && a[a.length - 1]) ? a[a.length - 1] : a[0]; })
       .replace(/{@\w+}/g, "");
   }
@@ -316,7 +356,7 @@
   function parseAction(a, kind) {
     const raw = flattenEntries(a.entries);
     const plain = stripTags(raw);
-    const atkM = /\{@atk ([^}]+)\}/i.exec(raw);
+    const atkM = /\{@atkr? ([^}|]+)(?:\|[^}]*)?\}/i.exec(raw);
     const kinds = atkM ? atkM[1].split(",").map(s => s.trim()) : [];
     const hitM = /\{@hit ([^}|]+)\}/i.exec(raw);
     const spellAtk = /\{@hitYourSpellAttack/i.test(raw);

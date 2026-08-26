@@ -101,6 +101,21 @@
     // Reach beyond 5 ft on any attack: "it hit me from further away than it should have".
     reach: (m, arg) => [].concat(m.actions || [], m.legendary || [], m.reactions || [])
       .some(a => (a.reach || 0) >= Number(arg)),
+    /* What kind of attack it makes, structurally. `attack.ranged` is true of a Ranged
+       Weapon Attack and a Ranged Spell Attack alike, because the party cannot tell and
+       should not have to: a substring match over the parsed kinds is exactly the
+       distinction that survives at a table. This exists because the prose alternative
+       could not do the job — a regex for "ranged weapon attack" silently missed every
+       ranged SPELL attack in the game. */
+    attack: (m, arg) => (m.attackKinds || []).some(k => norm(k).includes(arg)),
+    /* An attack that reaches at least N feet, counting both thrown/fired range and
+       plain reach — "it attacked us from a long way off" does not distinguish them. */
+    range: (m, arg) => [].concat(m.actions || [], m.legendary || [], m.reactions || [],
+                                 m.bonusActions || [])
+      .some(a => {
+        const r = a.range ? parseInt(String(a.range).split("/")[0], 10) : 0;
+        return Math.max(r || 0, a.reach || 0) >= Number(arg);
+      }),
   };
 
   function testField(m, spec) {

@@ -22,6 +22,7 @@
     "  field                 structural predicate on the statblock, e.g. speed.burrow,",
     "                        sense.tremorsense, condimmune.charmed, immune.fire,",
     "                        dealsdamage.psychic, type.undead, size.huge, lair, legendary,",
+    "                        attack.ranged, attack.spell, range.30, reach.15,",
     "                        spellcasting, language.common, reach.15",
     "",
     "`volatile` marks a symptom whose underlying mechanic GMs add and remove freely, so a",
@@ -725,7 +726,7 @@
       "group": "turn",
       "testable": true,
       "candidates": [
-        { "mechanic": "damaging aura", "p": 0.95, "text": "within \\d+ feet of (?:it|the).{0,120}takes? \\d+ \\(\\d+d\\d+\\)" },
+        { "mechanic": "damaging aura", "p": 0.95, "text": "within \\d+ feet of (?:it|the).{0,200}takes? \\d+ \\(\\d+d\\d+\\)" },
         { "mechanic": "named aura trait", "p": 0.9, "name": "aura" }
       ]
     },
@@ -1006,7 +1007,9 @@
       "aka": ["it had a ranged attack", "it shot at us", "we couldn't close the gap"],
       "group": "offence",
       "candidates": [
-        { "mechanic": "ranged attack", "p": 0.85, "where": ["action"], "text": "ranged weapon attack|range \\d+/\\d+" }
+        { "mechanic": "a ranged attack", "p": 0.9, "field": "attack.ranged" },
+        { "mechanic": "an attack reaching 30 ft. or more", "p": 0.8, "field": "range.30" },
+        { "mechanic": "ranged attack", "p": 0.7, "where": ["action"], "text": "ranged (?:weapon|spell) attack|range \\d+/\\d+" }
       ]
     },
     {
