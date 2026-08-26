@@ -642,6 +642,42 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("a set button keeps its colour under the cursor");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* `button:hover:not(:disabled)` scores (0,2,1) thanks to the element selector and
+         beat `.fbtn.inc` at (0,2,0) however far down the file it sat — so an included
+         source went grey under the cursor, and hovering was the one moment you could
+         not tell include from exclude from neither. */
+      await page.evaluate(() => document.querySelectorAll(".fbtn")[0].click());
+      await page.waitForTimeout(300);
+      // Re-query between clicks: the filter re-renders on every change.
+      await page.evaluate(() => document.querySelectorAll(".fbtn")[1].click());
+      await page.waitForTimeout(300);
+      await page.evaluate(() => document.querySelectorAll(".fbtn")[1].click());
+      await page.waitForTimeout(400);
+
+      const classes = await page.evaluate(() =>
+        [...document.querySelectorAll(".fbtn")].slice(0, 3).map(b => b.className));
+      assertEqual("one source included, one excluded, one left alone",
+        classes, ["fbtn inc", "fbtn exc", "fbtn"]);
+
+      const hoveredBg = async i => {
+        await page.hover(`.fbtn >> nth=${i}`);
+        await page.waitForTimeout(150);
+        return page.evaluate(n =>
+          getComputedStyle(document.querySelectorAll(".fbtn")[n]).backgroundColor, i);
+      };
+      const [inc, exc, none] = [await hoveredBg(0), await hoveredBg(1), await hoveredBg(2)];
+      assert("an included source stays its own colour while hovered", inc !== none);
+      assert("...and an excluded one stays a different colour again", exc !== none && exc !== inc);
+      assert("a source set to neither is the one that greys", /236|ececec/.test(none));
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);

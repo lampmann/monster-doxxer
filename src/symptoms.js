@@ -326,7 +326,16 @@
      and the id itself. The id is written as a sentence for exactly this reason
      (`it-felt-me-through-the-floor`), and leaving it out lost matches where the id said
      the thing more plainly than the prose did. */
-  const phrasesOf = s => [s.player].concat(s.aka, [s.id.replace(/-/g, " ")]);
+  /* Everything a search should be able to find this symptom by.
+
+     THE MECHANIC NAMES BELONG HERE, and were missing. Every mechanic under a symptom is
+     now a button of its own, so the names are on screen and invite being searched for —
+     but the index only knew the player-facing sentence and its `aka` list, so typing
+     "pack tactics" or "magical darkness" found nothing while the button sat there. A
+     name you can see and cannot search for is worse than one that was never shown. */
+  const phrasesOf = s => [s.player]
+    .concat(s.aka, [s.id.replace(/-/g, " ")],
+            (s.candidates || []).map(c => c.mechanic).filter(Boolean));
 
   /* Token weights, by how distinctive each word is across the ontology's own phrasings.
      Plain overlap counts "through" for as much as "burrowed", and since half the movement

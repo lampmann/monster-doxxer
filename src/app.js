@@ -22,6 +22,10 @@
   const esc = s => String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+  /* Values are stored lowercase because that is what the scorer matches on; labels are
+     capitalised because that is what a reader wants. Same string, two jobs. */
+  const cap = v => String(v || "").replace(/^./, c => c.toUpperCase());
+
   const STORE_KEY = "monster-doxxer-session";
   /* Rank a wider window than gets shown. The extra rows are never rendered; they exist so
      the tie count can say "40+ are tied" rather than reporting the size of the list it
@@ -84,6 +88,7 @@
   const S = {
     monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
     appearanceIndex: null, nameIndex: null, embeddings: null, sizeFromProse: "",
+    srcVisible: null,         // group -> the codes currently shown, for the bulk buttons
     // The active tab's fields, mirrored here so the rest of the app reads them unchanged.
     obs: blankObs(),
     ac: null, hp: null, retuned: false,
@@ -431,7 +436,7 @@
       $("pick-" + field).innerHTML = cfg.opts.map(v => {
         const on = cfg.multi ? S.obs[field].includes(v) : S.obs[field] === v;
         return `<button class="chip${on ? " on" : ""}" data-pick="${field}" data-val="${esc(v)}">` +
-               `${esc(CONDIMMUNE_LABEL[v] || v)}</button>`;
+               `${esc(cap(CONDIMMUNE_LABEL[v] || v))}</button>`;
       }).join("");
     });
   }
@@ -457,7 +462,7 @@
     { key: "condition", label: "condition", opts: () => CONDITIONS },
   ];
   const SAVE_FIELDS = [
-    { key: "abil",   label: "ability",    opts: () => ABILITIES },
+    { key: "abil",   label: "ability",    opts: () => ABILITIES, upper: true },
     { key: "dc",     label: "DC",         w: "4.5rem" },
     /* The saves the party made, which bound the DC the same way attack totals bound AC
        — a passed save is an inclusive upper bound, a failed one an exclusive lower
@@ -480,7 +485,10 @@
     const attrs = `data-row="${list}" data-idx="${i}" data-field="${esc(f.key)}"`;
     const inner = f.opts
       ? `<select class="rowsel" ${attrs}><option value=""></option>` +
-        f.opts().map(o => `<option value="${esc(o)}"${o === val ? " selected" : ""}>${esc(o)}</option>`).join("") +
+        /* The VALUE stays lowercase — it is what the scorer matches on — while the
+           label is capitalised. Two different things that happened to be one string. */
+        f.opts().map(o => `<option value="${esc(o)}"${o === val ? " selected" : ""}>` +
+          `${esc(f.upper ? o.toUpperCase() : cap(o))}</option>`).join("") +
         `</select>`
       : `<input type="${f.type || "text"}" class="txt rowin" ${attrs} ` +
         `style="width:${f.w || "5rem"}" value="${esc(val)}" autocomplete="off">`;
@@ -570,7 +578,7 @@
       // No clear button: clicking the selected option again unselects it, which is
       // what people try first anyway. Unselected means "we never tested this", and
       // costs the candidate nothing (F2).
-      return `<tr><td class="dt">${esc(d)}</td>${cells}</tr>`;
+      return `<tr><td class="dt">${esc(cap(d))}</td>${cells}</tr>`;
     }).join("");
   }
 
@@ -810,14 +818,37 @@
     if (el) el.textContent = named
       ? ` \u2014 ${named} unique adventure NPCs, e.g. Acererak. Off by default: one of them really might be what you fought.`
       : "";
-    const groups = window.groupRows(S.srcRows);
-    if (!groups.length) { $("src-filter").innerHTML = `<span class="hint">no sources loaded</span>`; return; }
+    /* NARROW THE LIST, NEVER THE FILTER. 107 sources is more than anyone scans, and
+       "which button is Curse of Strahd" is a real question — but a search box over a
+       filter invites a nasty bug, where a source you excluded scrolls out of view and
+       you forget it is still excluded. So the search hides ROWS and touches no state:
+       anything already include/exclude stays visible however the search reads. */
+    const q = ($("src-search") ? $("src-search").value : "").trim().toLowerCase();
+    const visible = !q ? S.srcRows : S.srcRows.filter(r =>
+      (S.sources[r.code] && S.sources[r.code] !== "ignore") ||
+      r.code.toLowerCase().includes(q) || String(r.name).toLowerCase().includes(q));
+
+    const groups = window.groupRows(visible);
+    /* What each group's Include all / Exclude all should act on. Recorded at render
+       time from the VISIBLE rows: with a search active, a bulk button that reached
+       sources you cannot see would be a trap — you would exclude a book by name and
+       silently take out five others with it. */
+    S.srcVisible = new Map(groups.map(g => [g.group, g.rows.map(r => r.code)]));
+    if (!groups.length) {
+      $("src-filter").innerHTML = q
+        ? `<span class="hint">No source matches &ldquo;${esc(q)}&rdquo;.</span>`
+        : `<span class="hint">no sources loaded</span>`;
+      return;
+    }
     $("src-filter").innerHTML = groups.map(g => {
       const opts = g.rows.map(r => {
         const st = S.sources[r.code] || "ignore";
         const cls = st === "include" ? " inc" : st === "exclude" ? " exc" : "";
+        /* While searching, the code alone is useless — you searched by title, so the
+           title is what confirms the hit. */
+        const label = q && r.name !== r.code ? `${r.code} · ${r.name}` : r.code;
         return `<button class="fbtn${cls}" data-src="${esc(r.code)}" ` +
-               `title="${esc(r.name)} — ${r.count} monster${r.count === 1 ? "" : "s"}">${esc(r.code)}</button>`;
+               `title="${esc(r.name)} — ${r.count} monster${r.count === 1 ? "" : "s"}">${esc(label)}</button>`;
       }).join("");
       return `<div class="fgroup"><div class="flabel">${esc(g.label)}</div>` +
              `<div class="fbody"><span class="fctrl">` +
@@ -939,11 +970,33 @@
       const s = S.ontology.byId[x.value];
       return s ? s.player : x.value;
     }
-    if (x.facet === "damage") return x.value;
-    if (x.facet === "ac" || x.facet === "hp") return x.value;
+    /* A mechanic's value is a composite key — "it-put-out-the-lights::magical darkness" —
+       because two symptoms may reasonably name the same mechanic and they are different
+       observations. That is the right key and the wrong thing to read: it was being
+       printed raw. Split back into the sentence and the mechanic under it. */
+    if (x.facet === "mechanic") {
+      const i = String(x.value).indexOf("::");
+      if (i < 0) return cap(x.value);
+      const s = S.ontology.byId[x.value.slice(0, i)];
+      const mech = cap(x.value.slice(i + 2));
+      return s ? `${s.player} (${mech})` : mech;
+    }
+    if (x.facet === "spell") return spellTitle(x.value);
+    if (x.facet === "damage") {
+      // "fire: immune" -> "Fire: immune". The type is a proper noun here, the state is not.
+      const i = String(x.value).indexOf(":");
+      return i < 0 ? cap(x.value) : cap(x.value.slice(0, i)) + x.value.slice(i);
+    }
+    if (x.facet === "ac" || x.facet === "hp" || x.facet === "dc") return x.value;
+    if (x.facet === "attack" || x.facet === "save") return x.value;
     if (x.facet === "movement") return x.value === "fly" ? "it flew" : "it " + x.value + "ed";
-    if (x.facet === "sense") return x.value;
+    if (x.facet === "sense") return cap(x.value);
     if (x.facet === "condImmune") return "immune to " + x.value;
+    // Damage types, creature types, sizes, attack kinds — all read as labels, not prose.
+    if (x.facet === "damageDealt" || x.facet === "immune" || x.facet === "resist"
+        || x.facet === "vuln" || x.facet === "type" || x.facet === "size"
+        || x.facet === "attackKind" || x.facet === "inflicts") return cap(x.value);
+    if (x.facet === "saveAbility" || x.facet === "castingAbility") return x.value.toUpperCase();
     return x.value;
   }
 
@@ -1241,9 +1294,10 @@
     if (bulk) {
       const g = bulk.dataset.srcAll || bulk.dataset.srcNone || bulk.dataset.srcClear;
       const mode = bulk.dataset.srcAll ? "include" : bulk.dataset.srcNone ? "exclude" : "ignore";
-      S.srcRows.filter(r => r.group === g).forEach(r => {
-        if (mode === "ignore") delete S.sources[r.code];
-        else S.sources[r.code] = mode;
+      const codes = (S.srcVisible && S.srcVisible.get(g)) || [];
+      codes.forEach(code => {
+        if (mode === "ignore") delete S.sources[code];
+        else S.sources[code] = mode;
       });
       persist(); renderSources(); renderResults(); renderSuggestions();
       return;
@@ -1444,6 +1498,8 @@
 
   document.addEventListener("input", e => {
     if (e.target.id === "sym-search") { renderSymptoms(); return; }
+    // Hides rows only — no state changes, so nothing to persist or re-rank.
+    if (e.target.id === "src-search") { renderSources(); return; }
     /* Picking from the datalist fires `input`, not `change`, and there is no event that
        distinguishes a click on a suggestion from typing the same letters. Committing on
        an exact vocabulary match handles both: the moment what is typed IS a spell, it

@@ -88,12 +88,29 @@ label { font-size: .85rem; }
 /* Interaction feedback, applied once for every clickable thing — same two
    questions as pmcrwf: "is this clickable?" and "did my click land?" */
 button, .chip, .fbtn, .fctrl-btn { cursor: pointer; transition: background-color .08s ease, transform .04s ease; }
-button:hover:not(:disabled), .chip:hover, .fbtn:hover, .fctrl-btn:hover { background-color: var(--hover-bg); }
-button:active:not(:disabled), .chip:active, .fbtn:active, .fctrl-btn:active { background-color: var(--active-bg); transform: translateY(1px); }
-/* A chip that is already "on" carries a strong background; tinting it grey would wash it
-   out, so those darken with an overlay instead of a background swap. */
-.fbtn.inc:hover, .fbtn.exc:hover, .chip.on:hover { box-shadow: inset 0 0 0 999px rgba(0,0,0,.12); }
-.fbtn.inc:active, .fbtn.exc:active, .chip.on:active { box-shadow: inset 0 0 0 999px rgba(0,0,0,.25); }
+/* A BUTTON CARRYING STATE KEEPS ITS COLOUR ON HOVER.
+
+   The grey rule below used to win over every state colour, and not by accident of order:
+   `button:hover:not(:disabled)` scores (0,2,1) because of the element selector, which
+   beats `.fbtn.inc` at (0,2,0) however far down the file it sits. So an included source
+   went grey under the cursor, and hovering was the one moment you could not tell
+   include from exclude from neither — exactly when you were about to click.
+
+   Stateful buttons are excluded from the swap and darken with an overlay instead, which
+   reads as pressed on any background colour. `.state` is the list of classes that mean
+   "this button is set to something": include, exclude, on, and the half-selected part. */
+button:hover:not(:disabled):not(.inc):not(.exc):not(.on):not(.part),
+.chip:hover:not(.on), .fbtn:hover:not(.inc):not(.exc), .fctrl-btn:hover {
+  background-color: var(--hover-bg); }
+button:active:not(:disabled):not(.inc):not(.exc):not(.on):not(.part),
+.chip:active:not(.on), .fbtn:active:not(.inc):not(.exc), .fctrl-btn:active {
+  background-color: var(--active-bg); }
+button:active:not(:disabled), .chip:active, .fbtn:active, .fctrl-btn:active { transform: translateY(1px); }
+/* The overlay, for everything that carries a colour worth keeping. */
+.fbtn.inc:hover, .fbtn.exc:hover, .chip.on:hover,
+.sym-hit.on:hover, .sym-hit.part:hover, .sym-sub.on:hover { box-shadow: inset 0 0 0 999px rgba(0,0,0,.12); }
+.fbtn.inc:active, .fbtn.exc:active, .chip.on:active,
+.sym-hit.on:active, .sym-hit.part:active, .sym-sub.on:active { box-shadow: inset 0 0 0 999px rgba(0,0,0,.25); }
 button:disabled { cursor: not-allowed; opacity: .5; }
 button:focus-visible, .chip:focus-visible, .fbtn:focus-visible, .fctrl-btn:focus-visible,
 input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
@@ -121,7 +138,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .sym-row:first-child { border-top: 0; }
 #sym-results .sym-hit { display: block; width: 100%; text-align: left; border: 0;
                         background: none; padding: .15rem .2rem; font-size: .85rem; }
-#sym-results .sym-hit:hover { background: var(--hover-bg); }
+#sym-results .sym-hit:hover:not(.on):not(.part) { background: var(--hover-bg); }
 /* Selected, and half-selected. The dashed underline is the whole point of the middle
    state: it says the sentence is claimed but narrowed, which a plain highlight cannot. */
 #sym-results .sym-hit.on { background: var(--link); color: #fff; border-radius: var(--radius); }
@@ -172,6 +189,8 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .addrow:hover { color: var(--btn-fg); border-style: solid; }
 
 /* ----- tri-state source filter (F16), lifted from pmcrwf's filter idiom ----- */
+#src-search { margin-bottom: .4rem; }
+
 .fgroup { display: grid; grid-template-columns: 5.5rem 1fr; gap: .3rem; align-items: start;
           padding: 2px 0; border-top: 1px solid var(--border-hair); }
 .flabel { font-weight: bold; font-size: .8rem; padding-top: 3px; }
