@@ -813,6 +813,21 @@ and thins it, so it models a party *forgetting* half of an action. It never mode
 misattributing damage from one attack to another, which is the mistake the pairing is
 most vulnerable to.
 
+### The saves you rolled
+
+The save row asks for the DC, and also for the saves the party made against it — because
+those bound the DC without anyone having announced it. A passed save is an inclusive upper
+bound and a failed one an exclusive lower bound, the same shape as `ranges.js` uses for AC,
+save DCs and HP. It is the better of the two fields: a GM has to say a DC out loud for you
+to know it, and nobody has to say anything for you to have rolled.
+
+Scored **per row** rather than through `obs.dcRange`. A row is one action, and the claim
+being made is that these saves were against *that action's* DC; the monster-level
+`dcRange` still exists for a party who cannot say which action a save belonged to.
+
+"Failed on 19" alone returns Kraken, Pit Fiend and Tarrasque — the DC-20-and-up creatures —
+from one number nobody had to be told.
+
 ### Two things deliberately not asked
 
 **Number of targets.** The statblocks say "one target" for essentially every attack roll
@@ -935,10 +950,25 @@ say "casts one of the following spells, requiring no material components", which
 same claim in different words. Keying on "innate" alone dumped 668 blocks — the largest
 group — into a catch-all bucket that meant nothing.
 
-The spell list offered in the UI is built from the loaded corpus rather than hardcoded,
-unlike every other picker vocabulary in the tool. There is no fixed set of spells a
-monster might cast, only the set the loaded books use, and offering one no monster has
-would be offering a guaranteed dead end.
+### A vocabulary that was wrong, and why
+
+The spell suggestions were built from the loaded corpus alone, on the reasoning that
+offering a spell no monster casts is offering a guaranteed dead end.
+
+That reasoning is wrong, and this feature's own premise is what says so. Spell names are
+priced as volatile *because GMs re-prepare casters constantly*. A GM who hands their
+archmage Melf's Minute Meteors — which nothing in the bestiary casts — is not an edge
+case, it is the case the module was built for, and the suggestion list refused to admit
+the spell existed. Free text was always accepted; the list is what implied otherwise.
+
+So the box reads `data/spells` when it is there (optional, like the fluff and the CLIP
+index), falls back to the corpus when it is not, and takes anything typed either way. The
+suggestions are a convenience and never a constraint.
+
+Names are stored and matched lowercase, so one canonical key backs every spelling and
+"Fire Bolt" cannot become a second chip beside "fire bolt". Only the display is
+capitalised, and only when the real name is not already known — which is the only way to
+get *Abi-Dalzim* and *Otiluke* right, since the bestiary writes every spell lowercase.
 
 ## Testing the UI
 

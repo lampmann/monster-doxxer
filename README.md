@@ -97,8 +97,9 @@ One row per thing it did. Each row is matched against a **single action** on the
 statblock, which is the whole point: *"a melee attack that burned me"* finds creatures
 whose claw deals fire, not every dragon that happens to own a breath weapon. Say how many
 it made, what it rolled to hit, how far away it was, how much damage and of what type,
-and what it left you with; saves ask the ability, the DC and the size of the area. Fill
-in what you remember and leave the rest blank.
+and what it left you with. Saves ask the ability, the size of the area, and — better than
+either — **the saves you rolled**: one passed and one failed pins the DC between them, the
+same trick the AC boxes use. Fill in what you remember and leave the rest blank.
 
 Measured, one attack row on its own is worth **+10 points of top-1 recall** and finds the
 monster in the top 20 nearly half the time from that alone. Reach turns out to be the
@@ -110,7 +111,9 @@ echoed back, so you can see what the tool concluded.
 
 ## If it cast anything
 
-Name the spells you recognised. These are held **loosely on purpose**: a GM re-preparing
+Name the spells you recognised — **any** spell, whether or not the box suggests it. Nothing
+in the bestiary casts Melf's Minute Meteors, and that is exactly the point: a GM who
+re-prepared a caster is who this module is for. These are held **loosely on purpose**: a GM re-preparing
 a caster's spells is the most ordinary thing in the game, so a spell the statblock lacks
 barely counts against it &mdash; the tool says so on the line rather than leaving you to
 wonder. *How* it cast is a different matter. Innate, prepared or psionic, and off which
