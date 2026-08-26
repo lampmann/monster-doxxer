@@ -52,6 +52,30 @@ code { background: var(--code-bg); color: inherit; padding: 0 2px; font-family: 
 .col-query { flex: 1 1 22rem; min-width: 18rem; }
 .col-results { flex: 2 1 26rem; min-width: 18rem; }
 
+/* EACH COLUMN SCROLLS ON ITS OWN, once there is room for two of them.
+
+   With one page scroll, reaching the damage grid or the book filter pushed the
+   ranking off the top of the screen — so the half of the tool that answers the
+   question was invisible exactly while you were feeding it. The two columns are
+   independent views of the same session and should scroll like it.
+
+   Only above the breakpoint. Below it the columns are stacked, and locking a stacked
+   column to viewport height would produce two nested scrollbars on a phone, which is
+   worse than the problem. The wrap breakpoint is 40rem: 22 + 26 + 1 of gap exceeds it,
+   so the two flex bases can no longer sit side by side below that. */
+@media (min-width: 52rem) {
+  .cols { align-items: stretch; }
+  .col-query, .col-results {
+    max-height: calc(100vh - 7rem);
+    overflow-y: auto;
+    /* Room for the scrollbar so it never sits on top of a chip. */
+    padding-right: .4rem;
+    /* Keep a scroll gesture inside the column it started in rather than handing the
+       overflow to the page once an end is reached. */
+    overscroll-behavior: contain;
+  }
+}
+
 .module { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .75rem; margin-bottom: .75rem; background: var(--bg); }
 .module > h2 { border-bottom: 1px solid var(--border-hair); padding-bottom: .2rem; }
 
@@ -162,8 +186,17 @@ th, td { text-align: left; padding: 1px 4px; }
 .result-meta { font-size: .78rem; color: var(--muted-fg); }
 /* The score bar is the one piece of ornament, and it earns it: a ranked list without
    magnitudes hides the difference between "clearly this" and "the least bad of 4,500". */
-.bar { display: inline-block; height: .55rem; background: var(--link); vertical-align: middle; }
-.bar-track { display: inline-block; width: 4rem; height: .55rem; border: 1px solid var(--border-soft); vertical-align: middle; margin-right: .3rem; }
+.bar-track { position: relative; display: inline-block; width: 3.4rem; height: 1.05rem;
+             border: 1px solid var(--border-soft); border-radius: 2px; vertical-align: middle;
+             margin-right: .35rem; overflow: hidden; background: var(--bg); }
+/* Positioned, not inline: an inline-block fill aligned to the track's baseline and sat
+   above its own frame. */
+.bar { position: absolute; inset: 0 auto 0 0; background: var(--link); }
+/* The number, drawn twice — see scoreBar. The white copy is clipped to the fill, so
+   whichever half of the track a digit lands on, it is legible against it. */
+.bar-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+           font-size: .68rem; font-variant-numeric: tabular-nums; color: var(--muted-fg); }
+.bar-num.on { color: #fff; }
 .why { font-size: .78rem; margin: .15rem 0 0 2rem; }
 .why .for { color: var(--good); }
 .why .against { color: var(--danger); }

@@ -465,6 +465,31 @@
       `<button class="chip on" data-spell-remove="${esc(sp)}" title="remove">${esc(sp)}</button>`).join("");
   }
 
+  /* THE SCORE BAR, WITH ITS NUMBER IN IT.
+
+     It was a hover-only tooltip, which meant the one piece of ornament in the results
+     was unreadable: a reader saw a blue rectangle and had no way to learn what it
+     measured without discovering that it could be hovered.
+
+     The number is drawn TWICE — once in the ordinary text colour across the whole
+     track, once in white clipped to the filled part. Which half you read depends on
+     where the fill ends, so the digits stay legible at 4% and at 96% alike. One copy
+     in white would vanish on the empty half of the track; one copy in dark would
+     vanish on the blue.
+
+     The fill was also rendering ABOVE its frame rather than inside it: both were
+     inline-blocks with vertical-align: middle, so the inner one aligned to the track's
+     baseline instead of filling it. It is positioned now, which is what a fill wants. */
+  function scoreBar(rel) {
+    const pct = Math.round(rel * 100);
+    const label = `${pct}%`;
+    return `<span class="bar-track" title="explains ${pct}% of what you reported">` +
+      `<span class="bar" style="width:${pct}%"></span>` +
+      `<span class="bar-num">${label}</span>` +
+      `<span class="bar-num on" style="clip-path:inset(0 ${100 - pct}% 0 0)">${label}</span>` +
+      `</span>`;
+  }
+
   function renderCombatRows() {
     const draw = (list, fields, verb) => {
       const rows = S.obs[list] || [];
@@ -856,7 +881,7 @@
       return `<div class="result">
         <div class="result-head">
           <span class="result-rank">${i + 1}.</span>
-          <span class="bar-track" title="explains ${(rel * 100).toFixed(0)}% of what you reported"><span class="bar" style="width:${(rel * 100).toFixed(0)}%"></span></span>
+          ${scoreBar(rel)}
           <span class="result-name"><button data-detail="${esc(r.key)}">${esc(r.name)}</button></span>
           <span class="result-meta">${esc(r.source)}${m && m.cr ? ", CR " + esc(m.cr) : ""}${
             r.alsoIn ? " (also " + esc(r.alsoIn.slice(0, 2).join(", ")) + ")" : ""}</span>

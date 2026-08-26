@@ -57,9 +57,10 @@
     const cat = catalogue || {};
     const rows = Object.keys(counts).map(code => {
       const meta = cat[code.toLowerCase()];
+      const fallback = FALLBACK_NAMES[code.toUpperCase()];
       return {
         code,
-        name: meta ? meta.name : code,
+        name: meta ? meta.name : (fallback || code),
         group: meta ? meta.group : "other",
         count: counts[code],
         known: !!meta,
@@ -70,6 +71,32 @@
     rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
     return rows;
   }
+
+  /* Products 5e.tools ships bestiary files for but does not list in books.json or
+     adventures.json — the Plane Shift PDFs, the Monstrous Compendium volumes, a couple
+     of one-offs. 346 monsters across 14 codes, every one of which showed in the filter
+     as a bare acronym with a tooltip that repeated the acronym back.
+
+     TITLES ONLY, and only for codes that actually fall through. This is bibliographic
+     metadata of exactly the kind books.json already carries — a citation, not content —
+     and it stays a FALLBACK so a real catalogue entry always wins. If 5e.tools starts
+     listing one of these, this table silently stops being consulted for it. */
+  const FALLBACK_NAMES = {
+    TFTYP: "Tales from the Yawning Portal",
+    MFF: "Mordenkainen's Fiendish Folio",
+    ESK: "Essentials Kit",
+    VD: "Vecna Dossier",
+    SADS: "Sapphire Anniversary Dice Set",
+    MISMV1: "Misplaced Monsters: Volume 1",
+    MCV2DC: "Monstrous Compendium Volume 2: Dragonlance Creatures",
+    MCV3MC: "Monstrous Compendium Volume 3: Minecraft Creatures",
+    PSA: "Plane Shift: Amonkhet",
+    PSD: "Plane Shift: Dominaria",
+    PSI: "Plane Shift: Innistrad",
+    PSK: "Plane Shift: Kaladesh",
+    PSX: "Plane Shift: Ixalan",
+    PSZ: "Plane Shift: Zendikar",
+  };
 
   const GROUP_LABEL = { book: "Books", adventure: "Adventures", other: "Other" };
   const GROUP_ORDER = ["book", "adventure", "other"];
