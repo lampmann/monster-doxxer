@@ -132,6 +132,14 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .chip.on { background: var(--link); color: #fff; border-color: var(--link-border); }
 .chiprow { margin: .15rem 0; }
 
+/* The name's family: offered, never scored. Small, because it is a prompt rather than
+   an answer — most of the time the name you typed is the name you meant. */
+.kin { margin-top: .2rem; }
+.kin-btn { font-size: .72rem; padding: 0 .35rem; margin: .1rem .15rem 0 0;
+           border: 1px solid var(--border-soft); border-radius: var(--radius);
+           background: none; color: var(--link); }
+.kin-btn:hover { border-color: var(--btn-border); }
+
 /* ----- the symptom picker (F8) ----- */
 #sym-results { max-height: 14rem; overflow-y: auto; margin-top: .25rem; }
 .sym-row { border-top: 1px solid var(--border-hair); padding: .1rem 0 .2rem; }

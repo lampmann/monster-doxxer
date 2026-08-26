@@ -35,7 +35,7 @@ const NAMES = require("../src/names.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0, combat: 0, spells: 0, reprep: 0 };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0, combat: 0, spells: 0, reprep: 0, kin: false, kinHeard: 0 };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -54,6 +54,8 @@ function parseArgs(argv) {
     else if (a === "--heard") out.heard = Number(next());
     else if (a === "--misheard") out.misheard = Number(next());
     else if (a === "--boss-drift") out.bossDrift = Number(next());
+    else if (a === "--kin") out.kin = true;
+    else if (a === "--kin-heard") out.kinHeard = Number(next());
     else if (a === "--combat") out.combat = Number(next());
     else if (a === "--spells") out.spells = Number(next());
     else if (a === "--reprep") out.reprep = Number(next());
@@ -80,6 +82,8 @@ const HELP = `eval/run.js — corrupt real statblocks, measure top-5 recall
   --heard <0..1>    rate at which the party caught a name the DM said
   --misheard <0..1> ...of which this share are the WRONG name entirely
   --boss-drift <0..1> rate at which the DM promoted an ordinary monster to a boss
+  --kin               spread a heard name to monsters that READ like it
+  --kin-heard <0..1>  rate at which the DM named a RELATIVE, not the creature
   --combat <0..1>     rate at which the party describes one action it watched
   --spells <0..1>     rate at which the party names spells it saw cast
   --reprep <0..1>     ...and rate at which the DM had swapped one of those out
@@ -124,6 +128,9 @@ function measure(monsters, rarity, opts) {
     if (c.obs.heardName && o.nameIndex) {
       scoreOpts = Object.assign({}, scoreOpts,
         { nameScores: NAMES.nameScore(c.obs.heardName, o.nameIndex) });
+      /* --kin used to feed kinScores into the scorer. It was swept and rejected; the
+         flag and --kin-heard stay so the result can be re-tested rather than
+         re-litigated, but nothing consumes them now. See DESIGN.md. */
     }
     const ranked = S.rank(monsters, c.obs, rarity, scoreOpts);
     const nameWanted = m.name.toLowerCase();
@@ -183,6 +190,7 @@ function opts(args, extra) {
                heardRate: args.heard, mishearRate: args.misheard, allNames: args.allNames,
                bossDriftRate: args.bossDrift, rollRate: args.rolls,
                combatRate: args.combat, spellRate: args.spells, reprepRate: args.reprep,
+               kinMishearRate: args.kinHeard, kinNames: args.kinNames,
                isColour: w => APP.COLOURS.has(APP.stem(w)),
                isMorphology: w => APP.MORPHOLOGY.has(APP.stem(w)),
                isVisual: APP.isVisual },
@@ -191,6 +199,7 @@ function opts(args, extra) {
              volatileSymptoms: args.volatileSymptoms },
     appearanceIndex: args.appearanceIndex,
     nameIndex: args.nameIndex,
+    kin: args.kin,
   }, extra || {});
 }
 
@@ -358,6 +367,13 @@ function main() {
   args.documents = documents;
   args.nameIndex = NAMES.buildNameIndex(monsters);
   args.allNames = monsters.map(m => m.name);
+  /* Names grouped by creature type, for --kin-heard. Independent of the prose
+     similarity the kin feature ranks by, so the test is not marking its own homework. */
+  args.kinNames = monsters.reduce((acc, m) => {
+    if (!m.type) return acc;
+    (acc[m.type] = acc[m.type] || []).push(m.name);
+    return acc;
+  }, Object.create(null));
 
   if (args.sweep) return sweep(monsters, rarity, args, args.sweep);
   if (args.ablate) return ablate(monsters, rarity, args);

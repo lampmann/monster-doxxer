@@ -84,6 +84,7 @@ const DEFAULTS = {
   heardRate: 0,           // probability the DM said a name the party caught
   garbleRate: 0.4,        // ...and wrote down wrong, having heard it rather than read it
   mishearRate: 0.1,       // ...or got completely wrong. See below.
+  kinMishearRate: 0,      // ...or named a RELATIVE of it: "a ghost" for a Specter.
   bossDriftRate: 0,       // probability the DM added legendary/lair to a monster without it
   rollRate: 0,            // probability the party reports DICE instead of remembered numbers
   combatRate: 0,          // probability the party describes one action it watched — see below
@@ -410,7 +411,24 @@ function corrupt(m, r, opts) {
   /* 6. Somebody caught a name. */
   if (o.heardRate > 0 && r() < o.heardRate) {
     let heard = m.name;
-    if (o.allNames && o.allNames.length && r() < o.mishearRate) {
+    /* THE DM SAID THE FAMILY'S NAME, not this creature's. "It's a ghost" for a Specter,
+       "a troll" for a Rot Troll. This is a different failure from mishearing and needs
+       its own knob, because the two ask opposite things of the scorer: a completely
+       wrong name should be survived, a NEARLY right one should be exploited.
+
+       NOT GENERATED FROM THE THING BEING TESTED. The kin feature ranks by prose
+       similarity, so drawing the wrong name from prose similarity would be marking its
+       own homework. The proxy here is independent and cruder: another creature of the
+       same TYPE, chosen at random. If kin recovers the true monster from that, it is
+       because the corpus genuinely groups them, not because both sides ran the same
+       function. */
+    const pool = (o.kinNames && o.kinNames[m.type] || [])
+      .filter(n => n.toLowerCase() !== String(m.name).toLowerCase());
+    const kinAlt = pool.length && r() < o.kinMishearRate ? pick(r, pool) : "";
+    if (kinAlt) {
+      heard = kinAlt;
+      notes.push(`the DM named a relative: "${heard}"`);
+    } else if (o.allNames && o.allNames.length && r() < o.mishearRate) {
       heard = pick(r, o.allNames);                       // wrong creature entirely
       notes.push(`misheard the name as "${heard}"`);
     } else if (r() < o.garbleRate) {

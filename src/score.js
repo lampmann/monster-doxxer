@@ -1059,6 +1059,16 @@
         forEvidence.push({ facet: "name", value: fit >= 1 ? "called by this name" : "the name is close",
                            weight: +credit.toFixed(3) });
       }
+      /* KIN IS NOT SCORED HERE, and that is a measurement rather than an oversight.
+         Spreading a heard name to the monsters that READ like the named one was built,
+         swept and rejected: across kinFactor 0 -> 1 it moved top-5 by 1.6 points and
+         top-1 DOWN by 0.4, in the scenario most favourable to it — every query carrying
+         a relative's name instead of the creature's. At a realistic rate it moved
+         nothing at all. See DESIGN.md.
+
+         names.js still computes kin, because the UI offers it as a visible suggestion.
+         Showing someone "you said ghost; Specter and Phantom Warrior read the same way"
+         is worth doing. Quietly moving scores on it is not. */
     }
 
     /* F4/F5/F6 — numbers, on tolerance curves. Added after the categorical evidence so

@@ -150,11 +150,16 @@
     "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
   /* The player's words, not the rulebook's. Someone at a table says "it shrugged it off",
      not "it has resistance". The value stored is still the mechanical state. */
+  /* The value the scorer matches on, and the word above the column. These used to be
+     the player's phrasing ("no effect", "halved") on the theory that nobody says
+     "resistance" at a table. They do, though — and a column head that says "halved"
+     while the reasoning below says "resistant" makes the reader do the translation
+     themselves. One vocabulary, the rules' own. */
   const DMG_STATES = [
-    ["immune", "no effect"],
-    ["resistant", "halved"],
-    ["normal", "normal"],
-    ["vulnerable", "extra"],
+    ["immune", "Immune"],
+    ["resistant", "Resistant"],
+    ["normal", "Normal"],
+    ["vulnerable", "Vulnerable"],
   ];
 
   /* ============================================================
@@ -1274,6 +1279,16 @@
       }
       return;
     }
+    const kinBtn = t.closest("[data-kin]");
+    if (kinBtn) {
+      e.preventDefault();
+      S.obs.heardName = kinBtn.dataset.kin;
+      $("in-name").value = S.obs.heardName;
+      renderNameRead();
+      persist(); renderResults(); renderSuggestions();
+      return;
+    }
+
     const rm = t.closest("[data-sym-remove]");
     if (rm) {
       const sym = S.ontology.byId[rm.dataset.symRemove];
@@ -1448,9 +1463,34 @@
       el.textContent = "No creature in your books goes by that. Left as a hint rather than an answer.";
       return;
     }
-    el.textContent = hit.exact
-      ? `Matched “${hit.name}” exactly.`
-      : `Closest name is “${hit.name}”. Ranked accordingly, not filtered to it.`;
+    const read = hit.exact
+      ? `Matched \u201c${hit.name}\u201d exactly.`
+      : `Closest name is \u201c${hit.name}\u201d. Ranked accordingly, not filtered to it.`;
+
+    /* THE FAMILY, OFFERED RATHER THAN SCORED.
+
+       A name is a word, and the word a GM used may not be the word on the statblock:
+       "it's a ghost" gets said about Specters and Phantom Warriors constantly. String
+       distance cannot get from "ghost" to "specter" — they share no letters — so
+       names.js finds them through the corpus's own prose instead.
+
+       SHOWN, NOT SCORED, and the difference is a measurement. Feeding these into the
+       ranking was built and swept: 1.6 points of top-5 in the scenario most favourable
+       to it, nothing at all in a realistic one, and top-1 slightly worse. Quietly
+       moving scores on that is not defensible. Putting the names in front of someone
+       who knows what they saw is a different proposition, and costs nothing if they
+       ignore it. */
+    const kin = window.kinScores
+      ? window.kinScores(q, S.nameIndex, S.monsters, S.appearanceIndex,
+                         window.appearanceScore, 6)
+      : new Map();
+    const byKey = new Map(S.monsters.map(m => [m.key, m]));
+    const names = [...kin.keys()].map(k => (byKey.get(k) || {}).name).filter(Boolean);
+
+    el.innerHTML = esc(read) + (names.length
+      ? `<div class="kin">Reads the same way: ` + names.map(n =>
+          `<button class="kin-btn" data-kin="${esc(n)}">${esc(n)}</button>`).join("") + `</div>`
+      : "");
   }
 
   /* One handler for every field of every combat row, addressed by data attributes

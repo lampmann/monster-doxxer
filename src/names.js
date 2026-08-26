@@ -136,5 +136,80 @@
     return { key: bestKey, name: entry ? entry.name : bestKey, score: best, exact: best >= 1 };
   }
 
-  return { norm, words, editDistance, slackFor, buildNameIndex, nameScore, looksLikeName, NAME_STOP };
+  /* ============================================================
+     KIN — the monsters a name MEANS, beyond the ones it spells.
+
+     "Ghost" should reach Specter and Phantom Warrior. String distance cannot do it:
+     they share no letters, and every trick that gets from "ghost" to "ghast" gets no
+     closer to "specter" than to "sceptre".
+
+     This is NOT word embedding, and the distinction is worth keeping straight, because
+     the obvious version was tried and measured: CLIP's text encoder scores 0/16 on
+     retrieval over this corpus (see DESIGN.md). What works instead is the corpus's own
+     prose. Find the monster the name means, take the most distinctive words out of ITS
+     description, and ask which other monsters those words describe. No model, no build
+     step, no shipped index — and it reads the same books the party did.
+
+     RESTRICTED TO THE SAME CREATURE TYPE, which is the whole difference between useful
+     and embarrassing. Unrestricted, "ghost" reached Animated Table and "owlbear"
+     reached Oxen — both on generic prose about size and habitat. Type is the one
+     structural fact that makes a kinship claim mean anything, and it costs nothing to
+     apply.
+
+     WHAT WAS TRIED AND MADE IT WORSE: weighting in shared symptoms. It sounds right —
+     Ghost and Specter share Incorporeal Movement — but it swamps the prose signal with
+     whichever obscure NPCs happen to carry the same tag set, and "ghost" came back
+     Spirit, Agony, Amun Sa, Celeste. Left out.
+
+     Callers get a Map of key -> 0..1 similarity. It is a HINT and is scored as one:
+     see TUNING.kinFactor, which discounts it well below the name itself. */
+  function kinScores(heard, nameIndex, monsters, appearanceIndex, appearanceScore, limit) {
+    const out = new Map();
+    if (!heard || !nameIndex || !appearanceIndex || !monsters) return out;
+    const hit = looksLikeName(heard, nameIndex, 0.5);
+    if (!hit) return out;
+
+    const seed = monsters.find(m => m.key === hit.key);
+    if (!seed) return out;
+    const doc = (appearanceIndex.docs || []).find(d => d.key === seed.key);
+    if (!doc || !doc.tf) return out;
+
+    /* The seed's own most distinctive words, as a query. Capped at 25: past that the
+       tail is common vocabulary that matches everything and ranks nothing. */
+    const terms = Object.keys(doc.tf)
+      .sort((a, b) => appearanceIndex.idf(b) * doc.tf[b] - appearanceIndex.idf(a) * doc.tf[a])
+      .slice(0, 25);
+    if (!terms.length) return out;
+
+    const prose = appearanceScore(terms.join(" "), appearanceIndex);
+    let max = 0;
+    prose.forEach(v => { if (v > max) max = v; });
+    if (!max) return out;
+
+    /* Excluded BY NAME, not by key. The Ghost is printed in several books and each
+       printing is its own key, so keying on the seed left "Ghost" listed among its own
+       relatives — and left Gauth in there twice. The party heard a word; a second
+       printing of the same word is not a second suggestion. */
+    const seedName = String(seed.name).toLowerCase();
+    const byKey = new Map(monsters.map(m => [m.key, m]));
+    const ranked = [];
+    prose.forEach((v, key) => {
+      const m = byKey.get(key);
+      if (!m || m.type !== seed.type) return;
+      if (String(m.name).toLowerCase() === seedName) return;
+      ranked.push([key, v / max, String(m.name).toLowerCase()]);
+    });
+    ranked.sort((a, b) => b[1] - a[1]);
+
+    const seenNames = new Set();
+    for (const [k, v, n] of ranked) {
+      if (seenNames.has(n)) continue;
+      seenNames.add(n);
+      out.set(k, v);
+      if (out.size >= (limit || 40)) break;
+    }
+    return out;
+  }
+
+  return { norm, words, editDistance, slackFor, buildNameIndex, nameScore, looksLikeName, kinScores, NAME_STOP };
 });

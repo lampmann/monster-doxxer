@@ -678,6 +678,35 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("a name reaches the creatures it MEANS");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* "Ghost" gets said about Specters and Wraiths constantly, and string distance
+         cannot get there — they share no letters with it. */
+      await page.fill("#in-name", "ghost");
+      await page.waitForTimeout(1400);
+      const kin = await page.evaluate(() => {
+        const k = document.querySelector("#name-read .kin");
+        return k ? [...k.querySelectorAll(".kin-btn")].map(b => b.textContent) : [];
+      });
+      assert("typing a name offers the creatures that read the same way", kin.length > 2);
+      assert("...including ones that share no letters with it",
+        kin.some(n => /specter|wraith|phantom/i.test(n)));
+      assert("the creature the name already matched is not listed as its own relative",
+        !kin.some(n => /^ghost$/i.test(n)));
+      assertEqual("...and no name appears twice", kin.length, new Set(kin).size);
+
+      // Clicking one adopts it, which is the whole point of showing them.
+      await page.evaluate(() => document.querySelector("#name-read .kin-btn").click());
+      await page.waitForTimeout(1200);
+      const box = await page.$eval("#in-name", el => el.value);
+      assert("clicking a relative puts its name in the box", box && !/^ghost$/i.test(box));
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);
