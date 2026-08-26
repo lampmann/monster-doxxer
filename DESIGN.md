@@ -863,6 +863,48 @@ alternatives so take the max, otherwise sum. The remaining 87 are genuinely unco
 yield 0, which costs the monster no evidence rather than inventing a number that argues
 against it.
 
+## Naming the mechanic, when the GM said it out loud
+
+The ontology's second idea is that the players never hear the mechanic's name, so every
+sentence in it is deliberately vague: *"One specific spell had no effect whatsoever"* has
+to cover Spell Immunity, an immunity to one named spell, and Antimagic Susceptibility,
+because from the table those look identical.
+
+Except when they don't. GMs narrate, and narration sometimes contains the actual word —
+and a party that heard it knew something much more specific than the sentence could
+express, with nowhere to put it.
+
+So every mechanic under a symptom is its own button, in a select-all relationship with
+the sentence above it. The invariant the rest of the code rests on is that a symptom is
+**either** in `symptoms` (all of it) **or** has keys in `mechanics` (some of it), never
+both — so the existing, measured symptom path is untouched whenever the parent button is
+used, and the new one only engages when someone deliberately narrows.
+
+The narrowing is worth having:
+
+| Query | Top results |
+|---|---|
+| *"One specific spell had no effect"* | Helmed Horror, Snake Horror |
+| ...narrowed to **Antimagic Susceptibility** | Flying Sword, Animated Armor, Rug of Smothering |
+| *"It vanished"* | Imp, Quasit, Sprite |
+| ...narrowed to **Incorporeal Movement** | Ghost, Wraith, Banshee, Specter |
+
+F1 prices this without being told to. A mechanic is rarer than the symptom it rolls up
+to, being one of several things that could have produced it, so `mechanic:incorporeal
+movement` carries **4.04 nats** where `symptom:it-vanished` carries **1.82**. The
+confidence discount carries over unchanged too: a mechanic scales by its own candidate's
+`p`, exactly as a symptom scales by the best `p` among its candidates.
+
+Two consequences fell out of the interaction and are worth naming, because both were
+existing behaviour that had to go:
+
+- **Selecting a symptom no longer removes it from the list**, and no longer clears the
+  search box. The mechanics live on that row; a row that vanishes the moment you select
+  it can never be narrowed. The chip strip is the summary, the list is the control.
+- **A symptom with one candidate gets no sub-button.** It would be a control that could
+  never disagree with its parent. It keeps the *name* in brackets, though, since naming
+  the mechanic is what tells apart eleven sentences that read alike.
+
 ## What it cast, and how
 
 Two facts about a caster, and **they age differently**. Which spells it has prepared is

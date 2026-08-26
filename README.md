@@ -80,6 +80,12 @@ worth, so the first box — *what did it do?* — is the one that matters. Type 
 table (&ldquo;it healed between rounds&rdquo;, &ldquo;my sword bounced off&rdquo;) and pick the
 match. Every result shows what argued for it and what argued against.
 
+**If the GM said the name.** Each sentence lists the mechanics it looks for, and each of
+those is its own button. Picking the sentence means "any of these"; clicking a mechanic
+off narrows it. Worth doing when you heard the word: *"One specific spell had no effect"*
+returns the Helmed Horror, while *Antimagic Susceptibility* on its own returns the
+animated objects.
+
 **Books.** Click a source once to **include** it, again to **exclude** it, again to clear. Include
 when you know which books your DM owns. Exclude to stop an adventure you're halfway through from
 spoiling itself — which is why exclude exists separately rather than being &ldquo;include
