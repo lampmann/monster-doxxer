@@ -117,9 +117,27 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 
 /* ----- the symptom picker (F8) ----- */
 #sym-results { max-height: 14rem; overflow-y: auto; margin-top: .25rem; }
-#sym-results .sym-hit { display: block; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--border-hair);
+.sym-row { border-top: 1px solid var(--border-hair); padding: .1rem 0 .2rem; }
+.sym-row:first-child { border-top: 0; }
+#sym-results .sym-hit { display: block; width: 100%; text-align: left; border: 0;
                         background: none; padding: .15rem .2rem; font-size: .85rem; }
 #sym-results .sym-hit:hover { background: var(--hover-bg); }
+/* Selected, and half-selected. The dashed underline is the whole point of the middle
+   state: it says the sentence is claimed but narrowed, which a plain highlight cannot. */
+#sym-results .sym-hit.on { background: var(--link); color: #fff; border-radius: var(--radius); }
+#sym-results .sym-hit.part { background: var(--hover-bg); border-radius: var(--radius);
+                             text-decoration: underline dashed var(--link); text-underline-offset: 2px; }
+/* The mechanics under a sentence, indented under it so the hierarchy reads without a
+   line or a bullet. Small, because they are the specialist path: most people pick the
+   sentence and never look down here. */
+.sym-subs { display: block; padding: .05rem 0 0 1rem; }
+.sym-sub { font-size: .7rem; padding: 0 .3rem; margin: .1rem .15rem 0 0;
+           border: 1px solid var(--border-soft); border-radius: var(--radius);
+           background: none; color: var(--muted-fg); }
+.sym-sub:hover { color: var(--btn-fg); border-color: var(--btn-border); }
+.sym-sub.on { background: var(--link); color: #fff; border-color: var(--link-border); }
+.chip-narrow { opacity: .8; font-size: .72rem; }
+.chip.part { background: var(--link); }
 /* Browsing all 111 needs more room than a search's dozen hits, and a heading per
    group so the list reads as a menu rather than a wall. */
 #sym-results:not(.searching) { max-height: 22rem; }

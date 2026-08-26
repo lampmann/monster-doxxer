@@ -212,6 +212,12 @@
     castingClass: m => (m.castingClass || []).map(str),
     attacksPerTurn: m => (m.attacksPerTurn ? [String(m.attacksPerTurn)] : []),
     symptom:     m => (m.symptoms || []),          // attached at index time by symptoms.js (F8)
+    /* One named mechanic rather than the symptom it rolls up to. A symptom is vague on
+       purpose — the players never hear the name — but sometimes the GM says it out
+       loud, and then the party knows something the symptom cannot express. Rarer than
+       its parent by construction, since it is one of several things that could have
+       caused it, so F1 prices it higher without being told to. */
+    mechanic:    m => (m.mechanics || []),
     /* Damage interactions are facets so that the rarity table COUNTS them. They are
        scored through the cost matrix below rather than by set membership, but a weight
        is only meaningful if something counted the feature: an uncounted key falls to the
@@ -896,7 +902,7 @@
      ============================================================ */
   const SET_FIELDS = {                 // observation field -> facet it scores against
     movement: "movement", senses: "sense", condImmune: "condImmune",
-    symptoms: "symptom", typeTags: "typeTag", damageDealt: "damageDealt",
+    symptoms: "symptom", mechanics: "mechanic", typeTags: "typeTag", damageDealt: "damageDealt",
     saveAbilities: "saveAbility", attackKinds: "attackKind",
     spells: "spell", castingKind: "castingKind", castingClass: "castingClass",
   };
@@ -943,8 +949,14 @@
        attached them — a curated trait tag is near-certain, a prose regex is a guess, and
        collapsing the two would let a loose keyword hit outrank the real mechanic. */
     const confidenceOf = (facet, value) => {
-      if (facet !== "symptom") return 1;
-      const c = (m.symptomConf || {})[value];
+      /* A mechanic carries its candidate's own p, exactly as a symptom carries the best
+         p among its candidates — same discount, same floor, because the reason is the
+         same: a mechanic attached by a loose prose regex is a weaker claim than one
+         attached by a curated trait tag. */
+      const table = facet === "symptom" ? m.symptomConf
+        : facet === "mechanic" ? m.mechanicConf : null;
+      if (!table) return 1;
+      const c = table[value];
       return c == null ? 1 : Math.max(TUNING.minSymptomConfidence, c);
     };
 

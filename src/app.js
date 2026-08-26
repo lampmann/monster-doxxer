@@ -64,7 +64,7 @@
      the "two monsters, one set of observations" failure the handoff flagged from the
      start. Everything else — which books your DM owns, how big your party is — is a fact
      about the TABLE and is shared, because retyping it per monster would be absurd. */
-  const blankObs = () => ({ symptoms: [], type: "", size: "", movement: [], senses: [],
+  const blankObs = () => ({ symptoms: [], mechanics: [], type: "", size: "", movement: [], senses: [],
     condImmune: [], damage: {}, appearance: "", heardName: "",
     /* What it did with its turn. One row per action rather than three bags of chips,
        because the fields have to be true OF THE SAME ACTION to mean anything — see
@@ -558,6 +558,72 @@
     persist(); renderDamage(); renderResults(); renderSuggestions();
   });
 
+  /* ============================================================
+     A SYMPTOM AND THE MECHANICS UNDER IT.
+
+     A symptom is vague on purpose: the players never hear the name, so "one specific
+     spell had no effect whatsoever" has to cover Spell Immunity, an immunity to one
+     named spell, and Antimagic Susceptibility at once. But GMs do sometimes say the
+     name out loud, and a party that heard it knows something far more specific than
+     the sentence can express — and, until now, had no way to say it.
+
+     So every mechanic under a symptom is its own button. The parent and its children
+     are a select-all relationship: the parent on means all of them, turning one child
+     off narrows the claim, turning the last one on widens it back. The invariant the
+     rest of the code depends on is that a symptom is EITHER in `symptoms` (all of it)
+     or has keys in `mechanics` (some of it), never both — so the existing, measured
+     symptom path is untouched whenever the parent button is used.
+
+     Symptoms with a single candidate get no children: the parent already is the
+     mechanic, and a lone sub-button that can never disagree with its parent is noise.
+     ============================================================ */
+  const mechNames = s => (window.mechanicsOf ? window.mechanicsOf(s, 99).shown : []);
+  const mechKeys = s => mechNames(s).map(m => window.mechanicKey(s.id, m));
+  const hasSubs = s => mechNames(s).length > 1;
+
+  /* "all" | "some" | "none" — everything the UI draws is derived from this rather than
+     stored, so the two halves of the selection cannot drift apart. */
+  function symState(sym) {
+    if (S.obs.symptoms.includes(sym.id)) return "all";
+    return mechKeys(sym).some(k => S.obs.mechanics.includes(k)) ? "some" : "none";
+  }
+  const mechOn = (sym, key) =>
+    S.obs.symptoms.includes(sym.id) || S.obs.mechanics.includes(key);
+
+  // Drop every trace of a symptom, whichever half it was recorded in.
+  function clearSym(sym) {
+    const i = S.obs.symptoms.indexOf(sym.id);
+    if (i >= 0) S.obs.symptoms.splice(i, 1);
+    const keys = mechKeys(sym);
+    S.obs.mechanics = S.obs.mechanics.filter(k => !keys.includes(k));
+  }
+
+  /* Re-record a symptom from the set of its mechanics that should be on, collapsing to
+     whichever of the two representations fits. This is the only writer of either list
+     for symptom state, which is what keeps the invariant true. */
+  function setSym(sym, onKeys) {
+    clearSym(sym);
+    const all = mechKeys(sym);
+    if (!onKeys.length) return;
+    if (onKeys.length === all.length) { S.obs.symptoms.push(sym.id); return; }
+    S.obs.mechanics = S.obs.mechanics.concat(onKeys);
+  }
+
+  function toggleSymptom(sym) {
+    if (symState(sym) === "all") clearSym(sym);
+    else setSym(sym, mechKeys(sym));
+  }
+
+  function toggleMechanic(sym, key) {
+    const all = mechKeys(sym);
+    // "all" is stored as the symptom alone, so expand it before narrowing.
+    const on = symState(sym) === "all" ? all.slice()
+      : all.filter(k => S.obs.mechanics.includes(k));
+    const i = on.indexOf(key);
+    if (i >= 0) on.splice(i, 1); else on.push(key);
+    setSym(sym, on);
+  }
+
   /* THE SENTENCE, THEN THE MECHANIC IT MEANS.
 
      Eleven sentences in the offence group read as near-synonyms of each other, because
@@ -579,19 +645,56 @@
      rarity table still counts it. Only the player-facing list drops it. */
   const collectedElsewhere = s => !!(s && s.collectedBy);
 
-  function symLabel(s) {
-    const mech = window.mechanicsLabel ? window.mechanicsLabel(s) : "";
-    return esc(s.player) + (mech ? ` <span class="sym-mech">(${esc(mech)})</span>` : "");
+  /* One symptom, as a parent button plus a button per mechanic under it. A row rather
+     than one button, because a button cannot contain another button. */
+  function symRow(sym) {
+    const st = symState(sym);
+    const cls = st === "all" ? " on" : st === "some" ? " part" : "";
+    const parent = `<button class="sym-hit${cls}" data-sym-toggle="${esc(sym.id)}">` +
+      `${esc(sym.player)}</button>`;
+    /* A symptom with ONE mechanic gets its name as plain text, not as a button. The
+       button would be a control that can never disagree with its parent — clicking it
+       and clicking the sentence do the same thing — but the NAME still has to be
+       there, because it is what tells apart eleven sentences that read alike. */
+    const names = mechNames(sym);
+    if (!hasSubs(sym)) {
+      const only = names.length ? ` <span class="sym-mech">(${esc(names[0])})</span>` : "";
+      return `<div class="sym-row">${parent.replace("</button>", only + "</button>")}</div>`;
+    }
+    const subs = names.map(name => {
+      const key = window.mechanicKey(sym.id, name);
+      return `<button class="sym-sub${mechOn(sym, key) ? " on" : ""}" ` +
+        `data-mech="${esc(key)}" data-mech-sym="${esc(sym.id)}" ` +
+        `title="only this mechanic, rather than any of the ${names.length}">` +
+        `${esc(name)}</button>`;
+    }).join("");
+    return `<div class="sym-row">${parent}<span class="sym-subs">${subs}</span></div>`;
   }
 
   function renderSymptoms() {
+    /* Both halves of the selection, in one strip: whole symptoms and the partial ones.
+       A partial selection says which mechanics survived, because "It vanished" and "It
+       vanished (Incorporeal Movement)" are very different claims and the chip is the
+       only place you would see which one you made. */
+    const partials = new Map();
+    S.obs.mechanics.forEach(k => {
+      const id = k.slice(0, k.indexOf("::"));
+      if (!partials.has(id)) partials.set(id, []);
+      partials.get(id).push(k.slice(k.indexOf("::") + 2));
+    });
     const chosen = S.obs.symptoms.map(id => {
       const s = S.ontology.byId[id];
       const mech = s && window.mechanicsLabel ? window.mechanicsLabel(s) : "";
       return `<button class="chip on" data-sym-remove="${esc(id)}" ` +
              `title="${esc(mech ? "looks for: " + mech : "remove")}">` +
              `${esc(s ? s.player : id)}</button>`;
-    }).join("");
+    }).concat([...partials.entries()].map(([id, names]) => {
+      const s = S.ontology.byId[id];
+      return `<button class="chip on part" data-sym-remove="${esc(id)}" ` +
+             `title="narrowed to ${esc(names.join(", "))}">` +
+             `${esc(s ? s.player : id)} <span class="chip-narrow">(${esc(names.join(", "))})</span>` +
+             `</button>`;
+    })).join("");
     $("sym-chosen").innerHTML = chosen;
 
     const q = $("sym-search").value.trim();
@@ -605,29 +708,27 @@
        cannot search a list of 111 sentences you have never seen. Browsing is the
        default; searching narrows it. */
     if (!q) {
-      const taken = new Set(S.obs.symptoms);
       const groups = new Map();
       S.ontology.symptoms.forEach(s => {
-        if (taken.has(s.id) || collectedElsewhere(s)) return;
+        if (collectedElsewhere(s)) return;
         const g = s.group || "other";
         if (!groups.has(g)) groups.set(g, []);
         groups.get(g).push(s);
       });
-      if (!groups.size) { box.innerHTML = `<span class="hint">Everything is already picked.</span>`; return; }
+      if (!groups.size) { box.innerHTML = `<span class="hint">Nothing to pick from.</span>`; return; }
       box.innerHTML = [...groups.entries()]
         .sort((a, b) => b[1].length - a[1].length)
         .map(([g, list]) =>
           `<div class="sym-group"><div class="sym-group-label">${esc(GROUP_LABELS[g] || g)}</div>` +
-          list.map(s => `<button class="sym-hit" data-sym-add="${esc(s.id)}">${symLabel(s)}</button>`).join("") +
+          list.map(s => symRow(s)).join("") +
           `</div>`).join("");
       return;
     }
 
     const hits = window.lookup(S.ontology, q, 12)
-      .filter(h => !S.obs.symptoms.includes(h.id) && !collectedElsewhere(S.ontology.byId[h.id]));
+      .filter(h => !collectedElsewhere(S.ontology.byId[h.id]));
     box.innerHTML = hits.length
-      ? hits.map(h => `<button class="sym-hit" data-sym-add="${esc(h.id)}">` +
-          `${symLabel(S.ontology.byId[h.id] || h)}</button>`).join("")
+      ? hits.map(h => symRow(S.ontology.byId[h.id] || h)).join("")
       : `<span class="hint">Nothing matches that yet. Try plainer words &mdash; ` +
         `&ldquo;it vanished&rdquo;, &ldquo;my sword bounced off&rdquo; &mdash; or clear the box ` +
         `to browse all ${S.ontology.symptoms.length}.</span>`;
@@ -672,6 +773,8 @@
   function currentObservation() {
     const obs = {
       symptoms: S.obs.symptoms.slice(),
+      // Partial selections — see the symptom/mechanic model above.
+      mechanics: (S.obs.mechanics || []).slice(),
       movement: S.obs.movement.slice(),
       senses: S.obs.senses.slice(),
       condImmune: S.obs.condImmune.slice(),
@@ -1020,16 +1123,34 @@
       return;
     }
 
-    const add = t.closest("[data-sym-add]");
-    if (add) {
-      S.obs.symptoms.push(add.dataset.symAdd);
-      $("sym-search").value = "";
-      persist(); renderSymptoms(); renderResults(); renderSuggestions();
+    /* One mechanic under a symptom. Checked before the parent, since a sub-button sits
+       inside the same row and `closest` would otherwise walk past it. */
+    const mech = t.closest("[data-mech]");
+    if (mech) {
+      const sym = S.ontology.byId[mech.dataset.mechSym];
+      if (sym) {
+        toggleMechanic(sym, mech.dataset.mech);
+        persist(); renderSymptoms(); renderResults(); renderSuggestions();
+      }
+      return;
+    }
+    const symBtn = t.closest("[data-sym-toggle]");
+    if (symBtn) {
+      const sym = S.ontology.byId[symBtn.dataset.symToggle];
+      if (sym) {
+        toggleSymptom(sym);
+        /* The search box is NOT cleared and the row is NOT removed from the list.
+           Both used to happen, and both are wrong now: the mechanics under a symptom
+           live on that row, so a row that vanishes the moment you select it can never
+           be narrowed. The chip strip above is the summary; the list is the control. */
+        persist(); renderSymptoms(); renderResults(); renderSuggestions();
+      }
       return;
     }
     const rm = t.closest("[data-sym-remove]");
     if (rm) {
-      toggleIn(S.obs.symptoms, rm.dataset.symRemove);
+      const sym = S.ontology.byId[rm.dataset.symRemove];
+      if (sym) clearSym(sym); else toggleIn(S.obs.symptoms, rm.dataset.symRemove);
       persist(); renderSymptoms(); renderResults(); renderSuggestions();
       return;
     }
@@ -1302,7 +1423,7 @@
   document.addEventListener("keydown", e => {
     if (e.target.id !== "sym-search" || e.key !== "Enter") return;
     e.preventDefault();
-    const first = $("sym-results").querySelector("[data-sym-add]");
+    const first = $("sym-results").querySelector("[data-sym-toggle]");
     if (first) first.click();
   });
 

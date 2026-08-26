@@ -361,20 +361,19 @@ async function main() {
         document.querySelectorAll("#sym-results .sym-hit").length);
       assert("typing narrows the list", narrowed > 0 && narrowed < b.options);
 
-      /* The sentences avoid naming the mechanic on purpose, which leaves eleven of
-         them in one group reading as near-synonyms. The bracket is how you tell
-         which is which. */
+      /* The sentences avoid naming the mechanic on purpose, which leaves several of
+         them reading as near-synonyms. The mechanics are named under each one. */
       await page.fill("#sym-search", "friends were nearby");
       await page.waitForTimeout(600);
       const packTactics = await page.evaluate(() => {
-        const b = [...document.querySelectorAll("#sym-results .sym-hit")]
+        const row = [...document.querySelectorAll("#sym-results .sym-row")]
           .find(x => /friends were nearby/.test(x.textContent));
-        return b ? { text: b.textContent, mech: (b.querySelector(".sym-mech") || {}).textContent } : null;
+        return row ? row.textContent : null;
       });
-      assert("a symptom names the mechanic it looks for", packTactics &&
-        /\(Pack Tactics\)/.test(packTactics.mech || ""));
+      assert("a symptom names the mechanic it looks for",
+        packTactics && /Pack Tactics/.test(packTactics));
       assert("...after the player's own words, not instead of them",
-        packTactics && /friends were nearby/.test(packTactics.text));
+        packTactics && /friends were nearby/.test(packTactics));
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
@@ -548,6 +547,76 @@ async function main() {
       assert("how it cast is asked separately from what it cast", clicked);
       await page.waitForTimeout(800);
       assert("...and ranks on its own", /1\./.test(await resultsText(page)));
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("playtest feedback: naming the mechanic directly");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* A symptom is vague on purpose — the players never hear the name — but GMs do
+         say it out loud, and then the party knows something the sentence cannot
+         express. The parent and its mechanics are a select-all relationship. */
+      await page.fill("#sym-search", "specific spell had no effect");
+      await page.waitForTimeout(800);
+
+      // The search returns several rows; everything below is scoped to the one we mean.
+      const ROW = "One specific spell had no effect";
+      const inRow = body => page.evaluate(([label, b]) => {
+        const row = [...document.querySelectorAll("#sym-results .sym-row")]
+          .find(r => r.querySelector(".sym-hit").textContent.includes(label));
+        return row ? new Function("row", b)(row) : null;
+      }, [ROW, body]);
+
+      const subs = () => inRow(`return [...row.querySelectorAll(".sym-sub")]
+        .map(b => ({ text: b.textContent.trim(), on: b.classList.contains("on") }));`);
+      const parentOn = () => inRow(`const b = row.querySelector(".sym-hit");
+        return b.classList.contains("on") ? "all" : b.classList.contains("part") ? "some" : "none";`);
+      const clickIn = sel => page.evaluate(([label, t]) => {
+        const row = [...document.querySelectorAll("#sym-results .sym-row")]
+          .find(r => r.querySelector(".sym-hit").textContent.includes(label));
+        const el = t === ".sym-hit" ? row.querySelector(".sym-hit")
+          : [...row.querySelectorAll(".sym-sub")].find(b => new RegExp(t, "i").test(b.textContent));
+        el.click();
+      }, [ROW, sel]);
+
+      const before = await subs();
+      assertEqual("each mechanic under the sentence is its own button", before.length, 3);
+      assert("...named, so a GM's word can be matched to one",
+        before.some(b => /Antimagic Susceptibility/i.test(b.text)));
+      assert("...and none is selected yet", before.every(b => !b.on));
+
+      await clickIn(".sym-hit");
+      await page.waitForTimeout(900);
+      assertEqual("clicking the sentence selects all of its mechanics", await parentOn(), "all");
+      assert("...visibly, on the children too", (await subs()).every(b => b.on));
+
+      // Turning one child off narrows the claim; the parent goes half-selected.
+      await clickIn("Antimagic");
+      await page.waitForTimeout(900);
+      assertEqual("deselecting one mechanic leaves the sentence partly selected",
+        await parentOn(), "some");
+      assertEqual("...and exactly that one is off",
+        (await subs()).filter(b => !b.on).length, 1);
+      assert("the chip says which mechanics survived, since it is the only place you'd see it",
+        /Spell Immunity/i.test(await page.$eval("#sym-chosen", el => el.textContent)));
+
+      // Turning it back on widens it to the whole sentence again.
+      await clickIn("Antimagic");
+      await page.waitForTimeout(900);
+      assertEqual("selecting the last mechanic promotes it back to the whole sentence",
+        await parentOn(), "all");
+
+      /* THE POINT OF THE FEATURE: a narrowed claim ranks differently from the vague
+         one. Antimagic Susceptibility is the animated objects; Spell Immunity is the
+         Helmed Horror. The sentence alone cannot tell them apart. */
+      await clickIn("Spell Immunity");
+      await clickIn("immune to a named spell");
+      await page.waitForTimeout(1600);
+      assert("naming one mechanic ranks the creatures that have THAT one",
+        /flying sword|animated armor|rug of smothering/i.test(await resultsText(page)));
+
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
     }

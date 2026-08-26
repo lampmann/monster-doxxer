@@ -261,6 +261,7 @@
     };
     const bank = entryBank(m);
     const symptoms = [], confidence = Object.create(null), evidence = Object.create(null);
+    const mechanics = [], mechConf = Object.create(null);
     compiled.symptoms.forEach(s => {
       let best = 0;
       const hits = [];
@@ -274,8 +275,24 @@
       symptoms.push(s.id);
       confidence[s.id] = best;
       evidence[s.id] = hits.sort((a, b) => b.p - a.p);
+      /* THE INDIVIDUAL MECHANICS THAT FIRED, not just the symptom they roll up to.
+
+         A symptom is deliberately vague — "one specific spell had no effect" covers
+         Spell Immunity, an immunity to one named spell, and Antimagic Susceptibility,
+         and the players cannot tell which. But sometimes the GM says the name out
+         loud, and then the party knows something much more specific than the symptom
+         can express. Tagged here so that claim can be scored on its own.
+
+         Keyed by symptom as well as mechanic: two symptoms may reasonably name the
+         same mechanic, and they are different observations. */
+      hits.forEach(h => {
+        const key = s.id + "::" + norm(h.mechanic);
+        mechanics.push(key);
+        mechConf[key] = h.p;
+      });
     });
-    return { symptoms, symptomConf: confidence, symptomWhy: evidence };
+    return { symptoms, symptomConf: confidence, symptomWhy: evidence,
+             mechanics, mechanicConf: mechConf };
   }
 
   /* Tag the whole corpus in place. Returns the monsters for chaining. */
@@ -285,6 +302,8 @@
       m.symptoms = t.symptoms;
       m.symptomConf = t.symptomConf;
       m.symptomWhy = t.symptomWhy;
+      m.mechanics = t.mechanics;
+      m.mechanicConf = t.mechanicConf;
     });
     return monsters;
   }
@@ -370,6 +389,11 @@
 
      Ordered by p — the strongest explanation first, since that is the one most likely
      to be what the party actually met. */
+  /* The one place the composite key is spelled. Both the tagger and the UI build these,
+     and a mismatch between them would fail silently as a symptom that simply never
+     matches anything. */
+  const mechanicKey = (symptomId, mechanic) => symptomId + "::" + norm(mechanic);
+
   function mechanicsOf(symptom, limit) {
     const seen = new Set();
     const names = (symptom && symptom.candidates || [])
@@ -417,5 +441,5 @@
   }
 
   return { ENTRY_KINDS, ALL_KINDS, FIELD_TESTS, testField, compile, tagMonster, tagAll, lookup,
-           mechanicsOf, mechanicsLabel, coverage };
+           mechanicsOf, mechanicsLabel, mechanicKey, coverage };
 });
