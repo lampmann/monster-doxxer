@@ -26,45 +26,45 @@
   <div class="col-query">
 
     <div class="module">
-      <h2>Did anyone call it something?</h2>
+      <h2>Name</h2>
       <span class="hint block">If your DM used a name &mdash; even one you didn't recognise as a
         creature &mdash; put it here. Spelling doesn't matter; you heard it, you didn't read it.
         This is the strongest single thing you can tell the tool.</span>
-      <input type="text" class="txt" id="in-name" placeholder="barghest, owl bear, some kind of giant&hellip;" autocomplete="off">
+      <input type="text" class="txt" id="in-name" autocomplete="off">
       <div class="hint" id="name-read"></div>
     </div>
 
     <div class="module">
-      <h2>What did it do?</h2>
+      <h2>Observed effects</h2>
       <span class="hint block">Describe what you saw, in your own words. This is the strongest
         evidence the tool has &mdash; far stronger than any stat. What <em>kind</em> of damage it
         dealt belongs in <em>How did it fight?</em> below, where it can be tied to the attack that
         dealt it.</span>
-      <input type="text" class="txt" id="sym-search" placeholder="it healed between rounds&hellip;" autocomplete="off">
+      <input type="text" class="txt" id="sym-search" autocomplete="off">
       <div class="sym-chosen" id="sym-chosen"></div>
       <div id="sym-results"></div>
     </div>
 
     <div class="module">
-      <h2>What did it look like?</h2>
+      <h2>Appearance</h2>
       <span class="hint block">Your words, not the book's. This can only ever help a monster's
         score &mdash; it never counts against one, because reflavouring is exactly the case
         where the description is wrong and the monster is right.</span>
-      <input type="text" class="txt" id="in-appearance" placeholder="big hairy ape thing, white fur&hellip;" autocomplete="off">
+      <input type="text" class="txt" id="in-appearance" autocomplete="off">
       <div class="hint" id="size-read"></div>
     </div>
 
     <div class="module">
-      <h2>What was it like?</h2>
+      <h2>Creature</h2>
       <div class="chiprow"><span class="hint">Type</span><br><span id="pick-type"></span></div>
       <div class="chiprow"><span class="hint">Size</span><br><span id="pick-size"></span></div>
-      <div class="chiprow"><span class="hint">How it moved</span><br><span id="pick-movement"></span></div>
-      <div class="chiprow"><span class="hint">How it sensed you</span><br><span id="pick-senses"></span></div>
-      <div class="chiprow"><span class="hint">Couldn't be&hellip;</span><br><span id="pick-condImmune"></span></div>
+      <div class="chiprow"><span class="hint">Movement</span><br><span id="pick-movement"></span></div>
+      <div class="chiprow"><span class="hint">Senses</span><br><span id="pick-senses"></span></div>
+      <div class="chiprow"><span class="hint">Condition immunities</span><br><span id="pick-condImmune"></span></div>
     </div>
 
     <div class="module">
-      <h2>What did you hit it with?</h2>
+      <h2>Damage taken</h2>
       <span class="hint block">Only fill in what you actually tried. Leaving a row blank means
         &ldquo;we never tested it&rdquo;, which costs nothing &mdash; saying &ldquo;normal&rdquo;
         is a real observation and is treated as one.</span>
@@ -75,65 +75,65 @@
     </div>
 
     <div class="module">
-      <h2>How did it fight?</h2>
+      <h2>Attacks and saves</h2>
       <span class="hint block">One row per thing it did &mdash; each row is matched against a
         <em>single</em> action on the statblock, so &ldquo;a melee attack that burned me&rdquo; finds
         creatures whose claw deals fire, not every dragon with a breath weapon. Fill in what you
         remember and leave the rest blank; a blank field costs a monster nothing.</span>
       <div id="atk-rows"></div>
-      <button id="atk-add" class="addrow">+ another attack</button>
+      <button id="atk-add" class="addrow">+ attack</button>
       <div class="hint block" id="atk-total"></div>
       <div id="sav-rows"></div>
-      <button id="sav-add" class="addrow">+ a saving throw it forced</button>
+      <button id="sav-add" class="addrow">+ saving throw</button>
     </div>
 
     <div class="module">
-      <h2>Did it cast anything?</h2>
-      <span class="hint block">Name the spells you recognised. These are held loosely on purpose:
-        a GM re-preparing a caster's spells is the most ordinary thing in the game, so a spell the
-        statblock lacks barely counts against it. <em>How</em> it cast is a different matter &mdash;
-        that comes from what the creature is, and it is weighed in full.</span>
-      <input type="text" class="txt" id="in-spell" list="spell-list"
-             placeholder="counterspell, cone of cold&hellip;" autocomplete="off">
+      <h2>Spellcasting</h2>
+      <span class="hint block">Name the spells you recognised &mdash; any spell, whether or not it
+        is suggested. These are held loosely on purpose: a GM re-preparing a caster's spells is the
+        most ordinary thing in the game, so a spell the statblock lacks barely counts against it.
+        <em>How</em> it cast is a different matter &mdash; that comes from what the creature is, and
+        it is weighed in full.</span>
+      <input type="text" class="txt" id="in-spell" list="spell-list" autocomplete="off">
       <datalist id="spell-list"></datalist>
       <div class="sym-chosen" id="spell-chosen"></div>
-      <div class="chiprow"><span class="hint">How it cast</span><br><span id="pick-castingKind"></span></div>
-      <div class="chiprow"><span class="hint">Off which ability, if the GM said</span><br><span id="pick-castingAbility"></span></div>
-      <div class="chiprow"><span class="hint">Whose spell list it felt like</span><br><span id="pick-castingClass"></span></div>
+      <div class="chiprow"><span class="hint">Casting type</span><br><span id="pick-castingKind"></span></div>
+      <div class="chiprow"><span class="hint">Spellcasting ability</span><br><span id="pick-castingAbility"></span></div>
+      <div class="chiprow"><span class="hint">Spell list</span><br><span id="pick-castingClass"></span></div>
     </div>
 
     <div class="module">
       <h2>Numbers</h2>
-      <span class="hint block">Rough is fine. These are scored on a tolerance curve, never matched exactly.</span>
       <label>Armour Class <input type="number" class="num" id="in-ac" min="1" max="40"></label>
       <label style="margin-left:.5rem">Hit points <input type="number" class="num" id="in-hp" min="1"></label>
 
       <div class="rolls">
-        <div class="rolls-head">&hellip;or work them out from the dice, which is better</div>
-        <span class="hint block">The rolls are the one thing nobody can misremember. Type the
-          <b>totals</b>, separated however you like.</span>
+        <div class="rolls-head">From the dice, which is better evidence</div>
+        <span class="hint block">Scored on a tolerance curve, never matched exactly. The rolls are
+          the one thing nobody can misremember &mdash; type the <b>totals</b>, separated however
+          you like.</span>
 
         <div class="rollrow">
-          <span class="rolllabel">Attacks that <b>hit</b></span>
-          <input type="text" class="txt roll" id="in-ac-hit" placeholder="16" autocomplete="off">
+          <span class="rolllabel">Attack rolls that <b>hit</b></span>
+          <input type="text" class="txt roll" id="in-ac-hit" autocomplete="off">
           <span class="rolllabel">that <b>missed</b></span>
-          <input type="text" class="txt roll" id="in-ac-miss" placeholder="8, 13" autocomplete="off">
+          <input type="text" class="txt roll" id="in-ac-miss" autocomplete="off">
           <span class="hint" id="ac-range-read"></span>
         </div>
 
         <div class="rollrow">
-          <span class="rolllabel">Saves we <b>passed</b></span>
-          <input type="text" class="txt roll" id="in-dc-pass" placeholder="18" autocomplete="off">
-          <span class="rolllabel">that we <b>failed</b></span>
-          <input type="text" class="txt roll" id="in-dc-fail" placeholder="12" autocomplete="off">
+          <span class="rolllabel">Saves <b>passed</b></span>
+          <input type="text" class="txt roll" id="in-dc-pass" autocomplete="off">
+          <span class="rolllabel">that <b>failed</b></span>
+          <input type="text" class="txt roll" id="in-dc-fail" autocomplete="off">
           <span class="hint" id="dc-range-read"></span>
         </div>
 
         <div class="rollrow">
-          <span class="rolllabel">Damage it <b>survived</b></span>
-          <input type="text" class="txt roll" id="in-hp-lived" placeholder="40" autocomplete="off">
+          <span class="rolllabel">Damage <b>survived</b></span>
+          <input type="text" class="txt roll" id="in-hp-lived" autocomplete="off">
           <span class="rolllabel">damage that <b>dropped</b> it</span>
-          <input type="text" class="txt roll" id="in-hp-died" placeholder="55" autocomplete="off">
+          <input type="text" class="txt roll" id="in-hp-died" autocomplete="off">
           <span class="hint" id="hp-range-read"></span>
         </div>
 
@@ -141,14 +141,14 @@
           whatever the AC &mdash; so leave those out, or the bound will be wrong.</span>
       </div>
       <div style="margin-top:.35rem">
-        <label><input type="checkbox" id="in-retuned"> Assume the DM rebuilt this statblock</label>
+        <label><input type="checkbox" id="in-retuned"> Statblock was rebuilt by the GM</label>
         <span class="hint block">Drops the numbers to near-nothing and ranks on everything else.</span>
       </div>
       <div class="hint" id="cr-implied"></div>
     </div>
 
     <div class="module">
-      <h2>Your party</h2>
+      <h2>Party</h2>
       <span class="hint block">Optional. This never changes a score and never rules anything
         out &mdash; it only decides the order among monsters the evidence can't tell apart,
         which is most of them. DMs throw wildly over- and under-levelled monsters at parties
@@ -164,7 +164,7 @@
     </div>
 
     <div class="module">
-      <h2>Books</h2>
+      <h2>Sources</h2>
       <span class="hint block">Click once to <b style="color:var(--link)">include</b>, again to
         <b style="color:var(--danger)">exclude</b>, again to clear. Include when you know which
         books your DM owns; exclude to keep an adventure you're still playing from spoiling itself.</span>

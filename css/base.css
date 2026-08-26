@@ -162,7 +162,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .combatrow:first-child { border-top: 0; }
 .rowfield { display: inline-flex; flex-direction: column; gap: .05rem; }
 .rowfield .hint { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; }
-.rowfield > .hint + .hint { display: none; }        /* the suffix, folded into the label row */
 .combatrow .txt, .combatrow .rowsel { font-size: .85rem; padding: .1rem .2rem; }
 .rowdel { margin-left: auto; align-self: center; border: 0; background: none;
           color: var(--muted-fg); font-size: 1.1rem; line-height: 1; padding: 0 .3rem; }
@@ -218,6 +217,9 @@ th, td { text-align: left; padding: 1px 4px; }
 .why { font-size: .78rem; margin: .15rem 0 0 2rem; }
 .why .for { color: var(--good); }
 .why .against { color: var(--danger); }
+/* The sign does the work the words "for" and "against" used to. Fixed-width so the two
+   lines align under each other however long the first item is. */
+.ev-sign { display: inline-block; width: .7rem; font-weight: bold; }
 .why ul { margin: .1rem 0; padding-left: 1.1rem; }
 
 /* ----- F13 suggestions ----- */

@@ -200,19 +200,44 @@
     S.rarity = window.buildRarity(S.monsters);
     S.numerics = window.buildNumerics(S.monsters);
 
-    /* The spell vocabulary, out of the corpus rather than out of a hardcoded list —
-       unlike the picker vocabularies, which are fixed on purpose. There is no fixed set
-       of spells a monster might cast, only the set the loaded books actually use, and
-       offering a spell no monster has would be offering a guaranteed dead end. Commonest
-       first so the autocomplete's first suggestions are the ones you are likeliest to
-       have seen. */
+    /* THE SPELL VOCABULARY, AND A MISTAKE WORTH RECORDING.
+
+       It was built from the corpus alone, on the reasoning that offering a spell no
+       monster casts is offering a guaranteed dead end. That reasoning is wrong, and the
+       feature's own premise says why: the whole point of pricing spells as volatile is
+       that GMs re-prepare casters constantly. A GM who handed their archmage Melf's
+       Minute Meteors — which nothing in the bestiary casts — is precisely the case this
+       module exists for, and the suggestion list refused to admit the spell existed.
+
+       So: the full spell list when data/spells is present, the corpus's own names
+       otherwise, and free text accepted either way. Suggestions are a convenience, never
+       a constraint — see addSpell. */
     const spellCount = new Map();
     S.monsters.forEach(m => (m.spells || []).forEach(sp =>
       spellCount.set(sp, (spellCount.get(sp) || 0) + 1)));
-    S.spellVocab = [...spellCount.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+
+    /* Optional, like the fluff and the CLIP index: read it if it is there, carry on
+       without it if not. 5e.tools ships it next to the bestiary. */
+    const spellNames = new Map();          // lowercase key -> the name as the book prints it
+    const sidx = await getJsonOptional("data/spells/index.json");
+    if (sidx) {
+      await Promise.all(Object.values(sidx).map(async f => {
+        const j = await getJsonOptional("data/spells/" + f);
+        (j && j.spell || []).forEach(sp => {
+          if (sp && sp.name) spellNames.set(String(sp.name).toLowerCase(), String(sp.name));
+        });
+      }));
+    }
+    S.spellNames = spellNames;
+
+    /* Ordered by how many monsters cast it, so the first suggestions are the ones you
+       are likeliest to have met; everything else follows alphabetically. */
+    const known = [...spellCount.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([sp]) => sp);
+    const rest = [...spellNames.keys()].filter(k => !spellCount.has(k)).sort();
+    S.spellVocab = known.concat(rest);
     const dl = $("spell-list");
-    if (dl) dl.innerHTML = S.spellVocab.map(sp => `<option value="${esc(sp)}">`).join("");
+    if (dl) dl.innerHTML = S.spellVocab.map(sp => `<option value="${esc(spellTitle(sp))}">`).join("");
 
     const [books, adventures] = await Promise.all([
       getJsonOptional("data/books.json"), getJsonOptional("data/adventures.json"),
@@ -423,21 +448,28 @@
      so adding a row costs nothing until you put something in it.
      ============================================================ */
   const ATTACK_FIELDS = [
-    { key: "count",  label: "how many",   ph: "2",       w: "4rem",   type: "number" },
-    { key: "kind",   label: "what kind",  opts: () => ATTACK_KINDS },
-    { key: "rolls",  label: "it rolled",  ph: "22, 17",  w: "6rem" },
-    { key: "reach",  label: "how far",    ph: "10",      w: "4.5rem", type: "number", suffix: "ft." },
-    { key: "dmg",    label: "damage",     ph: "14, 9 or 2d8+5", w: "8rem" },
-    { key: "dmgType", label: "of what",   opts: () => DAMAGE_TYPES },
-    { key: "condition", label: "and left us", opts: () => CONDITIONS },
+    { key: "count",  label: "attacks",    w: "4rem",   type: "number" },
+    { key: "kind",   label: "attack type", opts: () => ATTACK_KINDS },
+    { key: "rolls",  label: "attack rolls", w: "6rem" },
+    { key: "reach",  label: "reach/range (ft.)", w: "5rem", type: "number" },
+    { key: "dmg",    label: "damage",     w: "8rem" },
+    { key: "dmgType", label: "damage type", opts: () => DAMAGE_TYPES },
+    { key: "condition", label: "condition", opts: () => CONDITIONS },
   ];
   const SAVE_FIELDS = [
-    { key: "abil",   label: "save",       opts: () => ABILITIES },
-    { key: "dc",     label: "DC",         ph: "18",      w: "4.5rem" },
-    { key: "area",   label: "area",       ph: "30",      w: "4.5rem", type: "number", suffix: "ft." },
-    { key: "dmg",    label: "damage",     ph: "56 or 16d6", w: "7rem" },
-    { key: "dmgType", label: "of what",   opts: () => DAMAGE_TYPES },
-    { key: "condition", label: "and left us", opts: () => CONDITIONS },
+    { key: "abil",   label: "ability",    opts: () => ABILITIES },
+    { key: "dc",     label: "DC",         w: "4.5rem" },
+    /* The saves the party made, which bound the DC the same way attack totals bound AC
+       — a passed save is an inclusive upper bound, a failed one an exclusive lower
+       bound. Better evidence than the DC field above it, because the GM has to announce
+       a DC for you to know it and nobody has to announce anything for you to have
+       rolled. Both are offered: sometimes you are told, sometimes you only roll. */
+    { key: "passed", label: "saves passed", w: "5.5rem" },
+    { key: "failed", label: "saves failed", w: "5.5rem" },
+    { key: "area",   label: "area (ft.)", w: "5rem", type: "number" },
+    { key: "dmg",    label: "damage",     w: "7rem" },
+    { key: "dmgType", label: "damage type", opts: () => DAMAGE_TYPES },
+    { key: "condition", label: "condition", opts: () => CONDITIONS },
   ];
 
   const rowHasContent = r => !!r && Object.keys(r)
@@ -451,9 +483,8 @@
         f.opts().map(o => `<option value="${esc(o)}"${o === val ? " selected" : ""}>${esc(o)}</option>`).join("") +
         `</select>`
       : `<input type="${f.type || "text"}" class="txt rowin" ${attrs} ` +
-        `style="width:${f.w || "5rem"}" placeholder="${esc(f.ph || "")}" value="${esc(val)}" autocomplete="off">`;
-    return `<label class="rowfield"><span class="hint">${esc(f.label)}</span>${inner}` +
-           (f.suffix ? `<span class="hint">${esc(f.suffix)}</span>` : "") + `</label>`;
+        `style="width:${f.w || "5rem"}" value="${esc(val)}" autocomplete="off">`;
+    return `<label class="rowfield"><span class="hint">${esc(f.label)}</span>${inner}</label>`;
   }
 
   /* The spells the party named, as removable chips. Same shape as the symptom chips
@@ -462,7 +493,8 @@
     const el = $("spell-chosen");
     if (!el) return;
     el.innerHTML = (S.obs.spells || []).map(sp =>
-      `<button class="chip on" data-spell-remove="${esc(sp)}" title="remove">${esc(sp)}</button>`).join("");
+      `<button class="chip on" data-spell-remove="${esc(sp)}" title="remove">` +
+      `${esc(spellTitle(sp))}</button>`).join("");
   }
 
   /* THE SCORE BAR, WITH ITS NUMBER IN IT.
@@ -557,6 +589,34 @@
     delete S.obs.damage[dmg.dataset.dmg];
     persist(); renderDamage(); renderResults(); renderSuggestions();
   });
+
+  /* Spell names as the books print them.
+
+     The bestiary writes them lowercase ({@spell fire bolt}), so they are stored and
+     matched lowercase — one canonical key, no chance of "Fire Bolt" and "fire bolt"
+     becoming two chips. Only the DISPLAY is capitalised, and only when the real name is
+     not already known: with data/spells present the book's own spelling wins outright,
+     which is the only way to get "Abi-Dalzim" and "Otiluke" right.
+
+     Small words stay lowercase inside a title but never at the start; hyphens and
+     slashes ("enlarge/reduce", "abi-dalzim's") capitalise on both sides; a possessive
+     's does not become 'S. */
+  const SMALL_WORDS = new Set(["of", "the", "and", "to", "from", "in", "on", "at", "or", "a", "an"]);
+  function spellTitle(name) {
+    const raw = String(name || "");
+    const known = S.spellNames && S.spellNames.get(raw.toLowerCase());
+    if (known) return known;
+    return raw.split(" ").map((word, i) =>
+      /* Split on the punctuation that starts a new word, keeping it, so both halves get
+         capitalised. The apostrophe is NOT in that set: "melf's" must not become
+         "Melf'S". */
+      word.split(/([-/])/).map((part, j) => {
+        if (part === "-" || part === "/") return part;
+        if (i > 0 && j === 0 && SMALL_WORDS.has(part)) return part;
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      }).join("")
+    ).join(" ");
+  }
 
   /* ============================================================
      A SYMPTOM AND THE MECHANICS UNDER IT.
@@ -847,15 +907,29 @@
       : "";
   }
 
+  /* WHAT ARGUED FOR AND AGAINST, AS TIGHT AS IT GOES.
+
+     This was "for: ..." and "against: ...", semicolon-separated, with every entry on the
+     against side carrying "— the statblock doesn't have this". Which is what against
+     MEANS: repeating it once per item spent most of the line restating the heading.
+
+     A + and a - carry the same information in one character, and the colour already
+     says it twice over. The `why` is kept only where it says something the sign does
+     not — a volatile miss, a contradicted damage type, the nearest action a combat row
+     could find. */
   function evidenceList(items, cls) {
     if (!items.length) return "";
-    const label = cls === "for" ? "for" : "against";
-    return `<div class="${cls}">${label}: ` + items.map(x => {
+    const sign = cls === "for" ? "+" : "\u2212";
+    return `<div class="${cls}"><span class="ev-sign">${sign}</span> ` + items.map(x => {
       const conf = x.confidence != null && x.confidence < 1 ? ` <span class="hint">(uncertain)</span>` : "";
-      const why = x.why ? ` &mdash; ${esc(x.why)}` : "";
+      const why = x.why && !DEFAULT_WHY.test(x.why) ? ` <span class="hint">(${esc(x.why)})</span>` : "";
       return `${esc(prettyValue(x))}${conf}${why}`;
-    }).join("; ") + "</div>";
+    }).join(", ") + "</div>";
   }
+
+  /* The reason that is merely the definition of "against". Anything else is worth the
+     room it takes. */
+  const DEFAULT_WHY = /^the statblock doesn't have this$/i;
 
   /* Feature keys read like "symptom:it-healed-between-rounds" to the scorer. Nobody
      should have to read that, so F14's explanation is translated back into the same
@@ -1343,11 +1417,14 @@
     return true;
   }
 
-  /* Commit a spell name. Accepted whether or not the corpus has it: a spell nobody in
-     your books casts still scores — as a miss against everything, which is honest —
-     and refusing the input would mean arguing with a player about what they saw.
-     Matched case-insensitively against the vocabulary so the stored value is the
-     canonical one and two spellings cannot become two chips. */
+  /* Commit a spell name. ACCEPTED WHETHER OR NOT ANYTHING CASTS IT: a spell nobody in
+     your books has still scores — as a miss against everything, which is honest — and
+     refusing it would mean arguing with a player about what they watched happen. The
+     suggestion list is a convenience and never a constraint, which matters because the
+     re-prepared caster is the case this module was built for.
+
+     Stored lowercase so one canonical key backs every spelling; only the display is
+     capitalised. */
   function addSpell(text) {
     const raw = String(text || "").trim().toLowerCase();
     if (!raw) return false;

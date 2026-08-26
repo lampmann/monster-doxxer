@@ -664,6 +664,10 @@
 
   const gauss = (miss, sigma) => Math.exp(-(miss * miss) / (2 * sigma * sigma));
 
+  // "18, 11 9" -> [18, 11, 9]. As permissive about separators as the roll boxes.
+  const numsIn = v => String(v == null ? "" : v)
+    .split(/[^0-9]+/).map(x => parseInt(x, 10)).filter(Number.isFinite);
+
   /* "14, 9" -> totals the party watched land. "2d8+5" -> the expression, if the DM read
      it out or they worked it out. Told apart by the 'd', which is the only thing that
      could not appear in a list of totals. */
@@ -753,6 +757,31 @@
         claim(NUMERIC.dcWeight, gauss(best, NUMERIC.dcSigma), `DC ${dcs.join("/")}`);
       } else if (dcs.length) {
         claim(NUMERIC.dcWeight, 0, `DC ${dcs.join("/")}`);
+      }
+
+      /* THE SAVES THEY ACTUALLY ROLLED, which bound the DC without anyone announcing
+         it: a passed save is an inclusive upper bound on the DC, a failed one an
+         exclusive lower bound. Identical in shape to the AC bounds, and better evidence
+         than the DC field above — the GM has to say a DC for you to know it, and nobody
+         has to say anything for you to have rolled.
+
+         Scored per ROW rather than through obs.dcRange, because a row is one action and
+         the whole point is that these saves were against THAT action's DC. The
+         monster-level dcRange still exists for a party who cannot say which. */
+      const passed = numsIn(row.passed), failed = numsIn(row.failed);
+      if ((passed.length || failed.length) && typeof e.dc === "number") {
+        const hi = passed.length ? Math.min.apply(null, passed) : null;   // inclusive
+        const lo = failed.length ? Math.max.apply(null, failed) : null;   // exclusive
+        const contradiction = lo != null && hi != null && lo >= hi;
+        // A contradiction is the party telling us two untrue things; score neither.
+        if (!contradiction) {
+          const miss = lo != null && e.dc <= lo ? lo - e.dc + 1
+            : hi != null && e.dc > hi ? e.dc - hi : 0;
+          claim(NUMERIC.dcWeight, gauss(miss, NUMERIC.dcSigma),
+                `saves ${passed.join(", ") || "\u2014"} passed / ${failed.join(", ") || "\u2014"} failed`);
+        }
+      } else if (passed.length || failed.length) {
+        claim(NUMERIC.dcWeight, 0, "the saves we rolled");
       }
       if (row.area) {
         const size = Number(row.area);
@@ -871,6 +900,8 @@
     if (isSave) {
       if (row.abil) bits.push(`${row.abil} save`);
       if (row.dc) bits.push(`DC ${row.dc}`);
+      if (row.passed) bits.push(`passed ${row.passed}`);
+      if (row.failed) bits.push(`failed ${row.failed}`);
       if (row.area) bits.push(`${row.area} ft.`);
     } else {
       if (row.count > 1) bits.push(`${row.count}×`);

@@ -36,6 +36,12 @@ click.
 `bestiary/index.json` is 5e.tools' own manifest mapping source codes to filenames; the loader reads
 it to discover what you have rather than guessing at filenames.
 
+`spells/` is optional too, and improves one thing: the spell box suggests every spell in the game
+rather than only the ~400 that some monster in your books casts, and spells the bestiary writes in
+lowercase get the capitalisation the books use. Without it the box still accepts **any** spell you
+type, which is the part that matters — a GM who re-prepared a caster is exactly who this module is
+for, and their spell may be one nothing in the bestiary has.
+
 ## Why it isn't bundled
 
 Statblock text and fluff prose are WotC's. The unit tests in `tests/` therefore run on synthetic

@@ -179,7 +179,10 @@ async function main() {
 
       const txt = await resultsText(page);
       assert("something is ranked", /1\./.test(txt));
-      assert("the result explains WHY it ranked (F14)", /for:/i.test(txt));
+      /* The reasoning is marked with a + and a - rather than the words "for" and
+         "against", so this asserts the structure rather than the punctuation. */
+      assert("the result explains WHY it ranked (F14)",
+        await page.evaluate(() => !!document.querySelector("#results .why .for")));
       assert("...naming the observation back in the player's own words",
         /healed between rounds/i.test(txt));
       assertEqual("no JavaScript errors while ranking", page.__errors, []);
@@ -224,7 +227,8 @@ async function main() {
       assert("...and blames the DM or the memory, not the party",
         /built this one themselves|misremembered/i.test(txt));
       assert("the leads are still listed — rank, never filter", /1\./.test(txt));
-      assert("...with their reasoning intact", /for:/i.test(txt));
+      assert("...with their reasoning intact",
+        await page.evaluate(() => !!document.querySelector("#results .why .for")));
 
       const tabs = await tabsText(page);
       assert("the tab stops asserting a name it cannot support",
@@ -532,6 +536,22 @@ async function main() {
 
       const txt = await resultsText(page);
       assert("a spell alone ranks something", /1\./.test(txt));
+
+      assert("spell names are shown as the books print them, not lowercased",
+        /Counterspell/.test(await page.$eval("#spell-chosen", el => el.textContent)));
+
+      /* THE SUGGESTIONS ARE A CONVENIENCE, NEVER A CONSTRAINT. Nothing in the bestiary
+         casts Melf's Minute Meteors, and the list was built from the bestiary — so the
+         one case this module exists for, a GM who re-prepared a caster, was the one
+         case it refused to accept. */
+      await page.fill("#in-spell", "Melf's Minute Meteors");
+      await page.press("#in-spell", "Enter");
+      await page.waitForTimeout(1200);
+      const chips = await page.$eval("#spell-chosen", el => el.textContent);
+      assert("a spell no monster in the books casts is still accepted",
+        /Melf's Minute Meteors/.test(chips));
+      assertEqual("...and the box clears for the next one",
+        await page.$eval("#in-spell", el => el.value), "");
 
       /* THE POINT OF THE MODULE. GMs re-prepare spells constantly, so a spell the
          statblock lacks is weak evidence against it — and the page has to SAY that,
