@@ -163,6 +163,12 @@ A name is treated as the strongest single thing you can say, but it is still evi
 filter: your DM may have renamed the thing, or you may have caught the wrong word. Even when
 half the names given are outright wrong, the tool still does better than with no name at all.
 
+It also shows you **the creatures that name tends to mean**. GMs say "it's a ghost" about
+Specters and Wraiths, and no amount of spelling gets you from one to the other — so the tool
+reads the books instead, and offers the monsters whose descriptions read the same way. Click one
+to adopt it. These are offered rather than scored, and DESIGN.md has the measurement that says
+why.
+
 ## Describing it
 
 Type what it looked like in your own words. Two things happen:

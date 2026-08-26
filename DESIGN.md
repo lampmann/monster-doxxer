@@ -878,6 +878,71 @@ alternatives so take the max, otherwise sum. The remaining 87 are genuinely unco
 yield 0, which costs the monster no evidence rather than inventing a number that argues
 against it.
 
+## A name reaches further than it spells
+
+"It's a ghost" gets said about Specters, Wraiths and Phantom Warriors. String distance
+cannot follow that: they share no letters with *ghost*, and every trick that gets from
+"ghost" to "ghast" gets no nearer "specter" than to "sceptre".
+
+**This is not word embedding**, and the distinction is worth keeping straight, because
+the obvious version was already tried and measured — CLIP's text encoder scores 0/16 on
+retrieval over this corpus. What works instead is the corpus's own prose: find the
+monster the name means, take the most distinctive words out of *its* description, and ask
+which other monsters those words describe. No model, no build step, no shipped index.
+
+| Typed | Reaches |
+|---|---|
+| ghost | Phantom Warrior, Specter, Ghost Dragon, Obzedat Ghost, Atropal, Wraith |
+| beholder | Oculorb, Spectator, Gauth, Eyedrake, Gazer, Mindwitness |
+| troll | Troll Limb, Ice Troll, Troll Mutate, Rot Troll, Spirit Troll, Dire Troll |
+
+Restricted to the same creature type, which is the whole difference between useful and
+embarrassing — unrestricted, *ghost* reached Animated Table and *owlbear* reached Oxen,
+both on generic prose about size and habitat. Weighting in shared symptoms was tried and
+made it **worse**: it swamps the prose with whichever obscure NPCs carry the same tag
+set, and *ghost* came back Spirit, Agony, Amun Sa, Celeste.
+
+### Shown, not scored — and why that is a measurement
+
+Feeding kin into the ranking was built, wired into the harness and swept.
+
+It needed a corruption model of its own first. `mishearRate` replaces the name with a
+random creature, so no kin relationship to the truth exists by construction and the
+feature measured exactly zero. `--kin-heard` names a **relative** instead — drawn by
+creature type, deliberately *not* by the prose similarity the feature ranks on, so the
+test is not marking its own homework.
+
+In the scenario most favourable to it, every single query carrying a relative's name
+rather than the creature's:
+
+| `kinFactor` | top-1 | top-5 | top-20 |
+|---|---|---|---|
+| 0 | 40.4% | 62.4% | 78.4% |
+| 0.25 | 40.0% | 63.2% | 79.2% |
+| 1 | 40.0% | **64.0%** | 79.2% |
+
+1.6 points of top-5 across the entire range, top-1 slightly *worse*, and nothing at all
+at a realistic mishear rate. That is not enough to justify a silent score change and a
+constant the harness cannot defend, so the scoring branch was deleted.
+
+The names are offered instead. Putting them in front of someone who knows what they saw
+costs nothing if they ignore it, and one click adopts the name — at which point it is
+scored as an ordinary heard name, by the path that *is* measured. The harness flags
+remain so the result can be re-tested rather than re-litigated.
+
+## What the appearance box actually searches
+
+Worth stating plainly, because the box is easy to under-use: it is matched against the
+whole **description document**, not only the visual parts. That document is the name,
+size, type and tags, the names of every trait and action, and up to four paragraphs of
+5e.tools' Info text. So lore works — *"guards a lair full of treasure"* returns the red
+dragons, *"worships Orcus"* returns Zargash and the Bodak.
+
+What limits it is that the matching is lexical, not that the scope is narrow. *"Swamp-
+dwelling"* misses because the books say *marsh* and *bog*. That is the same vocabulary
+gap `eval/appearance.js` exists to measure, and the same one the CLIP experiment failed
+to close.
+
 ## Naming the mechanic, when the GM said it out loud
 
 The ontology's second idea is that the players never hear the mechanic's name, so every
