@@ -1042,6 +1042,36 @@ fight directly without ever re-splicing the array, so picking an *existing* figh
 that list (not just minting a new one) could have rendered as two boxes for what was
 really one fight. It now runs through the same `keepFightContiguous` the drag path uses.
 
+### The port carried a real bug, and "verify it live" is what caught it
+
+"The live feedback works, but not the grouping and reordering" — the report was right,
+and checking it against a real mouse drag (rather than trusting that the first live test
+had covered it) found reordering genuinely broken, in the most common state there is: two
+fresh tabs, still sharing the fight every tab starts in, dragged onto each other's edge.
+Nothing moved.
+
+The cause was the direct port of pmcrwf's `reorderCharacter`:
+
+```js
+const block = moved.group ? groupMembers(moved.group) : [moved];
+```
+
+pmcrwf's characters start **ungrouped**, so this line is almost always just the one
+character — a group there is the rare, opt-in state. Every tab here starts in the **same
+fight**, so the direct port moved the whole fight whenever mover and target shared one,
+which is the common case, not the rare one. The block being moved then included the
+target itself, `rest` (everything outside the block) no longer contained it,
+`rest.findIndex` came back `-1`, and the block spliced back in exactly where it started —
+a silent no-op on the first two tabs anyone would ever drag.
+
+Grouping was unaffected — `groupIntoFight` already treats "already share a fight" as a
+no-op on purpose — and neither was reordering *across* fights, which is exactly why the
+first round of tests missed it: they only ever exercised reordering after first splitting
+tabs into different fights. The fix moves only the single dragged tab when it and the
+target already share a fight, and the whole fight only when they do not — which is the
+one case the block-move exists to protect, a drag that would otherwise silently split a
+fight in two.
+
 ## Where a score came from
 
 The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one
