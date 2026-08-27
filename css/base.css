@@ -249,6 +249,22 @@ th, td { text-align: left; padding: 1px 4px; }
 .ev-sign { display: inline-block; width: .7rem; font-weight: bold; }
 .why ul { margin: .1rem 0; padding-left: 1.1rem; }
 
+/* ----- the detail panel's two tabs ----- */
+.dtabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border-hair);
+         margin-bottom: .4rem; }
+.dtab { border: 1px solid transparent; border-bottom: 0; background: none; color: var(--muted-fg);
+        font: inherit; font-size: .82rem; padding: .15rem .6rem; border-radius: var(--radius) var(--radius) 0 0;
+        margin-bottom: -1px; }
+.dtab.on { border-color: var(--border-hair); border-bottom-color: var(--bg);
+           background: var(--bg); color: var(--fg); font-weight: bold; }
+.dbody p { margin: .35rem 0; }
+.sb-group { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--muted-fg); margin: .5rem 0 .15rem;
+            border-bottom: 1px solid var(--border-hair); }
+/* The six ability scores, on one line, wrapping on a narrow column. */
+.sb-abils { display: flex; flex-wrap: wrap; gap: .1rem .8rem; margin: .25rem 0; font-size: .85rem; }
+.sb-abils i { color: var(--muted-fg); font-style: normal; }
+
 /* ----- F13 suggestions ----- */
 .sugg { border-top: 1px solid var(--border-hair); padding: .3rem 0; }
 .sugg:first-child { border-top: 0; }

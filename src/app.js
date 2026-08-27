@@ -88,6 +88,9 @@
   const S = {
     monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
     appearanceIndex: null, nameIndex: null, embeddings: null, sizeFromProse: "",
+    fluff: null,              // name|source -> the book's Info text, for the detail panel
+    loreIndex: null,          // built on demand — see loreIndex()
+    detailTab: "stat",        // which tab the detail panel is showing
     srcVisible: null,         // group -> the codes currently shown, for the bulk buttons
     // The active tab's fields, mirrored here so the rest of the app reads them unchanged.
     obs: blankObs(),
@@ -271,7 +274,11 @@
         if (j && Array.isArray(j.monsterFluff)) fluffLists.push(j.monsterFluff);
       }));
     }
-    S.appearanceIndex = window.buildAppearanceIndex(S.monsters, window.fluffMap(fluffLists));
+    /* Kept, not just consumed. It was built for the search index and dropped on the
+       floor; the Info tab is the same text, and re-reading a hundred files to show one
+       monster's description would be absurd. */
+    S.fluff = window.fluffMap(fluffLists);
+    S.appearanceIndex = window.buildAppearanceIndex(S.monsters, S.fluff);
     S.nameIndex = window.buildNameIndex(S.monsters);
     S.embeddings = await loadEmbeddings();
 
@@ -1173,31 +1180,93 @@
     S.suggested = tests;
   }
 
-  function renderDetail() {
-    const mod = $("detail-module");
-    if (!S.selected) { mod.hidden = true; return; }
-    const m = S.monsters.find(x => x.key === S.selected);
-    if (!m) { mod.hidden = true; return; }
-    mod.hidden = false;
-    $("detail-title").textContent = m.name;
+  /* ============================================================
+     The detail panel — two tabs, because they answer different questions.
 
+     "Is this it?" is a statblock question: the numbers, the actions, the traits. "What
+     IS this?" is a lore question, and the answer is in the book's Info text, which the
+     tool has loaded all along for the search index and never showed anyone.
+     ============================================================ */
+  const DETAIL_TABS = [["stat", "Stat block"], ["info", "Info"]];
+
+  const ABILS = [["str", "STR"], ["dex", "DEX"], ["con", "CON"],
+                 ["int", "INT"], ["wis", "WIS"], ["cha", "CHA"]];
+  const mod = n => (typeof n === "number" ? (n >= 10 ? "+" : "") + Math.floor((n - 10) / 2) : "");
+
+  function statBlockHtml(m) {
     const line = (k, v) => v ? `<div class="sb-line"><b>${esc(k)}</b> ${esc(v)}</div>` : "";
-    const traits = [].concat(m.traits, m.actions, m.legendary)
-      .map(t => `<div class="sb-trait"><b>${esc(t.name)}.</b> ${esc(t.text)}</div>`).join("");
+    const group = (label, list) => (list && list.length)
+      ? `<div class="sb-group">${esc(label)}</div>` + list.map(t =>
+          `<div class="sb-trait"><b>${esc(t.name)}.</b> ${esc(t.text)}</div>`).join("")
+      : "";
+    const abilities = ABILS.some(([k]) => typeof m[k] === "number")
+      ? `<div class="sb-abils">` + ABILS.map(([k, label]) =>
+          `<span><b>${label}</b> ${m[k] == null ? "\u2014" : esc(m[k])} <i>${esc(mod(m[k]))}</i></span>`).join("") +
+        `</div>`
+      : "";
+    const casting = (m.spellcasting || []).map(sc =>
+      `<div class="sb-trait"><b>${esc(sc.name)}.</b> ${esc(sc.text)}` +
+      ((m.spells || []).length ? `<div class="hint">${esc(m.spells.map(spellTitle).join(", "))}</div>` : "") +
+      `</div>`).join("");
 
-    $("detail").innerHTML =
-      `<div class="sb-line hint">${esc(m.size.join("/"))} ${esc(m.type)}` +
+    return `<div class="sb-line hint">${esc(m.size.join("/"))} ${esc(m.type)}` +
       `${m.typeTags.length ? " (" + esc(m.typeTags.join(", ")) + ")" : ""}, ${esc(m.alignment)} ` +
       `&mdash; ${esc(m.source)}${m.page ? " p." + m.page : ""}</div>` +
       line("AC", m.acText || m.ac) +
       line("HP", m.hpSpecial || (m.hpAvg ? m.hpAvg + (m.hpFormula ? " (" + m.hpFormula + ")" : "") : "")) +
       line("Speed", m.speedText) +
+      abilities +
+      line("Saving throws", m.save && Object.keys(m.save).length
+        ? Object.keys(m.save).map(k => k.toUpperCase() + " " + m.save[k]).join(", ") : "") +
+      line("Skills", m.skill && Object.keys(m.skill).length
+        ? Object.keys(m.skill).map(k => cap(k) + " " + m.skill[k]).join(", ") : "") +
       line("Senses", m.senses.concat(m.passive ? ["passive Perception " + m.passive] : []).join(", ")) +
       line("Resistances", m.resistText) + line("Immunities", m.immuneText) +
       line("Vulnerabilities", m.vulnerableText) +
       line("Condition immunities", m.conditionImmune.join(", ")) +
       line("Languages", m.languages.join(", ")) + line("CR", m.cr) +
-      traits;
+      group("Traits", m.traits) + (casting ? `<div class="sb-group">Spellcasting</div>` + casting : "") +
+      group("Actions", m.actions) + group("Bonus actions", m.bonusActions) +
+      group("Reactions", m.reactions) + group("Legendary actions", m.legendary);
+  }
+
+  /* The book's own Info text, whole. The search index takes four paragraphs of this;
+     a reader who has opened the panel wants all of it. */
+  function infoHtml(m) {
+    const f = S.fluff && S.fluff[String(m.name).toLowerCase() + "|" + String(m.source || "").toLowerCase()];
+    if (!f || !f.entries) {
+      return `<span class="hint">No description text for this one. About half the corpus has ` +
+             `none &mdash; it is the part of the books that is prose rather than rules, and ` +
+             `plenty of statblocks never got any.</span>`;
+    }
+    const out = [];
+    const walk = node => {
+      if (typeof node === "string") {
+        const t = String(node).trim();
+        if (t) out.push(`<p>${esc(window.stripTags ? window.stripTags(t) : t)}</p>`);
+        return;
+      }
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (!node || typeof node !== "object") return;
+      if (node.name) out.push(`<div class="sb-group">${esc(node.name)}</div>`);
+      walk(node.entries || node.items || []);
+    };
+    walk(f.entries);
+    return out.join("") || `<span class="hint">No description text for this one.</span>`;
+  }
+
+  function renderDetail() {
+    const box = $("detail-module");
+    if (!S.selected) { box.hidden = true; return; }
+    const m = S.monsters.find(x => x.key === S.selected);
+    if (!m) { box.hidden = true; return; }
+    box.hidden = false;
+    $("detail-title").textContent = m.name;
+
+    const tabs = DETAIL_TABS.map(([id, label]) =>
+      `<button class="dtab${S.detailTab === id ? " on" : ""}" data-dtab="${id}">${esc(label)}</button>`).join("");
+    $("detail").innerHTML = `<div class="dtabs">${tabs}</div>` +
+      `<div class="dbody">${S.detailTab === "info" ? infoHtml(m) : statBlockHtml(m)}</div>`;
   }
 
   function renderAll() {
@@ -1279,6 +1348,14 @@
       }
       return;
     }
+    const dtab = t.closest("[data-dtab]");
+    if (dtab) {
+      e.preventDefault();
+      S.detailTab = dtab.dataset.dtab;
+      renderDetail();
+      return;
+    }
+
     const kinBtn = t.closest("[data-kin]");
     if (kinBtn) {
       e.preventDefault();
@@ -1454,6 +1531,24 @@
   /* Say what the name matched, rather than silently reweighting the whole list. A nudge
      this strong has to be visible — and if it matched the wrong thing, the user needs to
      see that it did before they trust the ranking underneath it. */
+  /* KIN READS A DIFFERENT DOCUMENT FROM SEARCH, and has to.
+
+     The search index folds in the statblock's own prose, which is what makes
+     "heartstone" find the Night Hag. That same prose wrecks kinship: a Ghost's most
+     distinctive words become Etherealness and Horrifying Visage, and the nearest
+     neighbours become whichever obscure NPCs copied those traits — "ghost" came back
+     Agony, Amun Sa, Celeste. What makes Specter and Wraith read like a Ghost is the
+     LORE, and only the lore.
+
+     So kin gets its own index, built without entry text. Lazily, because it costs about
+     270ms and most sessions never type a name: nobody should pay for this at load. */
+  function loreIndex() {
+    if (!S.loreIndex && S.monsters.length && window.buildAppearanceIndex) {
+      S.loreIndex = window.buildAppearanceIndex(S.monsters, S.fluff || {}, { entryFactor: 0 });
+    }
+    return S.loreIndex;
+  }
+
   function renderNameRead() {
     const el = $("name-read");
     const q = (S.obs.heardName || "").trim();
@@ -1481,7 +1576,7 @@
        who knows what they saw is a different proposition, and costs nothing if they
        ignore it. */
     const kin = window.kinScores
-      ? window.kinScores(q, S.nameIndex, S.monsters, S.appearanceIndex,
+      ? window.kinScores(q, S.nameIndex, S.monsters, loreIndex(),
                          window.appearanceScore, 6)
       : new Map();
     const byKey = new Map(S.monsters.map(m => [m.key, m]));

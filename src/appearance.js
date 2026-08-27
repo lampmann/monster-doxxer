@@ -246,8 +246,29 @@
     return out.slice(0, maxParas || 2).join(" ");
   }
 
-  function describe(m, prose) {
-    return [
+  /* WHAT THE STATBLOCK ITSELF SAYS, which was missing entirely.
+
+     The document used to take trait and action NAMES and nothing else — so a Night Hag's
+     "Night Hag Items" was indexed and the heartstone described inside it was not. Searching
+     "heartstone" returned nothing, though the Night Hag is one of three creatures in the
+     whole corpus that has one. The most distinctive noun a statblock owns is routinely in
+     the body of a trait, never in its title.
+
+     Entry text is long, though, and BM25 normalises by document length: pasting every
+     action's prose in at full weight dilutes the short visual document that the appearance
+     query is actually aiming at. So it goes in at a weight, `entryFactor`, measured below
+     rather than guessed. */
+  function entryText(m) {
+    return [].concat(m.traits || [], m.actions || [], m.bonusActions || [],
+                     m.reactions || [], m.legendary || [])
+      .map(e => `${e.name || ""} ${e.text || ""}`)
+      .join(" ")
+      .trim();
+  }
+
+  function describe(m, prose, opts) {
+    const o = opts || {};
+    const parts = [
       m.name,
       (m.size || []).join(" "),
       m.type,
@@ -255,7 +276,9 @@
       (m.traits || []).map(t => t.name).join(" "),
       (m.actions || []).map(t => t.name).join(" "),
       prose || "",
-    ].filter(Boolean).join(". ");
+    ];
+    if (o.entries !== false) parts.push(entryText(m));
+    return parts.filter(Boolean).join(". ");
   }
 
   /* Resolve fluff `_copy` the same way the bestiary does — about a quarter of fluff
@@ -287,22 +310,58 @@
      at the very top — 5e.tools' opening paragraph is often ecology or attitude, with the
      shape of the thing a paragraph or two later. Chosen by measurement, below. */
   const PARAGRAPHS = 4;
+  /* How much a word in the statblock's own prose counts against one in its description.
+
+     MEASURED, and the trade is real rather than free. Against the 16 hand-written
+     appearance cases:
+
+         entryFactor   top-1   top-5   top-20
+         0             4/16    8/16    10/16
+         0.5           4/16    7/16    11/16
+
+     Bulette drops out of the top 5 (5 -> 9); Owlbear (29 -> 18) and Unicorn (20 -> 12)
+     come into the top 20. Roughly a wash on the benchmark the index was built for — and
+     it buys an entire class of query that used to return literally nothing, because the
+     nouns a statblock owns live in the body of its traits and none of them were indexed.
+     "heartstone" found no Night Hag; it now finds all three creatures that have one.
+
+     0.5 rather than 1.0 because the statblock is several times longer than the visual
+     description and BM25 divides by document length: at full weight a creature with
+     fifteen actions looks like a poor match for its own appearance. 0.5, 0.75 and 1.0
+     measure identically, so this takes the least dilution that achieves it. */
+  const ENTRY_FACTOR = 0.5;
 
   function buildIndex(monsters, fluff, opts) {
-    const paras = (opts && opts.paras) || PARAGRAPHS;
+    const o = opts || {};
+    const paras = o.paras || PARAGRAPHS;
+    const ef = o.entryFactor == null ? ENTRY_FACTOR : o.entryFactor;
     const docs = [];
     const df = Object.create(null);
     let totalLen = 0;
 
     monsters.forEach(m => {
       const f = fluff && fluff[String(m.name).toLowerCase() + "|" + String(m.source || "").toLowerCase()];
-      const text = describe(m, f ? fluffProse(f.entries, paras) : "");
+      const text = describe(m, f ? fluffProse(f.entries, paras) : "", { entries: false });
       const ts = tokens(text);
       const tf = Object.create(null);
       ts.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
+
+      /* Statblock prose, folded in at a fraction of full weight. It carries the nouns
+         nothing else has — heartstone, eyestalks, a hag's items — but it is many times
+         longer than the visual description, and BM25 divides by document length. At full
+         weight a creature with fifteen actions would look like a poor match for its own
+         appearance. The count contributes `ef` per occurrence and `ef` to the length, so
+         both halves of the BM25 ratio move together. */
+      if (ef > 0) {
+        const es = tokens(entryText(m));
+        es.forEach(t => { tf[t] = (tf[t] || 0) + ef; });
+        totalLen += es.length * ef;
+        docs.push({ key: m.key, tf, len: ts.length + es.length * ef, hasProse: !!(f && f.entries) });
+      } else {
+        docs.push({ key: m.key, tf, len: ts.length, hasProse: !!(f && f.entries) });
+      }
       Object.keys(tf).forEach(t => { df[t] = (df[t] || 0) + 1; });
       totalLen += ts.length;
-      docs.push({ key: m.key, tf, len: ts.length, hasProse: !!(f && f.entries) });
     });
 
     const N = docs.length || 1;
@@ -371,6 +430,6 @@
   return { tokens, stem, STOP, semanticWeight,
            COLOURS, MORPHOLOGY, TEXTURE, CREATURE_NOUNS, VISUAL, isVisual,
            WEIGHTS, termWeight, PARAGRAPHS,
-           SIZES, SIZE_LIKE, extractSize, withoutSize, fluffProse, fluffMap, describe,
+           SIZES, SIZE_LIKE, extractSize, withoutSize, fluffProse, fluffMap, describe, entryText,
            buildAppearanceIndex: buildIndex, appearanceScore: score };
 });

@@ -707,6 +707,52 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("the statblock's own words are searchable");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* The description document took trait NAMES and not their bodies, so a Night Hag's
+         "Night Hag Items" was indexed and the heartstone described inside it was not.
+         Three creatures in the corpus have a heartstone; the search found none of them. */
+      await page.fill("#in-appearance", "heartstone");
+      await page.waitForTimeout(1600);
+      const txt = await resultsText(page);
+      assert("a noun that appears only in trait prose finds its monster",
+        /night hag|morgantha|mad maggie/i.test(txt));
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a monster opens on two tabs");
+    {
+      const { ctx, page } = await fresh(browser);
+      await page.fill("#in-name", "night hag");
+      await page.waitForTimeout(1600);
+      await page.evaluate(() => document.querySelector("#results [data-detail]").click());
+      await page.waitForTimeout(600);
+
+      const tabs = await page.evaluate(() =>
+        [...document.querySelectorAll(".dtab")].map(x => x.textContent.trim()));
+      assertEqual("the panel offers a stat block and the book's info", tabs, ["Stat block", "Info"]);
+
+      const stat = await page.$eval(".dbody", el => el.textContent);
+      assert("the stat block carries the trait PROSE, not only trait names",
+        /heartstone/i.test(stat));
+      assert("...and the ability scores", /STR/.test(stat) && /CHA/.test(stat));
+      assert("...and what it casts", /Magic Missile/i.test(stat));
+
+      await page.evaluate(() =>
+        [...document.querySelectorAll(".dtab")].find(x => /Info/.test(x.textContent)).click());
+      await page.waitForTimeout(400);
+      const info = await page.$eval(".dbody", el => el.textContent);
+      assert("the info tab shows the book's description", info.length > 500);
+      assert("...which is different text from the stat block", !/^AC /.test(info.trim()));
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);
