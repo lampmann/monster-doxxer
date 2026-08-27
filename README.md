@@ -78,7 +78,7 @@ Failing all of that, any static server over this folder does the same job:
 Then describe what you saw. The form is ordered by how much each kind of evidence is actually
 worth, so the first box — *what did it do?* — is the one that matters. Type what you'd say at the
 table (&ldquo;it healed between rounds&rdquo;, &ldquo;my sword bounced off&rdquo;) and pick the
-match. Every result shows what argued for it and what argued against.
+match. Every result shows what argued for it and what argued against, and its score bar is split by where the score came from — hover it for the breakdown, and match the colours to the swatch on each part of the form.
 
 **If the GM said the name.** Each sentence lists the mechanics it looks for, and each of
 those is its own button. Picking the sentence means "any of these"; clicking a mechanic

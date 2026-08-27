@@ -942,6 +942,35 @@ heartstone described inside it was not. Searching **heartstone** returned nothin
 though the Night Hag is one of three creatures in the corpus that has one. The most
 distinctive noun a statblock owns is routinely in the body of a trait, never in its title.
 
+### The stemmer was splitting singulars from their plurals
+
+A playtester reported that *"white winged horse"* returned Draft Horse, Sea Horse and
+Winged Bull above the Pegasus. Two plausible explanations were tested and both were
+wrong. The actual bug was two lines of the stemmer, and it had been damaging every query
+since the index was written:
+
+```
+stem("horse")  -> "horse"
+stem("horses") -> "hors"
+```
+
+`horses` ends in `-ses`, so the rule meant for *glasses → glass* fired. `horse` has no
+plural suffix to strip and stayed whole. Two tokens that can never be equal — so a query
+for a winged **horse** could not match a Pegasus whose own book text calls it exactly
+that. Every noun whose singular ends in a silent *e* split the same way: house, scale,
+tentacle, snake, plate, carapace.
+
+No better plural rule fixes it, because *glasses* is glass+es and *horses* is horse+s and
+nothing in the spelling says which. Both forms are converged instead — strip the plural,
+then strip a trailing *e* from what survives, guarded on length so *cone* does not become
+*con*.
+
+**Two wrong theories, recorded because they were reasonable.** A coverage term — reward
+documents that explain more of the query, exactly what the symptom lookup does — pushed
+the Pegasus *down*, 15 → 17 → 19 as the exponent rose. Lowering `K1`, so a word repeated
+four times could not outvote three distinct ones, was worse: 9 → 18 → 26. Both are
+written beside the constants they failed to justify.
+
 ### The weight is a trade, and it was measured
 
 Statblock prose is several times longer than the visual description, and BM25 divides by
@@ -952,6 +981,10 @@ for its own appearance. Against the 16 hand-written cases:
 |---|---|---|---|
 | 0 | 4/16 | **8/16** | 10/16 |
 | 0.5 | 4/16 | 7/16 | **11/16** |
+
+(Both rows predate the stemmer fix. With it, and with `b` at 0.3, the benchmark stands at
+**6/16 top-1, 9/16 top-5, 12/16 top-20, median rank 3** — against 4 / 8 / 10 and median 5
+before either fix, and the Pegasus at rank 1 rather than 20.)
 
 Bulette drops out of the top 5 (5 → 9); Owlbear (29 → 18) and Unicorn (20 → 12) come into
 the top 20. Roughly a wash on the benchmark the index was built for, in exchange for a
@@ -972,6 +1005,19 @@ and most sessions never type a name. Two features, two documents, for a reason e
 What still limits both is that the matching is lexical. *"Swamp-dwelling"* misses because
 the books say *marsh* and *bog*. That is the vocabulary gap `eval/appearance.js` exists to
 measure, and the one the CLIP experiment failed to close.
+
+## Where a score came from
+
+The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one
+had earned it from a name and the other from three symptoms. The evidence lines below
+name every feature, which is the opposite failure: complete and unreadable at a glance.
+
+The bar is one band per module of the form now, coloured to a swatch on that module's
+heading, and hovering gives the arithmetic. The bands are computed from the same numbers
+the score is — each category's credit minus its penalties over the same F7 denominator —
+so they sum to it exactly rather than approximately, and a test asserts that they do. A
+facet belonging to no category falls into "other" rather than vanishing: a band that
+silently dropped evidence would make the arithmetic lie.
 
 ## Naming the mechanic, when the GM said it out loud
 
