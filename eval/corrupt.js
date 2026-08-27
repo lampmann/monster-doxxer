@@ -283,8 +283,21 @@ function corrupt(m, r, opts) {
           row.kind = String(e.atkKinds[0]).replace(/\s*attack\s*$/i, "").toLowerCase();
         if (keep() && typeof e.hit === "number")
           row.rolls = [1 + Math.floor(r() * 20) + e.hit, 1 + Math.floor(r() * 20) + e.hit].join(", ");
-        const dist = e.reach != null ? e.reach : (e.range ? parseInt(e.range, 10) : null);
-        if (keep() && dist) row.reach = dist;
+        /* HOW FAR AWAY THEY WERE — either range a weapon has, not always the short one.
+
+           This generator only ever reported `reach`, or the first number of a
+           "60/180 ft." range. So the scorer could compare against the short range alone
+           and the harness would never notice: a Treant throwing a rock the length of the
+           room scored as a MISS against the Treant's own Rock action, and it took a
+           playtester to find it. A party hit at a hundred and eighty feet says a hundred
+           and eighty. */
+        const dists = [];
+        if (e.reach != null) dists.push(e.reach);
+        if (e.range) String(e.range).split("/").forEach(x => {
+          const n = parseInt(x, 10);
+          if (Number.isFinite(n)) dists.push(n);
+        });
+        if (keep() && dists.length) row.reach = pick(r, dists);
       } else {
         if (keep() && e.saveAbil) row.abil = String(e.saveAbil).toLowerCase();
         if (keep() && typeof e.dc === "number") row.dc = String(e.dc);

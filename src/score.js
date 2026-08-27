@@ -718,16 +718,27 @@
     }));
   }
 
-  /* Reach and range both answer "how far away were we", so they are compared as one
-     number. "10/60" (a thrown weapon) is matched on its short range, which is the one
-     a party in melee would report. */
-  function entryDistance(e) {
-    if (typeof e.reach === "number") return e.reach;
+  /* EVERY DISTANCE AN ENTRY CAN ATTACK AT, because a thrown or fired weapon has two and
+     both are true.
+
+     This used to take the short range only, on the reasoning that a party in melee would
+     report that one. But "range 60/180 ft." means the thing can hit you at a hundred and
+     eighty feet, and a party that was hit at a hundred and eighty will say so. A Treant
+     throwing a rock the length of the room was scored as a MISS against the Treant's own
+     Rock action, which is the report that found this.
+
+     Returns every candidate; the caller keeps the best fit among them, so reporting
+     either range — or a reach, for an entry that has both — matches. */
+  function entryDistances(e) {
+    const out = [];
+    if (typeof e.reach === "number") out.push(e.reach);
     if (e.range) {
-      const n = parseInt(String(e.range).split("/")[0], 10);
-      if (Number.isFinite(n)) return n;
+      String(e.range).split("/").forEach(part => {
+        const n = parseInt(part, 10);
+        if (Number.isFinite(n)) out.push(n);
+      });
     }
-    return null;
+    return out;
   }
 
   /* One row, one entry: what fraction of the row this entry explains, and the weight
@@ -735,13 +746,13 @@
      about one action, and each claim is worth its own rarity. */
   function fitRow(row, e, rarity, isSave) {
     let earned = 0, total = 0, complete = true;
-    const parts = [];
+    const parts = [], missed = [];
     const claim = (weight, fit, label) => {
       if (weight <= 0) return;
       total += weight;
       const f = fit == null ? 0 : fit;
       earned += weight * f;
-      if (f < 0.5) complete = false;
+      if (f < 0.5) { complete = false; missed.push(label); }
       if (f > 0) parts.push({ label, fit: f });
     };
 
@@ -810,9 +821,12 @@
         claim(COMBAT.bonusWeight, 0, `rolled ${rolls.join(", ")}`);
       }
       if (row.reach) {
-        const d = entryDistance(e);
-        claim(COMBAT.reachWeight, d == null ? 0 : gauss(d - Number(row.reach), COMBAT.reachSigma),
-              `${row.reach} ft.`);
+        const want = Number(row.reach);
+        const ds = entryDistances(e);
+        const fit = ds.length
+          ? Math.max.apply(null, ds.map(d => gauss(d - want, COMBAT.reachSigma)))
+          : 0;
+        claim(COMBAT.reachWeight, fit, `${row.reach} ft.`);
       }
     }
 
@@ -835,7 +849,7 @@
       claim(w, (e.conditions || []).indexOf(c) >= 0 ? 1 : 0, c);
     }
 
-    return { earned, total, complete, parts, entry: e };
+    return { earned, total, complete, parts, missed, entry: e };
   }
 
   /* Score every combat row the party filled in. Returns credit and supplied in nats, to
@@ -878,16 +892,26 @@
       const shortfall = (best.total - best.earned) * TUNING.missFactor;
       out.credit += credit - shortfall;
 
-      if (credit > 0) {
-        out.hits.push({ facet: isSave ? "save" : "attack",
-                        value: `${rowLabel(row, isSave)} — ${best.entry.name || "an action"}`,
-                        weight: +credit.toFixed(3) });
-      }
-      if (shortfall > 0) {
-        out.misses.push({ facet: isSave ? "save" : "attack", value: rowLabel(row, isSave),
-                          weight: -(+shortfall.toFixed(3)),
-                          why: best.parts.length
-                            ? `the closest is ${best.entry.name || "an action"}, which doesn't match all of it`
+      /* ONE ROW, ONE LINE. A partial match used to push a hit AND a miss, so the same
+         observation appeared under + and under − with the same words, reading as a
+         contradiction — the tool arguing with itself about one thing the party saw. The
+         arithmetic was right (the score is the net) but the explanation was not.
+
+         It goes on the side of the net, once, and when something did not match the line
+         names WHICH field rather than saying "doesn't match all of it" and leaving the
+         reader to guess. */
+      const net = credit - shortfall;
+      const label = rowLabel(row, isSave);
+      const facet = isSave ? "save" : "attack";
+      const action = best.parts.length ? (best.entry.name || "an action") : "";
+      if (net >= 0) {
+        out.hits.push({ facet, value: `${label} — ${action || "an action"}`,
+                        weight: +net.toFixed(3),
+                        why: best.missed.length ? `apart from ${best.missed.join(", ")}` : "" });
+      } else {
+        out.misses.push({ facet, value: label, weight: +net.toFixed(3),
+                          why: action
+                            ? `the closest is ${action}, but ${best.missed.join(", ")} doesn't fit`
                             : "nothing on this statblock does that" });
       }
     });

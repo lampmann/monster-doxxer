@@ -951,6 +951,38 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("one attack is not a claim about the whole turn");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* A playtester described one rock thrown at a Treant's full range and the Treant
+         was argued AGAINST for it: its Multiattack reads "two SLAM attacks" — melee,
+         nothing to do with the rock — and a row saying "1" was being read as "this
+         thing attacks once per turn". Multiattack usually names the attacks it counts,
+         so it only describes the turn when those are the ones you saw. */
+      await page.click("#atk-add");
+      await page.waitForTimeout(300);
+      await page.fill('#atk-rows [data-field="count"]', "1");
+      await page.selectOption('#atk-rows [data-field="kind"]', "ranged weapon");
+      await page.fill('#atk-rows [data-field="reach"]', "180");
+      await page.selectOption('#atk-rows [data-field="dmgType"]', "bludgeoning");
+      await page.waitForTimeout(1600);
+
+      const txt = await resultsText(page);
+      assert("a treant is found from one rock thrown at its long range", /treant/i.test(txt));
+      assert("...and nothing argues that it only attacks once a turn",
+        !/\battacks? (?:per|a) turn\b/i.test(txt));
+
+      /* Two or more IS a claim about the turn, and still counts. */
+      await page.fill('#atk-rows [data-field="count"]', "2");
+      await page.waitForTimeout(1400);
+      const derived = await page.$eval("#atk-total", el => el.textContent);
+      assert("saying it attacked twice still reads as a routine", /2 attack rolls/.test(derived));
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);

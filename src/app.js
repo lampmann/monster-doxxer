@@ -1232,11 +1232,21 @@
     /* Attacks per turn is DERIVED from the rows rather than asked for separately.
        Asking twice invites the two answers to disagree, and the rows already know:
        two claws and a bite is three attack rolls. Only counted when every attack row
-       says how many it made, since a partial sum is worse than no claim at all. */
+       says how many it made, since a partial sum is worse than no claim at all.
+
+       AND ONLY WHEN THE ROWS DESCRIBE A ROUTINE — two or more attack rolls. "It threw
+       one rock at me" is not a claim that the thing only attacks once a turn; it is one
+       attack the party happened to be on the end of. Treating it as a claim about the
+       turn cost the Treant 4.2 nats against a party who watched it throw a rock, because
+       its Multiattack reads "two SLAM attacks" — melee, and nothing to do with the rock.
+       That is the general shape of the problem: Multiattack usually names the attacks it
+       counts, so it only describes the turn when those are the attacks you saw. A total
+       of one can never be that routine, and is exactly the case that is most often just
+       a fragment of the fight. */
     const counts = attacks.map(r => parseInt(r.count, 10)).filter(n => Number.isFinite(n) && n > 0);
     if (attacks.length && counts.length === attacks.length) {
       const total = counts.reduce((a, b) => a + b, 0);
-      if (total > 0 && total <= 10) obs.attacksPerTurn = String(total);
+      if (total > 1 && total <= 10) obs.attacksPerTurn = String(total);
     }
 
     // What it cast. Spell names go in loosely priced; the shape of the casting does not.

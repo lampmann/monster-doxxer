@@ -384,4 +384,67 @@ section("AC, HP and save DC as ranges");
     none.supplied, 0);
 }
 
+/* ---------- combat rows: one action, one line ---------- */
+section("a combat row, and what it says about itself");
+{
+  const rock = {
+    name: "Treant", source: "MM", key: "treant|mm", type: "plant", size: ["H"],
+    everyEntry: [
+      { name: "Slam", isAttack: true, atkKinds: ["Melee Weapon Attack"], hit: 10, reach: 5,
+        damages: [{ expr: "3d6 + 6", type: "bludgeoning",
+                    dice: { n: 3, sides: 6, mod: 6, min: 9, max: 24, avg: 16.5 } }],
+        dmgTypes: ["bludgeoning"], conditions: [], area: null, dc: null, saveAbil: "", range: null },
+      { name: "Rock", isAttack: true, atkKinds: ["Ranged Weapon Attack"], hit: 10, reach: null,
+        range: "60/180",
+        damages: [{ expr: "4d10 + 6", type: "bludgeoning",
+                    dice: { n: 4, sides: 10, mod: 6, min: 10, max: 46, avg: 28 } }],
+        dmgTypes: ["bludgeoning"], conditions: [], area: null, dc: null, saveAbil: "" },
+    ],
+    attackKinds: ["melee weapon", "ranged weapon"], saveAbilities: [], saveDcs: [],
+    inflicts: [], damageTags: ["bludgeoning"], immune: [], resist: [], vulnerable: [],
+    conditionImmune: [], symptoms: [], traitTags: [], actionTags: [], typeTags: [],
+    speeds: {}, spells: [], castingKind: [], castingAbility: [], castingClass: [],
+  };
+  const rarity = S.buildRarity([rock]);
+
+  /* A THROWN WEAPON HAS TWO RANGES AND BOTH ARE TRUE. The scorer compared against the
+     short one only, so a party hit by a rock at the far end of its range was scored as
+     a mismatch against the very action that threw it. */
+  const far = S.scoreMonster(rock, {
+    attacks: [{ kind: "ranged weapon", reach: "180", dmgType: "bludgeoning" }],
+  }, rarity, {});
+  assert("being hit at a weapon's LONG range matches the action that has it",
+    far.for.some(x => x.facet === "attack" && /Rock/.test(x.value)));
+  assertEqual("...with nothing argued against it", far.against.length, 0);
+
+  const near = S.scoreMonster(rock, {
+    attacks: [{ kind: "ranged weapon", reach: "60", dmgType: "bludgeoning" }],
+  }, rarity, {});
+  assert("...and so does its short range", near.for.some(x => x.facet === "attack"));
+
+  /* ONE ROW, ONE LINE. A partial match used to push a hit AND a miss with the same
+     words, so the same observation appeared under + and under −, reading as the tool
+     contradicting itself about one thing the party saw. */
+  const partial = S.scoreMonster(rock, {
+    attacks: [{ kind: "melee weapon", reach: "5", dmgType: "fire" }],
+  }, rarity, {});
+  const rows = partial.for.concat(partial.against).filter(x => x.facet === "attack");
+  assertEqual("a partly-matching row is reported once, not on both sides", rows.length, 1);
+  assert("...naming the field that did not fit, rather than leaving it to be guessed",
+    /fire/.test(rows[0].why || ""));
+  /* Which SIDE it lands on is the net, so it depends on the rarity of what matched
+     against what did not — here the corpus is one monster and a damage type it lacks is
+     worth almost nothing, so the melee attack it does have carries the row. The
+     invariant is that it appears once and says what was wrong with it, not that a
+     caveat always means "against". */
+  assert("...on the side of the net", typeof rows[0].weight === "number");
+
+  const nothing = S.scoreMonster(rock, {
+    attacks: [{ kind: "ranged spell", reach: "500", dmgType: "psychic", condition: "stunned" }],
+  }, rarity, {});
+  const bad = nothing.for.concat(nothing.against).filter(x => x.facet === "attack");
+  assertEqual("a row the statblock cannot explain is reported once too", bad.length, 1);
+  assert("...and argues against it", bad[0].weight < 0);
+}
+
 report("score");
