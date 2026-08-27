@@ -132,6 +132,16 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
              padding: .2rem .3rem; }
 .tab-group-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
                    color: var(--muted-fg); padding-right: .1rem; }
+/* Ported from pmcrwf's character-tab drag states. */
+.doxx-tab.dragging { opacity: .4; }
+.doxx-tab.drop-group { outline: 2px solid var(--link-border); outline-offset: 1px; }
+.doxx-tab.drop-before { box-shadow: inset 3px 0 0 var(--link-border); }
+.doxx-tab.drop-after { box-shadow: inset -3px 0 0 var(--link-border); }
+/* The button that peels the first tab off a shared fight — pmcrwf's chain-link icon,
+   for the same reason: a boxed group needs a way back out that isn't a drag. */
+.tab-group-x { font-size: .8rem; padding: 0 .3rem; opacity: .6; border: 0; background: none;
+               color: var(--muted-fg); }
+.tab-group-x:hover { opacity: 1; color: var(--danger); }
 
 /* ----- chips: the general on/off control ----- */
 .chip { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);

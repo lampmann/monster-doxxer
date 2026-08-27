@@ -395,6 +395,22 @@
     const ids = [...new Set(S.tabs.map(t => t.fight || "f1"))];
     return ids.sort();
   };
+  // Mints an id nothing else uses yet.
+  const newFightId = () => "f" + (fightIds().length + 1) + Date.now().toString(36).slice(-3);
+
+  /* Re-splice S.tabs so every tab sharing `fight` sits together, at the position of
+     whichever one of them appeared first. Ported from pmcrwf's groupCharacters, which
+     keeps a character group contiguous on its own tab bar for the same reason: a fight
+     that is not contiguous in the array cannot be drawn as one box, and renderTabs draws
+     it as one box. Anything that can put two tabs into the same fight — the dropdown
+     below, or dragging one tab onto another — has to call this afterwards. */
+  function keepFightContiguous(fight) {
+    const first = S.tabs.findIndex(t => (t.fight || "f1") === fight);
+    if (first < 0) return;
+    const members = S.tabs.filter(t => (t.fight || "f1") === fight);
+    S.tabs = S.tabs.filter(t => (t.fight || "f1") !== fight);
+    S.tabs.splice(first, 0, ...members);
+  }
 
   function renderFightPicker() {
     const sel = $("in-fight");
@@ -419,45 +435,174 @@
     return "Monster " + (S.tabs.indexOf(t) + 1);
   }
 
-  /* TABS, GROUPED BY THE FIGHT THEY WERE IN.
+  /* TABS, GROUPED BY THE FIGHT THEY WERE IN — AND DRAGGABLE, THE WAY pmcrwf's ARE.
 
      The grouping already existed and already worked — it drives the CR band, and moving
-     a monster into its own fight moves that band from CR 1-5 to CR 4-12. What it did not
-     do was SHOW anything: the tab strip was one flat row, and the only control was a
-     dropdown in the Party module several screens down, so a grouping you had set looked
-     exactly like one you had not. A feature with no visible state reads as broken, and
-     was reported as broken.
+     a monster into its own fight moves that band from CR 1-5 to CR 4-12. Showing which
+     tabs were grouped was one round's fix; this is the other half, and the one actually
+     reported missing: pmcrwf's tabs are draggable, and these were not. Dragging a tab
+     onto another puts them in the same fight, the same as dragging a character tab onto
+     another shares their Event Log there; dragging to an edge reorders. See the drag
+     handlers below `renderTabs` for the ported mechanism.
 
-     The label only appears once there is more than one fight. With a single fight it
-     would be a heading over the whole strip saying nothing. */
+     WALKED IN ARRAY ORDER rather than by iterating fightIds() and filtering, because
+     dragging has to be able to reorder the fights themselves and only a walk over the
+     tabs' own order can show that — groupIntoFight and reorderTab both keep a fight's
+     members spliced together for exactly this reason, the same way pmcrwf keeps a
+     character group contiguous on its own bar.
+
+     The label and the box only appear once there is more than one fight. With a single
+     fight a box would be a frame around the whole strip saying nothing. */
   function renderTabs() {
     const el = $("doxx-tabs");
     if (!el) return;
 
     const btn = t => {
       const active = t.id === S.activeId;
+      const dragHint = S.tabs.length > 1 ? " \u00b7 drag onto another tab to share its fight" : "";
       return `<button type="button" class="doxx-tab${active ? " active" : ""}" data-tab="${esc(t.id)}" ` +
-        `title="${active ? "click to rename" : "switch to this monster"}">${esc(tabLabel(t))}` +
+        `draggable="true" title="${active ? "click to rename" : "switch to this monster"}${dragHint}">` +
+        `${esc(tabLabel(t))}` +
         (t.count > 1 ? ` <span class="hint">\u00d7${esc(t.count)}</span>` : "") +
         (S.tabs.length > 1 ? `<span class="doxx-tab-x" data-closetab="${esc(t.id)}" title="close">\u00d7</span>` : "") +
         `</button>`;
     };
-
-    const fights = fightIds();
     const add = `<button type="button" id="tab-add" title="another monster in the same fight">+ Another monster</button>`;
-    if (fights.length < 2) {
+
+    if (fightIds().length < 2) {
       el.innerHTML = S.tabs.map(btn).join("") + add;
       return;
     }
-    el.innerHTML = fights.map((f, i) => {
-      const inFight = S.tabs.filter(t => (t.fight || "f1") === f);
+
+    let html = "", i = 0, group = 0;
+    while (i < S.tabs.length) {
+      const f = S.tabs[i].fight || "f1";
+      const run = [];
+      while (i < S.tabs.length && (S.tabs[i].fight || "f1") === f) run.push(S.tabs[i++]);
+      group++;
       const n = fightCount(f);
-      return `<span class="tab-group">` +
+      html += `<span class="tab-group">` +
         `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
-        `which is what sets the CR band">Fight ${i + 1}</span>` +
-        inFight.map(btn).join("") + `</span>`;
-    }).join("") + add;
+        `which is what sets the CR band">Fight ${group}</span>` +
+        run.map(btn).join("") +
+        (run.length > 1
+          ? `<button type="button" class="tab-group-x" data-splitfight="${esc(run[0].id)}" ` +
+            `title="split ${esc(tabLabel(run[0]))} out into its own fight">\u26d3</button>`
+          : "") +
+        `</span>`;
+    }
+    el.innerHTML = html + add;
   }
+
+  /* Move `movedId`'s WHOLE fight — every tab sharing it, so a fight moves as a unit, the
+     only reading that does not silently split one in two — into `targetId`'s fight.
+     Ported from pmcrwf's groupCharacters, minus the log merge (a fight has no log). */
+  function groupIntoFight(movedId, targetId) {
+    const moved = S.tabs.find(t => t.id === movedId);
+    const target = S.tabs.find(t => t.id === targetId);
+    if (!moved || !target || moved === target) return;
+    const movedFight = moved.fight || "f1", targetFight = target.fight || "f1";
+    if (movedFight === targetFight) return;
+    S.tabs.filter(t => (t.fight || "f1") === movedFight).forEach(t => { t.fight = targetFight; });
+    keepFightContiguous(targetFight);
+  }
+
+  /* Move `movedId`'s whole fight to sit before `targetId` (or the end, when target is
+     null). Ported from pmcrwf's reorderCharacter. */
+  function reorderTab(movedId, targetId) {
+    const moved = S.tabs.find(t => t.id === movedId);
+    if (!moved) return;
+    const fight = moved.fight || "f1";
+    const block = S.tabs.filter(t => (t.fight || "f1") === fight);
+    const rest = S.tabs.filter(t => !block.includes(t));
+    let at = targetId ? rest.findIndex(t => t.id === targetId) : rest.length;
+    if (at < 0) at = rest.length;
+    rest.splice(at, 0, ...block);
+    S.tabs = rest;
+  }
+
+  /* Peel one tab off the front of a shared fight and give it a new one of its own.
+     Ported from pmcrwf's ungroupCharacter — except a fight of one is not a cleanup case
+     here the way a group of one character is there. pmcrwf dissolves a group that drops
+     to one member, because an ungrouped character is a different, simpler state (no
+     shared log). A tab in a fight by itself is not a different state at all; every tab
+     is always in exactly one fight, alone or not, so there is nothing to dissolve. */
+  function splitFromFight(tabId) {
+    const t = S.tabs.find(x => x.id === tabId);
+    if (!t) return;
+    t.fight = newFightId();
+  }
+
+  /* ----- drag to reorder, drop onto a tab to share a fight -----
+     Ported from pmcrwf's character tabs. One gesture, two outcomes, decided by where in
+     the target tab you let go: the middle means "put these together", the edges mean
+     "put this here". Both are shown live while dragging — a ring for grouping, a bar for
+     the insertion point — because a drag with two possible meanings and no feedback is a
+     guess. */
+  let TAB_DRAG_ID = null;
+
+  function tabDropIntent(tab, clientX) {
+    const r = tab.getBoundingClientRect();
+    const rel = (clientX - r.left) / r.width;
+    if (rel < 0.28) return "before";
+    if (rel > 0.72) return "after";
+    return "group";
+  }
+  function clearTabDropMarks() {
+    document.querySelectorAll(".doxx-tab").forEach(t => t.classList.remove("drop-group", "drop-before", "drop-after"));
+  }
+
+  (() => {
+    const el = $("doxx-tabs");
+    if (!el) return;
+
+    el.addEventListener("dragstart", e => {
+      const tab = e.target.closest("[data-tab]");
+      if (!tab) return;
+      TAB_DRAG_ID = tab.dataset.tab;
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", TAB_DRAG_ID); } catch (err) { /* Firefox needs a payload */ }
+      tab.classList.add("dragging");
+    });
+    el.addEventListener("dragend", () => {
+      TAB_DRAG_ID = null;
+      clearTabDropMarks();
+      el.querySelectorAll(".doxx-tab.dragging").forEach(t => t.classList.remove("dragging"));
+    });
+    el.addEventListener("dragover", e => {
+      if (!TAB_DRAG_ID) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      clearTabDropMarks();
+      const tab = e.target.closest("[data-tab]");
+      if (!tab || tab.dataset.tab === TAB_DRAG_ID) return;
+      const intent = tabDropIntent(tab, e.clientX);
+      tab.classList.add(intent === "group" ? "drop-group" : intent === "before" ? "drop-before" : "drop-after");
+    });
+    el.addEventListener("drop", e => {
+      if (!TAB_DRAG_ID) return;
+      e.preventDefault();
+      const moved = TAB_DRAG_ID;
+      TAB_DRAG_ID = null;
+      clearTabDropMarks();
+
+      /* A fight's composition can move the CR band, and the band feeds the tie-break —
+         see renderBand — so a drag has to re-rank, exactly like the dropdown does. */
+      const finish = () => { renderFightPicker(); renderBand(); persist(); renderResults(); renderSuggestions(); };
+
+      const tab = e.target.closest("[data-tab]");
+      if (!tab) { reorderTab(moved, null); finish(); return; }   // dropped past the last tab
+      const targetId = tab.dataset.tab;
+      if (targetId === moved) return;
+      const intent = tabDropIntent(tab, e.clientX);
+      if (intent === "group") { groupIntoFight(moved, targetId); finish(); return; }
+      if (intent === "before") { reorderTab(moved, targetId); finish(); return; }
+      const idx = S.tabs.findIndex(t => t.id === targetId);
+      const after = S.tabs[idx + 1];
+      reorderTab(moved, after ? after.id : null);
+      finish();
+    });
+  })();
   // Clears the monster in front of you, not the whole session — the other tabs and the
   // book filter are separate work and losing them to a mis-click would be its own bug.
   function clearSession() {
@@ -1543,6 +1688,14 @@
     if (t.closest("#btn-clear")) { clearSession(); return; }
 
     /* ---- tabs ---- */
+    const splitFight = t.closest("[data-splitfight]");
+    if (splitFight) {
+      e.stopPropagation();
+      splitFromFight(splitFight.dataset.splitfight);
+      renderFightPicker(); renderBand();
+      persist(); renderResults(); renderSuggestions();
+      return;
+    }
     const close = t.closest("[data-closetab]");
     if (close) {
       const id = close.dataset.closetab;
@@ -1598,10 +1751,8 @@
     if (e.target.id === "in-fight") {
       const t = S.tabs.find(x => x.id === S.activeId);
       if (!t) return;
-      // "+ a separate fight" mints an id nothing else uses yet.
-      t.fight = e.target.value === "__new"
-        ? "f" + (fightIds().length + 1) + Date.now().toString(36).slice(-3)
-        : e.target.value;
+      t.fight = e.target.value === "__new" ? newFightId() : e.target.value;
+      keepFightContiguous(t.fight);
       renderFightPicker(); renderBand();
       persist(); renderResults(); renderSuggestions();
       return;

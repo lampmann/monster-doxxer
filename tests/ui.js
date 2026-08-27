@@ -838,6 +838,77 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("tabs can be dragged, pmcrwf-style");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* Reported as "you can't drag the tabs around at all" — the grouping worked and
+         even showed itself, from an earlier round, but pmcrwf's actual mechanism for
+         SETTING it was never ported: drag onto a tab to share its fight, drag to an
+         edge to reorder. */
+      await page.click("#tab-add"); await page.waitForTimeout(300);
+      await page.click("#tab-add"); await page.waitForTimeout(300);
+      const ids = await page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
+      assertEqual("three tabs to work with", ids.length, 3);
+      const sel = id => `.doxx-tab[data-tab="${id}"]`;
+      const groupSizes = () => page.evaluate(() =>
+        [...document.querySelectorAll(".tab-group")].map(g => g.querySelectorAll(".doxx-tab").length));
+
+      /* New tabs default into the SAME fight together, so there is nothing to drag a
+         merge onto yet — split two of them out first, the only way to create a second
+         fight from scratch. */
+      for (const id of [ids[1], ids[2]]) {
+        await page.click(sel(id)); await page.waitForTimeout(200);
+        await page.selectOption("#in-fight", "__new"); await page.waitForTimeout(300);
+      }
+      await page.click(sel(ids[0])); await page.waitForTimeout(200);
+      assertEqual("split apart, three separate fights", await groupSizes(), [1, 1, 1]);
+
+      // Live feedback while the gesture is still in progress, before anything is dropped.
+      const src = await page.$(sel(ids[2])), dst = await page.$(sel(ids[0]));
+      const sb = await src.boundingBox(), db = await dst.boundingBox();
+      await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(db.x + db.width / 2, db.y + db.height / 2, { steps: 8 });
+      await page.waitForTimeout(150);
+      assert("hovering the middle of a tab rings it, meaning 'group with this'",
+        await page.evaluate(s => document.querySelector(s).classList.contains("drop-group"), sel(ids[0])));
+      assert("the tab being dragged shows it is the one moving",
+        await page.evaluate(s => document.querySelector(s).classList.contains("dragging"), sel(ids[2])));
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+
+      // DROPPED ON THE MIDDLE: the two share a fight now.
+      assertEqual("dropping on the middle puts them in the same fight",
+        (await groupSizes()).sort(), [1, 2]);
+      const bandAfterGroup = await page.evaluate(() => document.getElementById("band-read").textContent);
+      assert("the CR band follows the new grouping, since it feeds the tie-break",
+        /2 creatures/.test(bandAfterGroup) || bandAfterGroup === "");
+
+      // DROPPED ON AN EDGE: reorders instead of grouping.
+      const idsNow = await page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
+      const groupedPair = idsNow.filter(id => id !== ids[1]);
+      const standalone = ids[1];
+      const target = await page.$(sel(groupedPair[0]));
+      const tb = await target.boundingBox();
+      await page.dragAndDrop(sel(standalone), sel(groupedPair[0]), { targetPosition: { x: 2, y: tb.height / 2 } });
+      await page.waitForTimeout(500);
+      const orderAfterEdge = await page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
+      assertEqual("dropping on the left edge moves it there rather than merging fights",
+        orderAfterEdge[0], standalone);
+      assertEqual("...and the fights stay separate", (await groupSizes()).sort(), [1, 2]);
+
+      // The split button peels the front tab of a group back into its own fight.
+      const hasSplit = await page.evaluate(() => !!document.querySelector(".tab-group-x"));
+      assert("a group of more than one offers a way back out without dragging", hasSplit);
+      await page.click(".tab-group-x");
+      await page.waitForTimeout(400);
+      assertEqual("clicking it gives that tab its own fight again", await groupSizes(), [1, 1, 1]);
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);
