@@ -850,8 +850,26 @@ async function main() {
       const ids = await page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
       assertEqual("three tabs to work with", ids.length, 3);
       const sel = id => `.doxx-tab[data-tab="${id}"]`;
+      const order = () => page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
       const groupSizes = () => page.evaluate(() =>
         [...document.querySelectorAll(".tab-group")].map(g => g.querySelectorAll(".doxx-tab").length));
+
+      /* THE BUG A REAL PLAYTEST FOUND. New tabs all default into the SAME fight, and
+         reordering two tabs that share a fight used to move the whole fight as a block —
+         a direct port of pmcrwf's reorderCharacter, where a "group" is the rare, opt-in
+         case. Here it is the default: the block being moved included the target itself,
+         so it silently landed back where it started. Reordering did nothing the very
+         first time anyone tried it, on the very first two tabs. Fixed by moving only the
+         one tab when target and moved already share a fight, and the whole fight only
+         when they do not — checked here BEFORE any fight is ever split, which is exactly
+         the state that was broken. */
+      await page.dragAndDrop(sel(ids[2]), sel(ids[0]), { targetPosition: { x: 2, y: 10 } });
+      await page.waitForTimeout(500);
+      assertEqual("dragging one same-fight tab before another actually moves it",
+        await order(), [ids[2], ids[0], ids[1]]);
+      const stillOneFight = await page.evaluate(() =>
+        new Set(JSON.parse(localStorage.getItem("monster-doxxer-session")).tabs.map(t => t.fight)).size);
+      assertEqual("...without splitting them into separate fights", stillOneFight, 1);
 
       /* New tabs default into the SAME fight together, so there is nothing to drag a
          merge onto yet — split two of them out first, the only way to create a second

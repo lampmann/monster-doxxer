@@ -507,13 +507,31 @@
     keepFightContiguous(targetFight);
   }
 
-  /* Move `movedId`'s whole fight to sit before `targetId` (or the end, when target is
-     null). Ported from pmcrwf's reorderCharacter. */
+  /* Move `movedId`'s fight to sit before `targetId` (or the end, when target is null).
+     Ported from pmcrwf's reorderCharacter, WITH ONE CASE PMCRWF DOES NOT HAVE TO HANDLE.
+
+     pmcrwf's characters start ungrouped, so "move the whole group" (`moved.group ?
+     groupMembers(moved.group) : [moved]`) is almost always just the one character —
+     groups there are the rare, opt-in case. Every tab here starts in the SAME fight, so
+     the direct port of that line moved the whole fight whenever target and moved shared
+     one, which is the common case, not the rare one: the block being moved then
+     included the target itself, `rest` (everything outside the block) no longer
+     contained it, `rest.findIndex` came back -1, and the block landed right back where
+     it started. Reordering two tabs in the same fight was a silent no-op — which is to
+     say dragging did nothing the very first time anyone tried it, since two fresh tabs
+     share a fight by default.
+
+     So: reordering WITHIN a shared fight moves only the one tab, by target ordering.
+     Reordering ACROSS fights still moves the whole fight as a block, which is the
+     pmcrwf behaviour and the one that matters — it is what stops a drag from silently
+     splitting a fight in two. */
   function reorderTab(movedId, targetId) {
     const moved = S.tabs.find(t => t.id === movedId);
     if (!moved) return;
+    const target = targetId ? S.tabs.find(t => t.id === targetId) : null;
     const fight = moved.fight || "f1";
-    const block = S.tabs.filter(t => (t.fight || "f1") === fight);
+    const sameFight = target && (target.fight || "f1") === fight;
+    const block = sameFight ? [moved] : S.tabs.filter(t => (t.fight || "f1") === fight);
     const rest = S.tabs.filter(t => !block.includes(t));
     let at = targetId ? rest.findIndex(t => t.id === targetId) : rest.length;
     if (at < 0) at = rest.length;
