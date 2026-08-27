@@ -1006,6 +1006,42 @@ What still limits both is that the matching is lexical. *"Swamp-dwelling"* misse
 the books say *marsh* and *bog*. That is the vocabulary gap `eval/appearance.js` exists to
 measure, and the one the CLIP experiment failed to close.
 
+## Tabs, actually draggable
+
+A round of playtest fixes made the fight grouping *visible* — boxed, labelled "Fight N" —
+without giving it pmcrwf's actual mechanism for *setting* it. "pmcrwf-style tab-grouping
+doesn't seem to work" was a fair description of what shipped: the only way to move a tab
+between fights was still a dropdown several screens below the strip it affects.
+
+Ported directly from pmcrwf's character tabs (`/workspace/pmcrwf/src/characters.js`, read
+rather than reimplemented from memory):
+
+- Drop on the **middle** of a tab — the two share a fight.
+- Drop on an **edge** — reorder there instead.
+- A fight moves as a **whole block**; dragging one member drags all of them, so a drag can
+  never silently split a fight in two.
+- Live feedback while the gesture is in progress — a ring for "group", an inset bar for
+  "reorder", the dragged tab dimmed — because a drag with two possible outcomes and no
+  feedback is a guess.
+- A button (pmcrwf's ⛓) that peels one tab back out of a group. Ungrouping was never a
+  drag gesture upstream either.
+
+`groupIntoFight` and `reorderTab` both re-splice `S.tabs` afterwards so a fight stays
+contiguous in the array, which is what lets `renderTabs` draw one as a single box by
+walking the tabs in their own order and grouping contiguous runs — exactly how pmcrwf
+keeps a character group contiguous on its own bar.
+
+**Verified live before it was trusted**, which caught something worth recording: new tabs
+all default into the *same* fight together, so dragging one straight onto another does
+nothing at first — there is nothing to merge that is not already merged. Not a bug; the
+test splits two tabs apart before exercising the merge, the only way to reach a second
+fight from scratch.
+
+One latent gap closed in passing: the dropdown's "+ a separate fight" path set a tab's
+fight directly without ever re-splicing the array, so picking an *existing* fight from
+that list (not just minting a new one) could have rendered as two boxes for what was
+really one fight. It now runs through the same `keepFightContiguous` the drag path uses.
+
 ## Where a score came from
 
 The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one

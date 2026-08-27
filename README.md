@@ -151,9 +151,9 @@ is more use than whatever the tool currently guesses. Each tab keeps its own evi
 mixing two monsters' observations together is the one mistake no amount of ranking recovers
 from.
 
-Tell it your party's level and size, and which tabs are in the same fight — the strip groups
-itself once there is more than one — and it works out the CR band a DM building that fight
-would be aiming at — one ogre is a very different
+Tell it your party's level and size, and which tabs are in the same fight — drag one tab onto
+another to put them together, drag it to an edge to reorder, same as pmcrwf's character tabs —
+and it works out the CR band a DM building that fight would be aiming at — one ogre is a very different
 proposition from one of eight. It never changes a score and never rules anything out; it
 only decides the order among monsters the evidence can't separate.
 
