@@ -532,13 +532,94 @@
      The fill was also rendering ABOVE its frame rather than inside it: both were
      inline-blocks with vertical-align: middle, so the inner one aligned to the track's
      baseline instead of filling it. It is positioned now, which is what a fill wants. */
-  function scoreBar(rel) {
+  /* ============================================================
+     WHERE A SCORE CAME FROM.
+
+     The bar said 24% and nothing else, so two monsters tied at 24% looked identical when
+     one had earned it from a name and the other from three symptoms. The evidence lines
+     underneath name every feature, which is the opposite problem: complete and unreadable
+     at a glance.
+
+     So the bar is split into one band per module of the form, coloured to match a swatch
+     on that module's heading. Hovering gives the arithmetic. The bands sum to the score
+     exactly, because they are computed from the same numbers it is: each category's
+     credit minus its penalties, over the same F7 denominator.
+     ============================================================ */
+  const CATEGORIES = [
+    { id: "name",     label: "Name",              colour: "#1a56c4",
+      facets: ["name"] },
+    { id: "symptom",  label: "Observed effects",  colour: "#7b2d8e",
+      facets: ["symptom", "mechanic"] },
+    { id: "look",     label: "Appearance and lore", colour: "#0f7b6c",
+      facets: ["appearance"] },
+    { id: "creature", label: "Creature",          colour: "#a8571a",
+      facets: ["type", "typeTag", "size", "movement", "hover", "sense", "condImmune"] },
+    { id: "damage",   label: "Damage taken",      colour: "#b32318",
+      facets: ["damage", "immune", "resist", "vuln"] },
+    { id: "fight",    label: "Attacks and saves", colour: "#2b6cb0",
+      facets: ["attack", "save", "attackKind", "saveAbility", "attacksPerTurn",
+               "inflicts", "damageDealt", "traitTag", "actionTag", "dc"] },
+    { id: "spells",   label: "Spellcasting",      colour: "#8a6d1f",
+      facets: ["spell", "castingKind", "castingAbility", "castingClass"] },
+    { id: "numbers",  label: "Numbers",           colour: "#4a5568",
+      facets: ["ac", "hp"] },
+  ];
+  const CATEGORY_OF = (() => {
+    const m = Object.create(null);
+    CATEGORIES.forEach(c => c.facets.forEach(f => { m[f] = c.id; }));
+    return m;
+  })();
+  const CATEGORY_BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
+
+  /* Each category's share of the score, in the same units the bar is drawn in. Anything
+     whose facet has no category falls into "other" rather than vanishing — a band that
+     silently dropped evidence would make the arithmetic lie. */
+  function scoreParts(r) {
+    const parts = new Map();
+    const add = (facet, w) => {
+      const id = CATEGORY_OF[facet] || "other";
+      parts.set(id, (parts.get(id) || 0) + w);
+    };
+    const denom = r.supplied > 0 ? r.supplied : 1;
+    (r.for || []).forEach(x => {
+      // The appearance bonus is added AFTER normalisation, so it is already on the score's scale.
+      if (x.facet === "appearance") add(x.facet, x.weight);
+      else add(x.facet, x.weight / denom);
+    });
+    (r.against || []).forEach(x => add(x.facet, x.weight / denom));
+    return [...parts.entries()]
+      .map(([id, share]) => ({ id, share, cat: CATEGORY_BY_ID.get(id) }))
+      .filter(p => p.share > 0.0005)
+      .sort((a, b) => b.share - a.share);
+  }
+
+  function scoreBar(rel, r) {
     const pct = Math.round(rel * 100);
     const label = `${pct}%`;
-    return `<span class="bar-track" title="explains ${pct}% of what you reported">` +
-      `<span class="bar" style="width:${pct}%"></span>` +
+    const parts = r ? scoreParts(r) : [];
+
+    /* Bands are drawn from the shares, then clipped to the filled width — a category
+       cannot paint past the score it helped produce. */
+    let run = 0;
+    const bands = parts.map(p => {
+      const w = Math.max(0, Math.min(100 - run, p.share * 100));
+      const seg = `<span class="bar-seg" style="left:${run}%;width:${w}%;` +
+                  `background:${p.cat ? p.cat.colour : "#888"}"></span>`;
+      run += w;
+      return seg;
+    }).join("");
+
+    const rows = parts.map(p =>
+      `<div class="tip-row"><span class="tip-sw" style="background:${p.cat ? p.cat.colour : "#888"}"></span>` +
+      `<span class="tip-pct">${Math.round(p.share * 100)}%</span>` +
+      `<span>${esc(p.cat ? p.cat.label : "other")}</span></div>`).join("");
+
+    return `<span class="barwrap">` +
+      `<span class="bar-track">${bands}` +
       `<span class="bar-num">${label}</span>` +
       `<span class="bar-num on" style="clip-path:inset(0 ${100 - pct}% 0 0)">${label}</span>` +
+      `</span>` +
+      (rows ? `<span class="bar-tip"><div class="tip-total">${label}</div>${rows}</span>` : "") +
       `</span>`;
   }
 
@@ -1123,7 +1204,7 @@
       return `<div class="result">
         <div class="result-head">
           <span class="result-rank">${i + 1}.</span>
-          ${scoreBar(rel)}
+          ${scoreBar(rel, r)}
           <span class="result-name"><button data-detail="${esc(r.key)}">${esc(r.name)}</button></span>
           <span class="result-meta">${esc(r.source)}${m && m.cr ? ", CR " + esc(m.cr) : ""}${
             r.alsoIn ? " (also " + esc(r.alsoIn.slice(0, 2).join(", ")) + ")" : ""}</span>
@@ -1163,7 +1244,9 @@
     mod.hidden = false;
 
     const ANSWERS = {
-      damage: [["immune", "no effect"], ["resistant", "halved"], ["normal", "normal"], ["vulnerable", "extra"]],
+      // Same four words as the damage grid. Two vocabularies for one thing made the
+      // reader translate between them.
+      damage: DMG_STATES,
       condition: [["immune", "it was immune"], ["affected", "it worked"]],
       symptom: [["yes", "yes, that happened"], ["no", "no"]],
     };
@@ -1269,7 +1352,19 @@
       `<div class="dbody">${S.detailTab === "info" ? infoHtml(m) : statBlockHtml(m)}</div>`;
   }
 
+  /* Paint the swatch on each module heading from the same table the bar bands use, so
+     the two can never disagree about what colour a category is. Once, at load. */
+  function paintCategorySwatches() {
+    document.querySelectorAll("[data-cat]").forEach(el => {
+      const c = CATEGORY_BY_ID.get(el.dataset.cat);
+      if (!c) return;
+      el.style.background = c.colour;
+      el.title = `${c.label} — this colour in the score bars`;
+    });
+  }
+
   function renderAll() {
+    paintCategorySwatches();
     applyProseSize(); renderNameRead(); renderFightPicker(); renderBand();
     renderPickers(); renderDamage(); renderCombatRows(); renderSpells();
     renderSymptoms(); renderSources();

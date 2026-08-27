@@ -230,12 +230,31 @@ th, td { text-align: left; padding: 1px 4px; }
 .result-meta { font-size: .78rem; color: var(--muted-fg); }
 /* The score bar is the one piece of ornament, and it earns it: a ranked list without
    magnitudes hides the difference between "clearly this" and "the least bad of 4,500". */
+.barwrap { position: relative; display: inline-block; vertical-align: middle; margin-right: .35rem; }
 .bar-track { position: relative; display: inline-block; width: 3.4rem; height: 1.05rem;
              border: 1px solid var(--border-soft); border-radius: 2px; vertical-align: middle;
-             margin-right: .35rem; overflow: hidden; background: var(--bg); }
-/* Positioned, not inline: an inline-block fill aligned to the track's baseline and sat
-   above its own frame. */
-.bar { position: absolute; inset: 0 auto 0 0; background: var(--link); }
+             overflow: hidden; background: var(--bg); }
+/* One band per category, positioned rather than inline: an inline-block fill aligned to
+   the track's baseline and sat above its own frame. */
+.bar-seg { position: absolute; top: 0; bottom: 0; }
+
+/* The arithmetic, on hover. A native title cannot carry the colours, and the colours are
+   what tie a band to the module that produced it. */
+.bar-tip { position: absolute; left: 0; top: calc(100% + 3px); z-index: 20;
+           display: none; min-width: 11rem; padding: .3rem .4rem;
+           background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius);
+           box-shadow: 0 2px 6px rgba(0,0,0,.18); font-size: .74rem; text-align: left;
+           white-space: nowrap; }
+.barwrap:hover .bar-tip { display: block; }
+.tip-total { font-weight: bold; border-bottom: 1px solid var(--border-hair);
+             margin-bottom: .15rem; padding-bottom: .1rem; }
+.tip-row { display: flex; align-items: center; gap: .3rem; }
+.tip-sw { width: .6rem; height: .6rem; border-radius: 2px; flex: none; }
+.tip-pct { width: 2.2rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* The swatch on a module heading, tying it to its band in every bar. */
+.cat-sw { display: inline-block; width: .55rem; height: .55rem; border-radius: 2px;
+          float: right; margin-top: .35rem; }
 /* The number, drawn twice — see scoreBar. The white copy is clipped to the fill, so
    whichever half of the track a digit lands on, it is legible against it. */
 .bar-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

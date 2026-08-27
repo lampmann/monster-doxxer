@@ -753,6 +753,54 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("a score says where it came from");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* The bar said 24% and nothing else, so two monsters tied at 24% looked identical
+         when one had earned it from a name and the other from three symptoms. */
+      await page.fill("#in-name", "vampire");
+      await page.waitForTimeout(500);
+      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickChip(page, "pick-type", "Undead");
+      await page.waitForTimeout(1600);
+
+      const bands = await page.evaluate(() =>
+        [...document.querySelectorAll("#results .result")][0]
+          .querySelectorAll(".bar-seg").length);
+      assert("the bar is split into one band per kind of evidence", bands >= 2);
+
+      const tip = await page.evaluate(() => {
+        const t = document.querySelector("#results .bar-tip");
+        if (!t) return null;
+        return {
+          total: parseInt(t.querySelector(".tip-total").textContent, 10),
+          rows: [...t.querySelectorAll(".tip-row")].map(r => ({
+            pct: parseInt(r.querySelector(".tip-pct").textContent, 10),
+            label: r.lastElementChild.textContent.trim(),
+            colour: r.querySelector(".tip-sw").style.background,
+          })),
+        };
+      });
+      assert("hovering gives the arithmetic behind it", tip && tip.rows.length >= 2);
+      assert("...naming the modules the evidence came from",
+        tip.rows.some(r => /Name/.test(r.label)) && tip.rows.some(r => /Observed effects/.test(r.label)));
+      /* The bands are only honest if they add up. Allow a point of rounding per row. */
+      const sum = tip.rows.reduce((n, r) => n + r.pct, 0);
+      assert(`the parts sum to the whole (${sum} vs ${tip.total})`,
+        Math.abs(sum - tip.total) <= tip.rows.length);
+
+      // The swatch on each module heading is what ties a band to its source.
+      const swatches = await page.evaluate(() =>
+        [...document.querySelectorAll(".cat-sw")].map(el => el.style.background).filter(Boolean));
+      assert("every module carries the colour of its band", swatches.length >= 6);
+      assertEqual("...and no two modules share a colour",
+        swatches.length, new Set(swatches).size);
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);
