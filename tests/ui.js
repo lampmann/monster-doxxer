@@ -801,6 +801,43 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("tabs show which fight they were in");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* The grouping always worked — it drives the CR band — but showed nothing, so a
+         grouping you had set looked exactly like one you had not, and read as broken. */
+      await page.fill("#in-level", "5");
+      await page.fill("#in-party", "4");
+      await page.waitForTimeout(400);
+      await page.click("#tab-add"); await page.waitForTimeout(400);
+      await page.click("#tab-add"); await page.waitForTimeout(400);
+
+      const band = () => page.$eval("#band-read", el => el.textContent.replace(/\s+/g, " ").trim());
+      const together = await band();
+      assert("three monsters in one fight are read as one encounter", /3 creatures/.test(together));
+      assertEqual("...and the strip is not grouped while there is only one fight",
+        await page.evaluate(() => document.querySelectorAll("#doxx-tabs .tab-group").length), 0);
+
+      await page.selectOption("#in-fight", "__new");
+      await page.waitForTimeout(700);
+      const apart = await band();
+      assert("moving one into its own fight changes the band it implies",
+        /1 creature\b/.test(apart) && apart !== together);
+
+      const groups = await page.evaluate(() =>
+        [...document.querySelectorAll("#doxx-tabs .tab-group")].map(g => ({
+          label: (g.querySelector(".tab-group-label") || {}).textContent,
+          tabs: g.querySelectorAll(".doxx-tab").length,
+        })));
+      assertEqual("...and the tab strip now shows two fights", groups.length, 2);
+      assertEqual("with the monsters split between them", groups.map(g => g.tabs), [2, 1]);
+      assert("each group is labelled", groups.every(g => /Fight \d/.test(g.label || "")));
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);

@@ -419,16 +419,44 @@
     return "Monster " + (S.tabs.indexOf(t) + 1);
   }
 
+  /* TABS, GROUPED BY THE FIGHT THEY WERE IN.
+
+     The grouping already existed and already worked — it drives the CR band, and moving
+     a monster into its own fight moves that band from CR 1-5 to CR 4-12. What it did not
+     do was SHOW anything: the tab strip was one flat row, and the only control was a
+     dropdown in the Party module several screens down, so a grouping you had set looked
+     exactly like one you had not. A feature with no visible state reads as broken, and
+     was reported as broken.
+
+     The label only appears once there is more than one fight. With a single fight it
+     would be a heading over the whole strip saying nothing. */
   function renderTabs() {
     const el = $("doxx-tabs");
     if (!el) return;
-    el.innerHTML = S.tabs.map(t => {
+
+    const btn = t => {
       const active = t.id === S.activeId;
       return `<button type="button" class="doxx-tab${active ? " active" : ""}" data-tab="${esc(t.id)}" ` +
         `title="${active ? "click to rename" : "switch to this monster"}">${esc(tabLabel(t))}` +
-        (S.tabs.length > 1 ? `<span class="doxx-tab-x" data-closetab="${esc(t.id)}" title="close">×</span>` : "") +
+        (t.count > 1 ? ` <span class="hint">\u00d7${esc(t.count)}</span>` : "") +
+        (S.tabs.length > 1 ? `<span class="doxx-tab-x" data-closetab="${esc(t.id)}" title="close">\u00d7</span>` : "") +
         `</button>`;
-    }).join("") + `<button type="button" id="tab-add" title="another monster in the same fight">+ Another monster</button>`;
+    };
+
+    const fights = fightIds();
+    const add = `<button type="button" id="tab-add" title="another monster in the same fight">+ Another monster</button>`;
+    if (fights.length < 2) {
+      el.innerHTML = S.tabs.map(btn).join("") + add;
+      return;
+    }
+    el.innerHTML = fights.map((f, i) => {
+      const inFight = S.tabs.filter(t => (t.fight || "f1") === f);
+      const n = fightCount(f);
+      return `<span class="tab-group">` +
+        `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
+        `which is what sets the CR band">Fight ${i + 1}</span>` +
+        inFight.map(btn).join("") + `</span>`;
+    }).join("") + add;
   }
   // Clears the monster in front of you, not the whole session — the other tabs and the
   // book filter are separate work and losing them to a mis-click would be its own bug.

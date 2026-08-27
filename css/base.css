@@ -125,6 +125,13 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .doxx-tab.active { font-weight: bold; border-bottom-width: 2px; border-bottom-color: var(--link-border); }
 .doxx-tab-x { margin-left: .4rem; opacity: .55; }
 .doxx-tab .hint { margin-left: .3rem; }
+/* One box per fight, so a grouping you set is a grouping you can see. Only drawn when
+   there is more than one — see renderTabs. */
+.tab-group { display: inline-flex; align-items: center; gap: .25rem;
+             border: 1px solid var(--border-hair); border-radius: var(--radius);
+             padding: .2rem .3rem; }
+.tab-group-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+                   color: var(--muted-fg); padding-right: .1rem; }
 
 /* ----- chips: the general on/off control ----- */
 .chip { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);
