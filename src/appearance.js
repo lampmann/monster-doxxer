@@ -54,11 +54,34 @@
      conflate more, and would also conflate things a player means differently ("winged"
      and "wing" are the same, "horned" and "horn" are the same, but "scaled" and "scale"
      matter to nobody). Crude and predictable beats clever and surprising here. */
+  /* THE SINGULAR AND THE PLURAL HAVE TO LAND ON THE SAME TOKEN. That is the entire job,
+     and the old version quietly failed it for a large class of words.
+
+     "horses" ends in "ses", so the rule meant for glasses -> glass fired and produced
+     "hors". "horse" has no plural suffix to strip and stayed "horse". Two tokens, never
+     equal, so a query for "white winged horse" could not match a Pegasus whose own book
+     text calls it a winged HORSE. Every noun whose singular ends in -se, -ce, -ge, -ke
+     was split the same way: house, scale, tentacle, snake, plate.
+
+     The fix is not a better plural rule — no single one works, because "glasses" is
+     glass+es and "horses" is horse+s and nothing in the spelling says which. Instead,
+     strip the plural AND then strip a trailing "e" from whatever is left, so both forms
+     converge:
+
+         horse  -> horse -> hors        horses  -> hors  -> hors
+         glass  -> glass -> glass       glasses -> glass -> glass
+         scale  -> scale -> scal        scales  -> scale -> scal
+
+     The trailing "e" only goes if at least four characters survive it, which keeps short
+     words that would otherwise collide with unrelated ones — "cone" does not become
+     "con", and "eye"/"eyes" already agree without help. */
   function stem(w) {
-    if (w.length > 4 && /ies$/.test(w)) return w.slice(0, -3) + "y";
-    if (w.length > 3 && /(ses|xes|zes|ches|shes)$/.test(w)) return w.slice(0, -2);
-    if (w.length > 3 && /s$/.test(w) && !/ss$/.test(w)) return w.slice(0, -1);
-    return w;
+    let out = w;
+    if (out.length > 4 && /ies$/.test(out)) out = out.slice(0, -3) + "y";
+    else if (out.length > 3 && /(ses|xes|zes|ches|shes)$/.test(out)) out = out.slice(0, -2);
+    else if (out.length > 3 && /s$/.test(out) && !/ss$/.test(out)) out = out.slice(0, -1);
+    if (out.length > 4 && /e$/.test(out)) out = out.slice(0, -1);
+    return out;
   }
 
   function tokens(text) {
@@ -305,7 +328,36 @@
   /* ============================================================
      F10 — BM25
      ============================================================ */
-  const K1 = 1.5, B = 0.75;
+  const K1 = 1.5;
+
+  /* B IS THE LENGTH NORMALISATION, and 0.75 — the textbook default — is wrong for this
+     corpus by a wide margin.
+
+     BM25's default assumes documents of broadly comparable length. These are not: a
+     Draft Horse's description document is ELEVEN tokens and a Pegasus's is a hundred and
+     eleven. At b=0.75 that difference outweighs everything else, so a document matching
+     one query word beat a document matching all three.
+
+     Re-derived after the stemmer fix below, since the first sweep was run on broken
+     tokens and its answer could not be trusted:
+
+         b     top-1   top-5   top-20   median
+         0.75  4/16    8/16    11/16    7        (the default)
+         0.4   6/16    9/16    12/16    5
+         0.3   6/16    9/16    12/16    5
+         0.1   6/16    9/16    12/16    5
+         0     6/16    8/16    12/16    6
+
+     Everything from 0.1 to 0.4 measures identically, so this takes the middle of the
+     plateau rather than an edge of it. Not 0: length still means something, and a
+     document one word long should not be a perfect match for that word.
+
+     A COVERAGE TERM WAS THE OBVIOUS FIX AND THE MEASUREMENT REJECTED IT. Weighting by
+     how much of the query a document explains — the same term the symptom lookup uses —
+     pushed the Pegasus DOWN, 15 -> 17 -> 19 as the exponent rose. So did lowering K1 to
+     stop a repeated word outvoting three distinct ones: 9 -> 18 -> 26. Both were
+     plausible and both were wrong, and what was actually broken was the stemmer. */
+  const B = 0.3;
   /* How much fluff to take. The visual description is usually near the top, but not always
      at the very top — 5e.tools' opening paragraph is often ecology or attitude, with the
      shape of the thing a paragraph or two later. Chosen by measurement, below. */
@@ -375,7 +427,10 @@
   /* Score every monster against what the player typed. Returns a Map of key -> [0,1],
      scaled by the best hit so the caller gets a comparable fraction rather than a raw
      BM25 total, which has no natural ceiling. */
-  function score(queryText, index) {
+  function score(queryText, index, opts) {
+    const o = opts || {};
+    const b = o.b == null ? B : o.b;
+    const k1 = o.k1 == null ? K1 : o.k1;
     const out = new Map();
     const qs = tokens(withoutSize(queryText));
     if (!qs.length || !index) return out;
@@ -391,7 +446,7 @@
       terms.forEach(t => {
         const f = d.tf[t];
         if (!f) return;
-        const norm = f * (K1 + 1) / (f + K1 * (1 - B + B * d.len / (index.avgLen || 1)));
+        const norm = f * (k1 + 1) / (f + k1 * (1 - b + b * d.len / (index.avgLen || 1)));
         s += index.idf(t) * norm * qw[t];
       });
       if (s > 0) { out.set(d.key, s); if (s > best) best = s; }

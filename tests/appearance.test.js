@@ -107,6 +107,18 @@ section("F11 — size out of prose");
 /* ---------- F12 ---------- */
 section("F12 — colour counts for little, shape counts for more");
 {
+  /* THE JOB OF A STEMMER IS THAT THE SINGULAR AND THE PLURAL AGREE. The old one failed
+     it for every noun whose singular ends in a silent e: "horses" hit the glasses->glass
+     rule and became "hors" while "horse" stayed "horse", so a query for a winged horse
+     could not match a book that called it a winged HORSE. */
+  [["horse", "horses"], ["glass", "glasses"], ["scale", "scales"], ["tentacle", "tentacles"],
+   ["eye", "eyes"], ["wing", "wings"], ["snake", "snakes"], ["body", "bodies"],
+   ["box", "boxes"], ["carapace", "carapaces"]].forEach(([one, many]) => {
+    assertEqual(`"${one}" and "${many}" stem alike`, A.stem(one), A.stem(many));
+  });
+  assertEqual("a short word keeps its final e rather than colliding with an unrelated one",
+    A.stem("cone"), "cone");
+
   assert("a colour is worth a fraction of an ordinary word", A.termWeight(A.stem("green")) < A.WEIGHTS.plain);
   assert("...and much less than a body part", A.termWeight(A.stem("green")) < A.termWeight(A.stem("tentacles")));
   assert("morphology is worth more than an ordinary word", A.termWeight(A.stem("carapace")) > A.WEIGHTS.plain);
