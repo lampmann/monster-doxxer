@@ -828,6 +828,50 @@ being made is that these saves were against *that action's* DC; the monster-leve
 "Failed on 19" alone returns Kraken, Pit Fiend and Tarrasque — the DC-20-and-up creatures —
 from one number nobody had to be told.
 
+### Three faults behind one Treant
+
+One rock thrown at 180 feet, and a Treant scored at 31% with the same observation argued
+both for and against it. Three unrelated bugs, all visible in one line of output.
+
+**A thrown weapon has two ranges and both are true.** `entryDistance` took the short one,
+reasoning that a party in melee would report that — but *range 60/180 ft.* means the thing
+can hit you at a hundred and eighty, and a party hit at a hundred and eighty says so. The
+Treant's own Rock was a MISS against a rock it had just thrown.
+
+**One attack is not a claim about the turn.** Row counts were summed into `attacksPerTurn`
+and compared against Multiattack. The Treant's Multiattack reads *"two **slam** attacks"* —
+melee, nothing to do with the rock — so reporting one thrown rock cost it 4.2 nats for
+contradicting a routine it never performed. Multiattack nearly always names the attacks it
+counts, so it describes a turn only when those are the attacks you saw. A total of one
+can never be that routine, and is most often the fragment of the fight the party happened
+to be on the end of. Two or more still counts.
+
+**One row, one line.** A partial match pushed a hit *and* a miss carrying the same words,
+so a single observation appeared under `+` and under `−` at once — the tool contradicting
+itself about one thing the party saw. The arithmetic was always the net; the explanation
+was not. It now lands once on the side of the net and names which field failed — *"the
+closest is Slam, but fire damage, 40 damage, restrained doesn't fit"* — rather than
+"doesn't match all of it", which left the reader to work out which part.
+
+### The harness could not express the bug, which is why it survived
+
+Worth recording as a lesson about the harness rather than the scorer. `--combat` generated
+a row's distance as `e.reach`, or the first number of a two-part range — precisely the case
+that already worked. It could not produce the observation that failed, so it reported
+success while the feature was broken in the field.
+
+It now picks either range, and against a harness that can finally fail:
+
+| | top-1 | top-5 | top-20 |
+|---|---|---|---|
+| short range only | 50.3% | 77.7% | 89.3% |
+| either range | **51.3%** | **79.3%** | **90.3%** |
+
+The combat figure had also drifted up to ~51% from the 46.3% recorded when combat rows
+landed, and it is tempting to bank that as this change's doing. It is not: that number
+predates the stemmer and attack-markup fixes, and isolating this change against the old
+harness moved nothing at all. The gain here is the point or so above.
+
 ### Two things deliberately not asked
 
 **Number of targets.** The statblocks say "one target" for essentially every attack roll
