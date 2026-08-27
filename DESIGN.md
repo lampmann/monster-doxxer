@@ -1042,6 +1042,41 @@ fight directly without ever re-splicing the array, so picking an *existing* figh
 that list (not just minting a new one) could have rendered as two boxes for what was
 really one fight. It now runs through the same `keepFightContiguous` the drag path uses.
 
+### Three more faults, and the test helper that hid them
+
+The port was reported broken twice more, and all three remaining faults were real. Two
+shared a single cause.
+
+**Left-to-right with exactly two tabs.** An "after" drop computed its anchor as *the tab
+following the drop target* — which, past the last tab, is nothing. A null anchor had no
+target to compare fights against, so it took the branch that moves the whole fight; with
+everything in one fight that was every tab, spliced back in at the end unchanged. The
+report's own detail was the diagnosis: *"having 3+ tabs fixes this"* is exactly what you
+would see, because with three the anchor is a real tab and the branch never runs.
+
+**The gap between tabs.** A flex gap plus the group box's padding leaves a genuine band
+of pixels where the cursor is over the container and over no tab at all. That resolved to
+"no target" and fell into the same dead path — so the most natural place to aim when
+dropping something *between* two tabs did nothing. A miss now resolves to the nearest tab
+by edge distance and the side of it the cursor is on, and `dragover` uses the same
+resolution so the marker always agrees with what releasing will do. Grouping is
+deliberately unreachable from a gap: the gap means "put it here", a tab's middle means
+"put it with this".
+
+**Grouping.** Merging across fights already worked. The default did not: every tab starts
+in one fight, so dragging one onto another is a legitimate no-op — and the box was drawn
+only once a *second* fight existed, so the grouped default looked identical to no
+grouping at all. Nothing happened and nothing explained why. The box now shows from the
+first pair onward, which makes the no-op legible and puts the way out (the split button)
+on screen at the same time.
+
+**Why the suite missed all of it.** It used `page.dragAndDrop`, which papers over exactly
+the two things these bugs lived in: where within a tab you release, and whether you are
+over a tab at all. The tab tests now drive `mouse.down` / `mouse.move` / `mouse.up` at
+measured offsets and cover each reported case — two tabs left-to-right, a drop into the
+gap, a drop on the last tab's right edge, and grouping both within and across fights.
+A convenience helper that cannot express a bug's precondition cannot test for it.
+
 ### The port carried a real bug, and "verify it live" is what caught it
 
 "The live feedback works, but not the grouping and reordering" — the report was right,
