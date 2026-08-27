@@ -469,7 +469,17 @@
     };
     const add = `<button type="button" id="tab-add" title="another monster in the same fight">+ Another monster</button>`;
 
-    if (fightIds().length < 2) {
+    /* BOXED AS SOON AS THERE IS MORE THAN ONE TAB, not only once there are two fights.
+
+       The box used to appear only when a second fight existed, which made the default
+       state — every tab in one fight together — look exactly like no grouping at all.
+       So dragging one tab onto another did nothing AND showed nothing, and was reported
+       as grouping being broken. It was not broken; they were already grouped, and
+       nothing on screen said so.
+
+       Now the grouping is always visible, so a no-op drag is a no-op you can see the
+       reason for, and the way OUT of a group (the split button) is visible too. */
+    if (S.tabs.length < 2) {
       el.innerHTML = S.tabs.map(btn).join("") + add;
       return;
     }
@@ -485,9 +495,12 @@
         `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
         `which is what sets the CR band">Fight ${group}</span>` +
         run.map(btn).join("") +
+        /* pmcrwf labels this ⛓, which renders there as a monochrome glyph and here as a
+           colour emoji — ambiguous at 11px and easy to read as an error marker rather
+           than a control. A word cannot misrender. */
         (run.length > 1
           ? `<button type="button" class="tab-group-x" data-splitfight="${esc(run[0].id)}" ` +
-            `title="split ${esc(tabLabel(run[0]))} out into its own fight">\u26d3</button>`
+            `title="move ${esc(tabLabel(run[0]))} into a fight of its own">split</button>`
           : "") +
         `</span>`;
     }
@@ -500,43 +513,53 @@
   function groupIntoFight(movedId, targetId) {
     const moved = S.tabs.find(t => t.id === movedId);
     const target = S.tabs.find(t => t.id === targetId);
-    if (!moved || !target || moved === target) return;
+    if (!moved || !target || moved === target) return false;
     const movedFight = moved.fight || "f1", targetFight = target.fight || "f1";
-    if (movedFight === targetFight) return;
+    if (movedFight === targetFight) return false;      // already together
     S.tabs.filter(t => (t.fight || "f1") === movedFight).forEach(t => { t.fight = targetFight; });
     keepFightContiguous(targetFight);
+    return true;
   }
 
-  /* Move `movedId`'s fight to sit before `targetId` (or the end, when target is null).
-     Ported from pmcrwf's reorderCharacter, WITH ONE CASE PMCRWF DOES NOT HAVE TO HANDLE.
+  /* Move `movedId` to sit before or after `dropId`.
 
-     pmcrwf's characters start ungrouped, so "move the whole group" (`moved.group ?
-     groupMembers(moved.group) : [moved]`) is almost always just the one character —
-     groups there are the rare, opt-in case. Every tab here starts in the SAME fight, so
-     the direct port of that line moved the whole fight whenever target and moved shared
-     one, which is the common case, not the rare one: the block being moved then
-     included the target itself, `rest` (everything outside the block) no longer
-     contained it, `rest.findIndex` came back -1, and the block landed right back where
-     it started. Reordering two tabs in the same fight was a silent no-op — which is to
-     say dragging did nothing the very first time anyone tried it, since two fresh tabs
-     share a fight by default.
+     ANCHORED ON THE TAB YOU DROPPED ON, never on a computed neighbour, and never on a
+     null "just put it at the end". Both of those were how the previous version broke:
 
-     So: reordering WITHIN a shared fight moves only the one tab, by target ordering.
-     Reordering ACROSS fights still moves the whole fight as a block, which is the
-     pmcrwf behaviour and the one that matters — it is what stops a drag from silently
-     splitting a fight in two. */
-  function reorderTab(movedId, targetId) {
+       - `reorderTab(moved, null)` meant "move to the end", and with a null anchor there
+         was no target to compare fights against, so it fell back to moving the whole
+         fight — which, since every tab starts in one fight, was every tab. Splicing all
+         of them back in at the end changed nothing. That is why dragging left-to-right
+         did nothing with two tabs and worked with three: with three, the anchor was a
+         real tab and the whole-fight branch never ran.
+       - Computing the anchor as "the tab after the drop target" could land on the moved
+         tab itself, which then vanished from `rest` and sent the block to the end.
+
+     Working from `rest` — the strip with the moved block already taken out — makes both
+     impossible: the insertion index is found in the list the block is going back into,
+     so it cannot be off by the block's own size.
+
+     WHOLE FIGHT OR ONE TAB is decided by the drop target, which is the only thing that
+     knows the user's intent. Reordering inside a fight moves the one tab. Reordering
+     across fights moves the whole fight, which is what stops a drag from silently
+     splitting one in two. */
+  function moveTab(movedId, dropId, intent) {
     const moved = S.tabs.find(t => t.id === movedId);
-    if (!moved) return;
-    const target = targetId ? S.tabs.find(t => t.id === targetId) : null;
+    const drop = S.tabs.find(t => t.id === dropId);
+    if (!moved || !drop || moved === drop) return false;
+
     const fight = moved.fight || "f1";
-    const sameFight = target && (target.fight || "f1") === fight;
+    const sameFight = (drop.fight || "f1") === fight;
     const block = sameFight ? [moved] : S.tabs.filter(t => (t.fight || "f1") === fight);
+    if (block.includes(drop)) return false;          // nothing to do inside its own block
+
     const rest = S.tabs.filter(t => !block.includes(t));
-    let at = targetId ? rest.findIndex(t => t.id === targetId) : rest.length;
-    if (at < 0) at = rest.length;
+    const i = rest.findIndex(t => t.id === dropId);
+    if (i < 0) return false;
+    const at = intent === "before" ? i : i + 1;
     rest.splice(at, 0, ...block);
     S.tabs = rest;
+    return true;
   }
 
   /* Peel one tab off the front of a shared fight and give it a new one of its own.
@@ -566,6 +589,39 @@
     if (rel > 0.72) return "after";
     return "group";
   }
+
+  /* WHAT THE CURSOR IS OVER, INCLUDING WHEN IT IS OVER NOTHING.
+
+     The strip is a flex row with a gap between tabs, and a group box adds padding of its
+     own — so there is a real band of pixels between any two tabs where the cursor is
+     over the container and not over a tab at all. Landing there used to mean "no target
+     found", which fell through to the move-to-the-end path and, with the anchor bug
+     above, did nothing whatsoever. It is also the most natural place to aim when you are
+     trying to drop something BETWEEN two tabs, which is exactly what a playtester
+     reported: a dead band between one tab's edge marker and the next one's.
+
+     So a miss resolves to the nearest tab by edge distance, and to the side of it the
+     cursor is on. Grouping is unreachable from the gap, which is correct — the gap
+     unambiguously means "put it here", and the middle of a tab means "put it with
+     this". Dropping past the last tab resolves to after it, for the same reason. */
+  function dropTargetAt(e) {
+    const el = e.target.closest && e.target.closest("[data-tab]");
+    if (el) return { id: el.dataset.tab, intent: tabDropIntent(el, e.clientX) };
+
+    const tabs = [...document.querySelectorAll("#doxx-tabs .doxx-tab")];
+    if (!tabs.length) return null;
+    let best = null, bestDist = Infinity;
+    tabs.forEach(t => {
+      const r = t.getBoundingClientRect();
+      // 0 while inside the tab; otherwise how far outside either edge the cursor is.
+      const d = e.clientX < r.left ? r.left - e.clientX
+        : e.clientX > r.right ? e.clientX - r.right : 0;
+      if (d < bestDist) { bestDist = d; best = { el: t, r }; }
+    });
+    if (!best) return null;
+    const mid = best.r.left + best.r.width / 2;
+    return { id: best.el.dataset.tab, intent: e.clientX < mid ? "before" : "after" };
+  }
   function clearTabDropMarks() {
     document.querySelectorAll(".doxx-tab").forEach(t => t.classList.remove("drop-group", "drop-before", "drop-after"));
   }
@@ -587,15 +643,20 @@
       clearTabDropMarks();
       el.querySelectorAll(".doxx-tab.dragging").forEach(t => t.classList.remove("dragging"));
     });
+    /* The mark is drawn from the SAME resolution the drop uses, so what you see is what
+       you get — including in the gaps, where the previous version showed nothing and
+       then did nothing. */
     el.addEventListener("dragover", e => {
       if (!TAB_DRAG_ID) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       clearTabDropMarks();
-      const tab = e.target.closest("[data-tab]");
-      if (!tab || tab.dataset.tab === TAB_DRAG_ID) return;
-      const intent = tabDropIntent(tab, e.clientX);
-      tab.classList.add(intent === "group" ? "drop-group" : intent === "before" ? "drop-before" : "drop-after");
+      const hit = dropTargetAt(e);
+      if (!hit || hit.id === TAB_DRAG_ID) return;
+      const tab = el.querySelector(`.doxx-tab[data-tab="${CSS.escape(hit.id)}"]`);
+      if (!tab) return;
+      tab.classList.add(hit.intent === "group" ? "drop-group"
+        : hit.intent === "before" ? "drop-before" : "drop-after");
     });
     el.addEventListener("drop", e => {
       if (!TAB_DRAG_ID) return;
@@ -604,21 +665,19 @@
       TAB_DRAG_ID = null;
       clearTabDropMarks();
 
-      /* A fight's composition can move the CR band, and the band feeds the tie-break —
-         see renderBand — so a drag has to re-rank, exactly like the dropdown does. */
-      const finish = () => { renderFightPicker(); renderBand(); persist(); renderResults(); renderSuggestions(); };
+      const hit = dropTargetAt(e);
+      if (!hit || hit.id === moved) return;
 
-      const tab = e.target.closest("[data-tab]");
-      if (!tab) { reorderTab(moved, null); finish(); return; }   // dropped past the last tab
-      const targetId = tab.dataset.tab;
-      if (targetId === moved) return;
-      const intent = tabDropIntent(tab, e.clientX);
-      if (intent === "group") { groupIntoFight(moved, targetId); finish(); return; }
-      if (intent === "before") { reorderTab(moved, targetId); finish(); return; }
-      const idx = S.tabs.findIndex(t => t.id === targetId);
-      const after = S.tabs[idx + 1];
-      reorderTab(moved, after ? after.id : null);
-      finish();
+      const changed = hit.intent === "group"
+        ? groupIntoFight(moved, hit.id)
+        : moveTab(moved, hit.id, hit.intent);
+      if (!changed) return;
+
+      /* A fight's composition can move the CR band, and the band feeds the tie-break —
+         see renderBand — so a drag has to re-rank, exactly like the dropdown does.
+         renderTabs is called by renderResults, at the end. */
+      renderFightPicker(); renderBand();
+      persist(); renderResults(); renderSuggestions();
     });
   })();
   // Clears the monster in front of you, not the whole session — the other tabs and the

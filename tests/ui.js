@@ -815,8 +815,13 @@ async function main() {
       const band = () => page.$eval("#band-read", el => el.textContent.replace(/\s+/g, " ").trim());
       const together = await band();
       assert("three monsters in one fight are read as one encounter", /3 creatures/.test(together));
-      assertEqual("...and the strip is not grouped while there is only one fight",
-        await page.evaluate(() => document.querySelectorAll("#doxx-tabs .tab-group").length), 0);
+      /* The box shows from the first pair onward, not only once a SECOND fight exists.
+         Hiding it until then made the default — everything in one fight together — look
+         identical to no grouping at all, so dragging one tab onto another did nothing
+         and showed nothing, and was reported as grouping being broken. */
+      assertEqual("...and the strip shows that grouping even with a single fight",
+        await page.evaluate(() => [...document.querySelectorAll("#doxx-tabs .tab-group")]
+          .map(g => g.querySelectorAll(".doxx-tab").length)), [3]);
 
       await page.selectOption("#in-fight", "__new");
       await page.waitForTimeout(700);
@@ -841,86 +846,105 @@ async function main() {
     section("tabs can be dragged, pmcrwf-style");
     {
       const { ctx, page } = await fresh(browser);
-      /* Reported as "you can't drag the tabs around at all" — the grouping worked and
-         even showed itself, from an earlier round, but pmcrwf's actual mechanism for
-         SETTING it was never ported: drag onto a tab to share its fight, drag to an
-         edge to reorder. */
-      await page.click("#tab-add"); await page.waitForTimeout(300);
-      await page.click("#tab-add"); await page.waitForTimeout(300);
-      const ids = await page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
-      assertEqual("three tabs to work with", ids.length, 3);
+
+      /* REAL MOUSE DRAGS, not page.dragAndDrop. Three separate playtest reports came
+         out of this feature and every one of them survived a suite that passed, because
+         the helper papers over the hit-testing details the bugs actually lived in:
+         where in a tab you release, and whether you are over a tab at all. */
       const sel = id => `.doxx-tab[data-tab="${id}"]`;
       const order = () => page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
-      const groupSizes = () => page.evaluate(() =>
-        [...document.querySelectorAll(".tab-group")].map(g => g.querySelectorAll(".doxx-tab").length));
+      const boxes = () => page.evaluate(() =>
+        [...document.querySelectorAll("#doxx-tabs .tab-group")].map(g => g.querySelectorAll(".doxx-tab").length));
+      const fights = () => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("monster-doxxer-session")).tabs.map(t => t.fight));
 
-      /* THE BUG A REAL PLAYTEST FOUND. New tabs all default into the SAME fight, and
-         reordering two tabs that share a fight used to move the whole fight as a block —
-         a direct port of pmcrwf's reorderCharacter, where a "group" is the rare, opt-in
-         case. Here it is the default: the block being moved included the target itself,
-         so it silently landed back where it started. Reordering did nothing the very
-         first time anyone tried it, on the very first two tabs. Fixed by moving only the
-         one tab when target and moved already share a fight, and the whole fight only
-         when they do not — checked here BEFORE any fight is ever split, which is exactly
-         the state that was broken. */
-      await page.dragAndDrop(sel(ids[2]), sel(ids[0]), { targetPosition: { x: 2, y: 10 } });
-      await page.waitForTimeout(500);
-      assertEqual("dragging one same-fight tab before another actually moves it",
-        await order(), [ids[2], ids[0], ids[1]]);
-      const stillOneFight = await page.evaluate(() =>
-        new Set(JSON.parse(localStorage.getItem("monster-doxxer-session")).tabs.map(t => t.fight)).size);
-      assertEqual("...without splitting them into separate fights", stillOneFight, 1);
-
-      /* New tabs default into the SAME fight together, so there is nothing to drag a
-         merge onto yet — split two of them out first, the only way to create a second
-         fight from scratch. */
-      for (const id of [ids[1], ids[2]]) {
-        await page.click(sel(id)); await page.waitForTimeout(200);
-        await page.selectOption("#in-fight", "__new"); await page.waitForTimeout(300);
+      // where: "left" | "mid" | "right" within the target tab, or "gap" between two.
+      async function drag(fromId, toId, where, gapRightId) {
+        const s = await (await page.$(sel(fromId))).boundingBox();
+        const d = await (await page.$(sel(toId))).boundingBox();
+        let x = d.x + d.width / 2;
+        if (where === "left") x = d.x + d.width * 0.08;
+        if (where === "right") x = d.x + d.width * 0.92;
+        if (where === "gap") {
+          const r = await (await page.$(sel(gapRightId))).boundingBox();
+          x = (d.x + d.width + r.x) / 2;
+        }
+        await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(x, d.y + d.height / 2, { steps: 12 });
+        await page.waitForTimeout(180);
+        await page.mouse.up();
+        await page.waitForTimeout(450);
       }
-      await page.click(sel(ids[0])); await page.waitForTimeout(200);
-      assertEqual("split apart, three separate fights", await groupSizes(), [1, 1, 1]);
 
-      // Live feedback while the gesture is still in progress, before anything is dropped.
+      await page.click("#tab-add"); await page.waitForTimeout(350);
+      let ids = await order();
+      assertEqual("two tabs to start", ids.length, 2);
+
+      /* REPORT: "when there are only 2 monsters, moving tabs left to right doesn't
+         work. Having 3+ tabs fixes this." Exactly diagnostic — the anchor for an
+         "after" drop onto the LAST tab was null, and a null anchor took the branch that
+         moves the whole fight, which with everything in one fight was every tab. */
+      assertEqual("two fresh tabs share a fight, and the strip says so", await boxes(), [2]);
+      await drag(ids[0], ids[1], "right");
+      assertEqual("dragging the left tab past the right one swaps them",
+        await order(), [ids[1], ids[0]]);
+      assertEqual("...without splitting the fight", new Set(await fights()).size, 1);
+
+      await page.click("#tab-add"); await page.waitForTimeout(350);
+      ids = await order();
+      assertEqual("three tabs now", ids.length, 3);
+
+      /* REPORT: dropping BETWEEN two tabs lands in the flex gap, where the cursor is
+         over the container and not over any tab. That used to resolve to "no target"
+         and fall through to the move-to-the-end path. */
+      await drag(ids[2], ids[0], "gap", ids[1]);
+      assertEqual("dropping into the gap between two tabs puts it between them",
+        await order(), [ids[0], ids[2], ids[1]]);
+
+      // Dragging onto the last tab's right edge still reaches the end of the strip.
+      ids = await order();
+      await drag(ids[0], ids[2], "right");
+      assertEqual("dragging onto the last tab's right edge moves it to the end",
+        await order(), [ids[1], ids[2], ids[0]]);
+
+      /* REPORT: "grouping still doesn't work." Two tabs in one fight ARE grouped, so
+         the drag is a legitimate no-op — what was missing was any sign of it. Across
+         fights it has to actually merge. */
+      ids = await order();
+      await page.click(sel(ids[2])); await page.waitForTimeout(250);
+      await page.selectOption("#in-fight", "__new"); await page.waitForTimeout(400);
+      assertEqual("splitting one out gives two fights", (await boxes()).length, 2);
+
+      await drag(ids[2], ids[0], "mid");
+      assertEqual("dragging it back onto another tab's middle merges the fights",
+        new Set(await fights()).size, 1);
+      assertEqual("...and the strip is one box again", await boxes(), [3]);
+
+      // Live feedback, and that the mark agrees with what a drop would do.
+      ids = await order();
       const src = await page.$(sel(ids[2])), dst = await page.$(sel(ids[0]));
       const sb = await src.boundingBox(), db = await dst.boundingBox();
       await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
       await page.mouse.down();
-      await page.mouse.move(db.x + db.width / 2, db.y + db.height / 2, { steps: 8 });
-      await page.waitForTimeout(150);
-      assert("hovering the middle of a tab rings it, meaning 'group with this'",
-        await page.evaluate(s => document.querySelector(s).classList.contains("drop-group"), sel(ids[0])));
-      assert("the tab being dragged shows it is the one moving",
-        await page.evaluate(s => document.querySelector(s).classList.contains("dragging"), sel(ids[2])));
+      await page.mouse.move(db.x + db.width / 2, db.y + db.height / 2, { steps: 10 });
+      await page.waitForTimeout(200);
+      assert("hovering a tab's middle rings it", await page.evaluate(i =>
+        document.querySelector(`.doxx-tab[data-tab="${i}"]`).classList.contains("drop-group"), ids[0]));
+      await page.mouse.move(db.x + db.width * 0.05, db.y + db.height / 2, { steps: 6 });
+      await page.waitForTimeout(200);
+      assert("...and sliding to its edge switches the mark to an insertion bar",
+        await page.evaluate(i =>
+          document.querySelector(`.doxx-tab[data-tab="${i}"]`).classList.contains("drop-before"), ids[0]));
       await page.mouse.up();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(400);
 
-      // DROPPED ON THE MIDDLE: the two share a fight now.
-      assertEqual("dropping on the middle puts them in the same fight",
-        (await groupSizes()).sort(), [1, 2]);
-      const bandAfterGroup = await page.evaluate(() => document.getElementById("band-read").textContent);
-      assert("the CR band follows the new grouping, since it feeds the tie-break",
-        /2 creatures/.test(bandAfterGroup) || bandAfterGroup === "");
-
-      // DROPPED ON AN EDGE: reorders instead of grouping.
-      const idsNow = await page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
-      const groupedPair = idsNow.filter(id => id !== ids[1]);
-      const standalone = ids[1];
-      const target = await page.$(sel(groupedPair[0]));
-      const tb = await target.boundingBox();
-      await page.dragAndDrop(sel(standalone), sel(groupedPair[0]), { targetPosition: { x: 2, y: tb.height / 2 } });
-      await page.waitForTimeout(500);
-      const orderAfterEdge = await page.evaluate(() => [...document.querySelectorAll(".doxx-tab")].map(t => t.dataset.tab));
-      assertEqual("dropping on the left edge moves it there rather than merging fights",
-        orderAfterEdge[0], standalone);
-      assertEqual("...and the fights stay separate", (await groupSizes()).sort(), [1, 2]);
-
-      // The split button peels the front tab of a group back into its own fight.
-      const hasSplit = await page.evaluate(() => !!document.querySelector(".tab-group-x"));
-      assert("a group of more than one offers a way back out without dragging", hasSplit);
+      // The split button peels one tab back out.
+      assert("a group of more than one offers a way out without dragging",
+        await page.evaluate(() => !!document.querySelector(".tab-group-x")));
       await page.click(".tab-group-x");
       await page.waitForTimeout(400);
-      assertEqual("clicking it gives that tab its own fight again", await groupSizes(), [1, 1, 1]);
+      assertEqual("clicking it gives that tab its own fight again", (await boxes()).length, 2);
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
