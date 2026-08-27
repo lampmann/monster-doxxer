@@ -86,6 +86,9 @@ off narrows it. Worth doing when you heard the word: *"One specific spell had no
 returns the Helmed Horror, while *Antimagic Susceptibility* on its own returns the
 animated objects.
 
+**Opening a result** shows its stat block and, on a second tab, the book's own description
+of it.
+
 **Books.** Click a source once to **include** it, again to **exclude** it, again to clear. Include
 when you know which books your DM owns. Exclude to stop an adventure you're halfway through from
 spoiling itself — which is why exclude exists separately rather than being &ldquo;include

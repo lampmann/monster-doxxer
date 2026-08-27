@@ -932,16 +932,46 @@ remain so the result can be re-tested rather than re-litigated.
 
 ## What the appearance box actually searches
 
-Worth stating plainly, because the box is easy to under-use: it is matched against the
-whole **description document**, not only the visual parts. That document is the name,
-size, type and tags, the names of every trait and action, and up to four paragraphs of
-5e.tools' Info text. So lore works — *"guards a lair full of treasure"* returns the red
-dragons, *"worships Orcus"* returns Zargash and the Bodak.
+The **description document**: the name, size, type and tags, every trait and action name,
+up to four paragraphs of 5e.tools' Info text, and — since a playtester found it missing —
+the statblock's own prose.
 
-What limits it is that the matching is lexical, not that the scope is narrow. *"Swamp-
-dwelling"* misses because the books say *marsh* and *bog*. That is the same vocabulary
-gap `eval/appearance.js` exists to measure, and the same one the CLIP experiment failed
-to close.
+That last part was a real hole and worth recording. The document took trait and action
+*names* and never their bodies, so a Night Hag's "Night Hag Items" was indexed and the
+heartstone described inside it was not. Searching **heartstone** returned nothing at all,
+though the Night Hag is one of three creatures in the corpus that has one. The most
+distinctive noun a statblock owns is routinely in the body of a trait, never in its title.
+
+### The weight is a trade, and it was measured
+
+Statblock prose is several times longer than the visual description, and BM25 divides by
+document length — at full weight a creature with fifteen actions looks like a poor match
+for its own appearance. Against the 16 hand-written cases:
+
+| `entryFactor` | top-1 | top-5 | top-20 |
+|---|---|---|---|
+| 0 | 4/16 | **8/16** | 10/16 |
+| 0.5 | 4/16 | 7/16 | **11/16** |
+
+Bulette drops out of the top 5 (5 → 9); Owlbear (29 → 18) and Unicorn (20 → 12) come into
+the top 20. Roughly a wash on the benchmark the index was built for, in exchange for a
+class of query that previously returned nothing. 0.5, 0.75 and 1.0 measure identically,
+so the setting takes the least dilution that achieves it.
+
+### Kin needed its own index, and the test suite is what noticed
+
+Folding entry text in broke the name-kinship feature, silently and badly: a Ghost's most
+distinctive words became *Etherealness* and *Horrifying Visage*, its nearest neighbours
+became whichever obscure NPCs had copied those traits, and "ghost" came back **Agony,
+Amun Sa, Celeste** instead of Specter and Wraith. What makes a Specter read like a Ghost
+is the lore and only the lore.
+
+So kin builds a second index without entry text — lazily, because it costs about 270ms
+and most sessions never type a name. Two features, two documents, for a reason each.
+
+What still limits both is that the matching is lexical. *"Swamp-dwelling"* misses because
+the books say *marsh* and *bog*. That is the vocabulary gap `eval/appearance.js` exists to
+measure, and the one the CLIP experiment failed to close.
 
 ## Naming the mechanic, when the GM said it out loud
 
