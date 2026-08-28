@@ -137,13 +137,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .doxx-tab.drop-group { outline: 2px solid var(--link-border); outline-offset: 1px; }
 .doxx-tab.drop-before { box-shadow: inset 3px 0 0 var(--link-border); }
 .doxx-tab.drop-after { box-shadow: inset -3px 0 0 var(--link-border); }
-/* The button that peels the first tab off a shared fight — pmcrwf's chain-link icon,
-   for the same reason: a boxed group needs a way back out that isn't a drag. */
-.tab-group-x { font-size: .68rem; padding: 0 .3rem; opacity: .7; border: 0; background: none;
-               color: var(--muted-fg); text-transform: uppercase; letter-spacing: .05em; }
-/* Not danger-red: splitting a fight is reversible (drag it back, or the dropdown), and
-   red next to a × that really does delete a tab reads as the same weight of action. */
-.tab-group-x:hover { opacity: 1; color: var(--link); }
 
 /* ----- chips: the general on/off control ----- */
 .chip { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);

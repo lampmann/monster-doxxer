@@ -1151,6 +1151,20 @@ target already share a fight, and the whole fight only when they do not — whic
 one case the block-move exists to protect, a drag that would otherwise silently split a
 fight in two.
 
+### The split button, replaced by dragging a tab out
+
+pmcrwf's own ⛓ button — the direct model for the split button above — turned out to do
+"weird shit" in practice and got pulled entirely; ungrouping there is now just dragging a
+tab to an edge outside its group, the same reading browser tab groups use. Since this
+port copied the button along with the rest of the mechanism, it carried the same problem
+and got the same fix: `splitFromFight` is no longer wired to a button. Dropping a tab on
+an edge next to a tab from a *different* fight now peels it off its own fight first —
+mirroring pmcrwf's `leaveGroup`-before-`reorderCharacter` — so `moveTab`'s own same-fight
+check moves just that one tab instead of the whole fight it used to share. Dropping on an
+edge next to a tab from the *same* fight is unaffected; that was always a plain reorder.
+
+`.tab-group-x` is gone from base.css along with the button.
+
 ## Where a score came from
 
 The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one

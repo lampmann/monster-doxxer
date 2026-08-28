@@ -945,12 +945,21 @@ async function main() {
       await page.mouse.up();
       await page.waitForTimeout(400);
 
-      // The split button peels one tab back out.
-      assert("a group of more than one offers a way out without dragging",
-        await page.evaluate(() => !!document.querySelector(".tab-group-x")));
-      await page.click(".tab-group-x");
-      await page.waitForTimeout(400);
-      assertEqual("clicking it gives that tab its own fight again", (await boxes()).length, 2);
+      /* pmcrwf's own split control — the ⛓ button this one was modelled on — "did weird
+         shit" in practice and was pulled in favour of dragging a tab out; this port
+         carried the same button, so it got the same fix. See DESIGN.md, "The split
+         button, replaced by dragging a tab out". There's no button left to click, so
+         first split one tab off to have a different-fight tab to drag onto. */
+      ids = await order();
+      await page.click(sel(ids[0])); await page.waitForTimeout(250);
+      await page.selectOption("#in-fight", "__new"); await page.waitForTimeout(400);
+      assertEqual("splitting one out gives two fights", (await boxes()).length, 2);
+
+      ids = await order();
+      await drag(ids[2], ids[0], "right");
+      assertEqual("dragging the other pair's tab to an edge next to the lone one peels it off too",
+        new Set(await fights()).size, 3);
+      assertEqual("...and the strip now shows three separate fights", (await boxes()).length, 3);
 
       /* Across every result on screen, not just the leader — the overflow showed up on
          low-scoring rows too, where a dropped negative category left the positives

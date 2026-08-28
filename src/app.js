@@ -495,13 +495,6 @@
         `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
         `which is what sets the CR band">Fight ${group}</span>` +
         run.map(btn).join("") +
-        /* pmcrwf labels this ⛓, which renders there as a monochrome glyph and here as a
-           colour emoji — ambiguous at 11px and easy to read as an error marker rather
-           than a control. A word cannot misrender. */
-        (run.length > 1
-          ? `<button type="button" class="tab-group-x" data-splitfight="${esc(run[0].id)}" ` +
-            `title="move ${esc(tabLabel(run[0]))} into a fight of its own">split</button>`
-          : "") +
         `</span>`;
     }
     el.innerHTML = html + add;
@@ -563,11 +556,15 @@
   }
 
   /* Peel one tab off the front of a shared fight and give it a new one of its own.
-     Ported from pmcrwf's ungroupCharacter — except a fight of one is not a cleanup case
-     here the way a group of one character is there. pmcrwf dissolves a group that drops
-     to one member, because an ungrouped character is a different, simpler state (no
-     shared log). A tab in a fight by itself is not a different state at all; every tab
-     is always in exactly one fight, alone or not, so there is nothing to dissolve. */
+     Ported from pmcrwf's leaveGroup — except a fight of one is not a cleanup case here
+     the way a group of one character is there. pmcrwf dissolves a group that drops to
+     one member, because an ungrouped character is a different, simpler state (no shared
+     log). A tab in a fight by itself is not a different state at all; every tab is
+     always in exactly one fight, alone or not, so there is nothing to dissolve.
+
+     There is no button for this. Same as pmcrwf: dragging a tab out of its fight — to an
+     edge next to a tab from a different fight, not the middle of one — peels it off on
+     the way; see the drop handler below. */
   function splitFromFight(tabId) {
     const t = S.tabs.find(x => x.id === tabId);
     if (!t) return;
@@ -668,9 +665,22 @@
       const hit = dropTargetAt(e);
       if (!hit || hit.id === moved) return;
 
-      const changed = hit.intent === "group"
-        ? groupIntoFight(moved, hit.id)
-        : moveTab(moved, hit.id, hit.intent);
+      let changed;
+      if (hit.intent === "group") {
+        changed = groupIntoFight(moved, hit.id);
+      } else {
+        // An edge, not the middle, of a tab from a different fight — the same "drag it
+        // out" gesture pmcrwf uses, so moved is peeled off its fight on the way. Ported
+        // from pmcrwf's drop handler, which calls leaveGroup before reorderCharacter for
+        // the same reason: once moved has its own fight, moveTab's own same-fight check
+        // moves just that one tab instead of the whole fight it used to share.
+        const movedTab = S.tabs.find(t => t.id === moved);
+        const dropTab = S.tabs.find(t => t.id === hit.id);
+        if (movedTab && dropTab && (movedTab.fight || "f1") !== (dropTab.fight || "f1")) {
+          splitFromFight(moved);
+        }
+        changed = moveTab(moved, hit.id, hit.intent);
+      }
       if (!changed) return;
 
       /* A fight's composition can move the CR band, and the band feeds the tie-break —
@@ -1811,14 +1821,6 @@
     if (t.closest("#btn-clear")) { clearSession(); return; }
 
     /* ---- tabs ---- */
-    const splitFight = t.closest("[data-splitfight]");
-    if (splitFight) {
-      e.stopPropagation();
-      splitFromFight(splitFight.dataset.splitfight);
-      renderFightPicker(); renderBand();
-      persist(); renderResults(); renderSuggestions();
-      return;
-    }
     const close = t.closest("[data-closetab]");
     if (close) {
       const id = close.dataset.closetab;
