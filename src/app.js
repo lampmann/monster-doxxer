@@ -511,22 +511,26 @@
       return;
     }
 
-    let html = "", i = 0, group = 0;
+    let html = "", i = 0;
     while (i < S.tabs.length) {
       const f = S.tabs[i].fight || "f1";
       const run = [];
       while (i < S.tabs.length && (S.tabs[i].fight || "f1") === f) run.push(S.tabs[i++]);
-      group++;
       const n = fightCount(f);
-      /* The title sits on the BOX, the way pmcrwf's does, so the whole boxed run explains
-         itself rather than only the 11px label at its left edge. */
-      /* `data-fight` is what the drop handler reads to answer "which box is the cursor
+      /* NO "Fight N" CAPTION. The box was labelled back when it was barely visible and
+         the word was doing work the border could not. The border does it now, and a
+         number that only counted boxes left to right said nothing the box had not
+         already said — while adding a second thing to read per group.
+
+         What the caption really carried was the creature count, which is the part that
+         matters (it is what sets the CR band). That moves onto the box's own tooltip, so
+         hovering anywhere in the group says it.
+
+         `data-fight` is what the drop handler reads to answer "which box is the cursor
          in", which is the whole basis of joining and leaving a fight — see fightBoxAt. */
       html += `<span class="tab-group" data-fight="${esc(f)}" ` +
-        `title="these monsters were in one fight, which is what sets the CR band — ` +
-        `drag a tab out of this box to give it a fight of its own">` +
-        `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
-        `which is what sets the CR band">Fight ${group}</span>` +
+        `title="${n} creature${n === 1 ? "" : "s"} in one fight, which is what sets the ` +
+        `CR band — drag a tab out of this box to give it a fight of its own">` +
         run.map(btn).join("") +
         `</span>`;
     }
@@ -634,11 +638,25 @@
      cursor is on. Grouping is unreachable from the gap, which is correct — the gap
      unambiguously means "put it here", and the middle of a tab means "put it with
      this". Dropping past the last tab resolves to after it, for the same reason. */
-  function dropTargetAt(e) {
+  /* `ignoreId` is passed in rather than read off TAB_DRAG_ID, because the drop handler
+     clears that before it resolves the target — so reading the module state here excluded
+     nothing at exactly the moment it mattered, and only the hover feedback got the
+     benefit. An explicit argument cannot drift out of step with its caller. */
+  function dropTargetAt(e, ignoreId) {
     const el = e.target.closest && e.target.closest("[data-tab]");
     if (el) return { id: el.dataset.tab, intent: tabDropIntent(el, e.clientX) };
 
-    const tabs = [...document.querySelectorAll("#doxx-tabs .doxx-tab")];
+    /* THE DRAGGED TAB IS NOT A CANDIDATE.
+
+       It is still sitting in the strip at its old place while you drag it, so when you
+       pull the FIRST or LAST tab of a box out past its own end, the tab nearest the
+       cursor is the one in your hand. That resolved to "you dropped on yourself", which
+       both handlers discard — so pulling a tab out towards its own side, the obvious way
+       to do it, did nothing at all, while dragging it across to the far side worked only
+       because some other tab was then nearest. Excluding it resolves to the real
+       neighbour, and the drop is judged on the box the cursor is in, as everywhere else. */
+    const tabs = [...document.querySelectorAll("#doxx-tabs .doxx-tab")]
+      .filter(t => t.dataset.tab !== ignoreId);
     if (!tabs.length) return null;
     let best = null, bestDist = Infinity;
     tabs.forEach(t => {
@@ -696,7 +714,7 @@
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       clearTabDropMarks();
-      const hit = dropTargetAt(e);
+      const hit = dropTargetAt(e, TAB_DRAG_ID);
       if (!hit || hit.id === TAB_DRAG_ID) return;
       const tab = el.querySelector(`.doxx-tab[data-tab="${CSS.escape(hit.id)}"]`);
       if (!tab) return;
@@ -721,7 +739,7 @@
       TAB_DRAG_ID = null;
       clearTabDropMarks();
 
-      const hit = dropTargetAt(e);
+      const hit = dropTargetAt(e, moved);
       if (!hit || hit.id === moved) return;
 
       let changed;

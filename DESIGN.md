@@ -1269,6 +1269,53 @@ Both fixes were confirmed against deliberate mutations — the old positional la
 the old different-fight rule — each of which turns its own assertions red and nothing
 else.
 
+### Pulling a tab out towards its own side, which is the way anyone would try it
+
+With five monsters boxed together, dragging the leftmost tab **left** or the rightmost
+tab **right** did nothing. Getting either out meant hauling it across to the opposite
+end, which is nobody's instinct. Two independent causes, one per side, both hiding behind
+the same symptom.
+
+**The dragged tab was competing with itself.** It stays in the strip at its old place
+while you drag it, so when you pull an *end* tab out past its own end, the tab nearest
+the cursor is the one in your hand. `dropTargetAt` returned it, both handlers saw
+`hit.id === moved`, and discarded the drop as "you dropped on yourself". Dragging to the
+far side worked only because some *other* tab was then nearest. The nearest-tab search
+now excludes the tab being dragged, so it resolves to the real neighbour and the drop is
+judged on the box the cursor is in, exactly as everywhere else.
+
+That exclusion needs the id **passed in**, not read off `TAB_DRAG_ID`: the drop handler
+clears that before resolving its target, so reading the module state excluded nothing at
+precisely the moment it mattered. The first version of this fix did read the module
+state, and made the hover feedback correct while leaving the drop as broken as before —
+the red box appeared and the release still did nothing. An explicit argument cannot drift
+out of step with its caller.
+
+**On the left there was nowhere to land.** The first box's left edge was the strip's own
+left edge, so the pixels to its left did not belong to `#doxx-tabs` and no `dragover` or
+`drop` ever fired there. `padding-left` gives the gesture somewhere to go, with an equal
+negative margin so the tabs stay where they were on screen. The right side never had this
+problem: the strip runs the full width of its column, so there is always bar beyond the
+last box.
+
+Worth noting that these two failed *identically* from the outside, and fixing either
+alone would have left a feature that works on one side and not the other — which is
+roughly how the original report read. The tests mutate each cause separately for that
+reason: removing the exclusion reddens both sides, removing the padding reddens only the
+left.
+
+### The "Fight N" caption is gone
+
+The box was captioned back when it was a `#eee` hairline nobody could see and the word
+was doing the work the border could not. The border does that work now. A number that
+only counted boxes left to right told you nothing the box had not already said, while
+adding a second thing to read per group — and it changed under you as fights came and
+went, which is the same complaint as the tab names.
+
+What the caption was really carrying is the creature count, which is the part that
+matters because it sets the CR band. That moved onto the box's own tooltip, so hovering
+anywhere in the group says it.
+
 ## Where a score came from
 
 The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one

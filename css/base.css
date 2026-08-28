@@ -119,8 +119,20 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
    You are usually working out what several things were at once, and the evidence for
    each has to stay separate — merging two monsters' observations is the failure mode
    the design has warned about since the handoff. */
+/* THE LEFT PADDING IS A DROP TARGET, not decoration.
+
+   Leaving a fight means dropping outside every box, and the first box's left edge used to
+   be the strip's own left edge — so there were no pixels left of it that still belonged
+   to #doxx-tabs, and dragover/drop never fired there at all. Pulling the leftmost tab out
+   to the left, the obvious gesture, had nowhere to land. The right side never had the
+   problem: the strip runs the full width of its column, so there is always bar to the
+   right of the last box.
+
+   The negative margin puts the tabs back where they were on screen, so the strip gains a
+   landing area on the left without being indented away from everything above it. */
 #doxx-tabs { display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .75rem;
-             border-bottom: 1px solid var(--border-hair); padding-bottom: .35rem; }
+             border-bottom: 1px solid var(--border-hair); padding-bottom: .35rem;
+             margin-left: -.6rem; padding-left: .6rem; }
 #doxx-tabs button { font: inherit; font-size: .85rem; padding: .15rem .5rem; }
 .doxx-tab.active { font-weight: bold; border-bottom-width: 2px; border-bottom-color: var(--link-border); }
 .doxx-tab-x { margin-left: .4rem; opacity: .55; }
@@ -159,9 +171,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 /* While a drag is heading somewhere that would take a tab out of this fight. Red because
    a member is about to be lost — the same colour the × that closes a tab uses. */
 .tab-group.losing { border-style: solid; border-color: var(--danger); }
-.tab-group-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
-                   color: var(--muted-fg); padding-right: .1rem;
-                   display: flex; align-items: center; }
 /* Ported from pmcrwf's character-tab drag states. */
 .doxx-tab.dragging { opacity: .4; }
 .doxx-tab.drop-group { outline: 2px solid var(--link-border); outline-offset: 1px; }

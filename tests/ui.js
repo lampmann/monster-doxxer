@@ -837,12 +837,19 @@ async function main() {
 
       const groups = await page.evaluate(() =>
         [...document.querySelectorAll("#doxx-tabs .tab-group")].map(g => ({
-          label: (g.querySelector(".tab-group-label") || {}).textContent,
+          title: g.title,
           tabs: g.querySelectorAll(".doxx-tab").length,
         })));
       assertEqual("...and the tab strip now shows two fights", groups.length, 2);
       assertEqual("with the monsters split between them", groups.map(g => g.tabs), [2, 1]);
-      assert("each group is labelled", groups.every(g => /Fight \d/.test(g.label || "")));
+      /* No "Fight N" caption any more — the box was captioned back when it was barely
+         visible and the word was doing work the border could not. What the caption
+         actually carried was the creature count, which is the part that sets the CR band,
+         and that now lives on the box's own tooltip. */
+      assertEqual("no box carries a Fight N caption",
+        await page.evaluate(() => document.querySelectorAll(".tab-group-label").length), 0);
+      assert("each box still says what it is, and how many are in it",
+        groups.every(g => /creatures? in one fight/.test(g.title || "")));
 
       /* THAT THE BOX IS DRAWN, not merely that it is in the DOM.
 
@@ -1047,6 +1054,54 @@ async function main() {
       assertEqual("dropping it back on a tab's middle rejoins that fight",
         new Set(await fights()).size, 1);
       assertEqual("...one box again", await boxes(), [3]);
+
+      /* OUT TOWARDS ITS OWN SIDE — the end tabs, in the direction you would actually pull.
+
+         Reported after the rule above shipped: with five monsters boxed together, the
+         leftmost dragged LEFT and the rightmost dragged RIGHT did nothing, and you had to
+         haul them across to the far side instead. Two causes, one per side.
+
+         The dragged tab stays in the strip at its old place while you drag it, so when
+         you pull an END tab out past its own end, the tab nearest the cursor is the one
+         in your hand — which resolved to "you dropped on yourself" and was discarded.
+         Dragging to the far side worked only because some other tab was then nearest.
+
+         And on the left there was nowhere to land at all: the first box's left edge was
+         the strip's own left edge, so the pixels left of it did not belong to #doxx-tabs
+         and no drop event fired there. The strip now carries left padding for it. */
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await page.waitForFunction(READY, null, { timeout: 90000 });
+      for (let i = 0; i < 4; i++) { await page.click("#tab-add"); await page.waitForTimeout(300); }
+      assertEqual("five monsters, one box", await boxes(), [5]);
+
+      const stripBox = await (await page.$("#doxx-tabs")).boundingBox();
+      ids = await order();
+      let row = await (await page.$(sel(ids[0]))).boundingBox();
+      await dragTo(ids[0], stripBox.x + 2, row.y + row.height / 2);
+      assertEqual("the leftmost tab, pulled LEFT, leaves the fight",
+        new Set(await fights()).size, 2);
+      assertEqual("...taking only itself", (await boxes()).sort(), [1, 4]);
+
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await page.waitForFunction(READY, null, { timeout: 90000 });
+      for (let i = 0; i < 4; i++) { await page.click("#tab-add"); await page.waitForTimeout(300); }
+      ids = await order();
+      const addBtn = await (await page.$("#tab-add")).boundingBox();
+      row = await (await page.$(sel(ids[4]))).boundingBox();
+      await dragTo(ids[4], addBtn.x + addBtn.width + 50, row.y + row.height / 2);
+      assertEqual("the rightmost tab, pulled RIGHT, leaves the fight",
+        new Set(await fights()).size, 2);
+      assertEqual("...taking only itself", (await boxes()).sort(), [1, 4]);
+
+      // The other half of the rule: staying inside the box is still just a reorder.
+      ids = await order();
+      const inside = await (await page.$(sel(ids[3]))).boundingBox();
+      await dragTo(ids[1], inside.x + inside.width * 0.92, inside.y + inside.height / 2);
+      assert("a drag that stays inside the box still splits nobody off",
+        (await boxes()).includes(4));
+
 
       /* Across every result on screen, not just the leader — the overflow showed up on
          low-scoring rows too, where a dropped negative category left the positives
