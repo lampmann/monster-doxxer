@@ -1194,6 +1194,19 @@ accent blue is above 7.
 
 Both new assertions were confirmed to fail against the previous stylesheet before the fix
 was kept. An assertion never seen red is not known to test anything.
+### The split button, replaced by dragging a tab out
+
+pmcrwf's own ⛓ button — the direct model for the split button above — turned out to do
+"weird shit" in practice and got pulled entirely; ungrouping there is now just dragging a
+tab to an edge outside its group, the same reading browser tab groups use. Since this
+port copied the button along with the rest of the mechanism, it carried the same problem
+and got the same fix: `splitFromFight` is no longer wired to a button. Dropping a tab on
+an edge next to a tab from a *different* fight now peels it off its own fight first —
+mirroring pmcrwf's `leaveGroup`-before-`reorderCharacter` — so `moveTab`'s own same-fight
+check moves just that one tab instead of the whole fight it used to share. Dropping on an
+edge next to a tab from the *same* fight is unaffected; that was always a plain reorder.
+
+`.tab-group-x` is gone from base.css along with the button.
 
 ## Where a score came from
 
@@ -1202,11 +1215,34 @@ had earned it from a name and the other from three symptoms. The evidence lines 
 name every feature, which is the opposite failure: complete and unreadable at a glance.
 
 The bar is one band per module of the form now, coloured to a swatch on that module's
-heading, and hovering gives the arithmetic. The bands are computed from the same numbers
-the score is — each category's credit minus its penalties over the same F7 denominator —
-so they sum to it exactly rather than approximately, and a test asserts that they do. A
-facet belonging to no category falls into "other" rather than vanishing: a band that
-silently dropped evidence would make the arithmetic lie.
+heading, and hovering gives the arithmetic. A facet belonging to no category falls into
+"other" rather than vanishing: a band that silently dropped evidence would make the
+arithmetic lie.
+
+### Making it add up, which took two goes
+
+The first version computed each category's raw contribution and displayed that, which
+overflowed — a playtester reported bars adding to 121%. Two independent causes:
+
+- **The appearance bonus lives above 1.** It is added *after* F7 normalisation, on
+  purpose, so a description can never dilute the evidence beside it. A monster that
+  explains everything you reported *and* looks the part scores 1.24, not 1.0. The bar
+  clamps at 100%; the rows did not.
+- **A net-negative category was filtered out of the display**, so the surviving positives
+  summed to more than the net they belonged to. At the other extreme this gave a **0% bar
+  over a tooltip claiming 41%**, with the category dragging it down (−59%) simply absent.
+
+Both are fixed by scaling the positive contributions to whatever the bar is showing, and
+rounding by largest remainder so the integers sum to it *exactly* rather than to 99 or
+102. The bands are drawn from those same rounded numbers, so bands, rows and bar always
+agree; the test asserts it for every result on screen, since the overflow appeared on
+low-scoring rows too.
+
+The trade is worth stating: these are shares **of the displayed score**, not raw
+contributions, so on a capped monster appearance's 24% of raw reads as 19% of 100. The
+alternative is a breakdown that does not describe the thing it breaks down. A capped
+score says so in words instead — *"explains everything you reported, and looks the
+part"* — rather than showing the same flat 100% as a monster that merely matched.
 
 ## Naming the mechanic, when the GM said it out loud
 

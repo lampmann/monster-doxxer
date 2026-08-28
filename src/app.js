@@ -498,13 +498,6 @@
         `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
         `which is what sets the CR band">Fight ${group}</span>` +
         run.map(btn).join("") +
-        /* pmcrwf labels this ⛓, which renders there as a monochrome glyph and here as a
-           colour emoji — ambiguous at 11px and easy to read as an error marker rather
-           than a control. A word cannot misrender. */
-        (run.length > 1
-          ? `<button type="button" class="tab-group-x" data-splitfight="${esc(run[0].id)}" ` +
-            `title="move ${esc(tabLabel(run[0]))} into a fight of its own">split</button>`
-          : "") +
         `</span>`;
     }
     el.innerHTML = html + add;
@@ -566,11 +559,15 @@
   }
 
   /* Peel one tab off the front of a shared fight and give it a new one of its own.
-     Ported from pmcrwf's ungroupCharacter — except a fight of one is not a cleanup case
-     here the way a group of one character is there. pmcrwf dissolves a group that drops
-     to one member, because an ungrouped character is a different, simpler state (no
-     shared log). A tab in a fight by itself is not a different state at all; every tab
-     is always in exactly one fight, alone or not, so there is nothing to dissolve. */
+     Ported from pmcrwf's leaveGroup — except a fight of one is not a cleanup case here
+     the way a group of one character is there. pmcrwf dissolves a group that drops to
+     one member, because an ungrouped character is a different, simpler state (no shared
+     log). A tab in a fight by itself is not a different state at all; every tab is
+     always in exactly one fight, alone or not, so there is nothing to dissolve.
+
+     There is no button for this. Same as pmcrwf: dragging a tab out of its fight — to an
+     edge next to a tab from a different fight, not the middle of one — peels it off on
+     the way; see the drop handler below. */
   function splitFromFight(tabId) {
     const t = S.tabs.find(x => x.id === tabId);
     if (!t) return;
@@ -671,9 +668,22 @@
       const hit = dropTargetAt(e);
       if (!hit || hit.id === moved) return;
 
-      const changed = hit.intent === "group"
-        ? groupIntoFight(moved, hit.id)
-        : moveTab(moved, hit.id, hit.intent);
+      let changed;
+      if (hit.intent === "group") {
+        changed = groupIntoFight(moved, hit.id);
+      } else {
+        // An edge, not the middle, of a tab from a different fight — the same "drag it
+        // out" gesture pmcrwf uses, so moved is peeled off its fight on the way. Ported
+        // from pmcrwf's drop handler, which calls leaveGroup before reorderCharacter for
+        // the same reason: once moved has its own fight, moveTab's own same-fight check
+        // moves just that one tab instead of the whole fight it used to share.
+        const movedTab = S.tabs.find(t => t.id === moved);
+        const dropTab = S.tabs.find(t => t.id === hit.id);
+        if (movedTab && dropTab && (movedTab.fight || "f1") !== (dropTab.fight || "f1")) {
+          splitFromFight(moved);
+        }
+        changed = moveTab(moved, hit.id, hit.intent);
+      }
       if (!changed) return;
 
       /* A fight's composition can move the CR band, and the band feeds the tie-break —
@@ -824,10 +834,10 @@
   })();
   const CATEGORY_BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
 
-  /* Each category's share of the score, in the same units the bar is drawn in. Anything
-     whose facet has no category falls into "other" rather than vanishing — a band that
-     silently dropped evidence would make the arithmetic lie. */
-  function scoreParts(r) {
+  /* Each category's signed contribution to the score, in the same units the score is.
+     Anything whose facet has no category falls into "other" rather than vanishing — a
+     band that silently dropped evidence would make the arithmetic lie. */
+  function categoryShares(r) {
     const parts = new Map();
     const add = (facet, w) => {
       const id = CATEGORY_OF[facet] || "other";
@@ -840,39 +850,75 @@
       else add(x.facet, x.weight / denom);
     });
     (r.against || []).forEach(x => add(x.facet, x.weight / denom));
-    return [...parts.entries()]
-      .map(([id, share]) => ({ id, share, cat: CATEGORY_BY_ID.get(id) }))
-      .filter(p => p.share > 0.0005)
-      .sort((a, b) => b.share - a.share);
+    return [...parts.entries()].map(([id, share]) => ({ id, share, cat: CATEGORY_BY_ID.get(id) }));
   }
 
-  function scoreBar(rel, r) {
+  /* THE ROWS HAVE TO ADD UP TO THE BAR. They did not, for two separate reasons, and both
+     produced totals a reader could see were wrong:
+
+       - The appearance bonus is added AFTER F7 normalisation, on purpose, so that a
+         description can never dilute the evidence (see DESIGN.md). A monster that
+         explains everything you reported AND looks the part therefore scores above 1 —
+         the bar clamps at 100%, the rows did not, and 67 + 33 + 21 came to 121%.
+       - A category with a net NEGATIVE contribution was filtered out of the display
+         entirely, so the surviving positives summed to more than the net. One case
+         showed a 0% bar over a tooltip claiming 41%.
+
+     So the positive contributions are scaled to whatever the bar is actually showing,
+     and rounded by largest remainder so the integers sum to it exactly rather than to
+     within a point or two. What is dropped is never silent: a category pulling the score
+     down is already named on the − line under the result, which is the place for it.
+
+     The consequence worth being honest about: these are shares OF THE DISPLAYED SCORE,
+     not raw contributions. For a monster whose score was capped, appearance's 24% of raw
+     shows as 19% of 100. The alternative is a breakdown that does not describe the thing
+     it is a breakdown of. */
+  function scoreParts(r, displayedPct) {
+    if (!r || displayedPct <= 0) return [];
+    const positives = categoryShares(r).filter(p => p.share > 0).sort((a, b) => b.share - a.share);
+    const total = positives.reduce((n, p) => n + p.share, 0);
+    if (!positives.length || total <= 0) return [];
+
+    const exact = positives.map(p => ({ ...p, pct: (p.share / total) * displayedPct }));
+    // Largest remainder: floor everything, then hand the leftover points to the biggest
+    // fractions, so the column sums to displayedPct and not to 99 or 102.
+    const out = exact.map(p => ({ ...p, whole: Math.floor(p.pct), rem: p.pct - Math.floor(p.pct) }));
+    let left = displayedPct - out.reduce((n, p) => n + p.whole, 0);
+    out.slice().sort((a, b) => b.rem - a.rem).forEach(p => { if (left > 0) { p.whole++; left--; } });
+    return out.filter(p => p.whole > 0).map(p => ({ id: p.id, cat: p.cat, pct: p.whole }));
+  }
+
+  function scoreBar(rel, r, raw) {
     const pct = Math.round(rel * 100);
     const label = `${pct}%`;
-    const parts = r ? scoreParts(r) : [];
+    const parts = scoreParts(r, pct);
 
-    /* Bands are drawn from the shares, then clipped to the filled width — a category
-       cannot paint past the score it helped produce. */
+    // Bands come from the same rounded numbers as the rows, so they fill the bar exactly.
     let run = 0;
     const bands = parts.map(p => {
-      const w = Math.max(0, Math.min(100 - run, p.share * 100));
-      const seg = `<span class="bar-seg" style="left:${run}%;width:${w}%;` +
+      const seg = `<span class="bar-seg" style="left:${run}%;width:${p.pct}%;` +
                   `background:${p.cat ? p.cat.colour : "#888"}"></span>`;
-      run += w;
+      run += p.pct;
       return seg;
     }).join("");
 
     const rows = parts.map(p =>
       `<div class="tip-row"><span class="tip-sw" style="background:${p.cat ? p.cat.colour : "#888"}"></span>` +
-      `<span class="tip-pct">${Math.round(p.share * 100)}%</span>` +
+      `<span class="tip-pct">${p.pct}%</span>` +
       `<span>${esc(p.cat ? p.cat.label : "other")}</span></div>`).join("");
+
+    /* A score above 1 is a real thing — everything you reported explained, plus an
+       appearance bonus on top — and the bar has nowhere to put it. Say so rather than
+       silently showing the same 100% as a monster that merely matched. */
+    const capped = typeof raw === "number" && raw > 1.005
+      ? `<div class="tip-note">explains everything you reported, and looks the part</div>` : "";
 
     return `<span class="barwrap">` +
       `<span class="bar-track">${bands}` +
       `<span class="bar-num">${label}</span>` +
       `<span class="bar-num on" style="clip-path:inset(0 ${100 - pct}% 0 0)">${label}</span>` +
       `</span>` +
-      (rows ? `<span class="bar-tip"><div class="tip-total">${label}</div>${rows}</span>` : "") +
+      (rows ? `<span class="bar-tip"><div class="tip-total">${label}</div>${rows}${capped}</span>` : "") +
       `</span>`;
   }
 
@@ -1467,7 +1513,7 @@
       return `<div class="result">
         <div class="result-head">
           <span class="result-rank">${i + 1}.</span>
-          ${scoreBar(rel, r)}
+          ${scoreBar(rel, r, r.score)}
           <span class="result-name"><button data-detail="${esc(r.key)}">${esc(r.name)}</button></span>
           <span class="result-meta">${esc(r.source)}${m && m.cr ? ", CR " + esc(m.cr) : ""}${
             r.alsoIn ? " (also " + esc(r.alsoIn.slice(0, 2).join(", ")) + ")" : ""}</span>
@@ -1778,14 +1824,6 @@
     if (t.closest("#btn-clear")) { clearSession(); return; }
 
     /* ---- tabs ---- */
-    const splitFight = t.closest("[data-splitfight]");
-    if (splitFight) {
-      e.stopPropagation();
-      splitFromFight(splitFight.dataset.splitfight);
-      renderFightPicker(); renderBand();
-      persist(); renderResults(); renderSuggestions();
-      return;
-    }
     const close = t.closest("[data-closetab]");
     if (close) {
       const id = close.dataset.closetab;
