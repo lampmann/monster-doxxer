@@ -1208,6 +1208,67 @@ edge next to a tab from the *same* fight is unaffected; that was always a plain 
 
 `.tab-group-x` is gone from base.css along with the button.
 
+### The drag that could not create the thing it required
+
+Dropping the split button left one gesture to leave a fight, and the rule behind it was
+that dropping a tab beside a tab from a **different fight** peels it off its own. Every
+tab is born in `f1` together. So from the state everybody actually starts in there is no
+different fight to drop beside, and the only gesture that could produce one needed one to
+exist already. Dragging reordered tabs and did nothing else, for ever — which is what
+"tab grouping completely doesn't work" was describing, precisely and correctly.
+
+The fix is the rule pmcrwf converged on, which is also the whole point of the port:
+**where a tab lands decides its fight.** Inside a box, that fight; outside every box, a
+fight of its own. There is no circularity, because "outside every box" is a place that
+exists from the first drag onward — the empty strip past the last box — so the gesture
+can bootstrap. It is the box and not an index calculation for the same reason as there:
+the dashed rectangle is the thing on screen, so it should be the thing you aim at.
+
+Two things had to be true at once for this to be reachable at all, and they were split
+across two branches. The rule above lives here; the box being *drawn in a colour anyone
+can see* was a separate fix on a separate branch, and dragging a tab out of a box you
+cannot see is not a gesture. Neither half is worth anything alone — hence the merge.
+
+Leaving now has no control of its own, so the box says when a drag is about to take a
+member out of it: it turns solid red under the cursor, the same red as the × that closes
+a tab. Without that the gesture is invisible until after it has happened.
+
+**Why the suite passed on a feature that could not work.** The drag test reached for the
+`#in-fight` dropdown *first*, to split one tab off and have a different-fight tab to drag
+beside. That is the one thing the drag itself could not do, so the test proved the rule
+worked given a second fight while never asking the question that mattered: can you get a
+second fight by dragging? It now starts from a cleared session, three tabs, one fight,
+and the dropdown untouched.
+
+### A default name is the monster's, not the slot's
+
+`tabLabel` ended with `"Monster " + (S.tabs.indexOf(t) + 1)`, so the fallback name was a
+property of the **position**. Drag the third tab to the front and it became "Monster 1",
+while the tab that had been Monster 1 became Monster 2. Nothing about either creature
+changed; the labels slid along underneath the drag. A name you are using to keep track of
+one monster must not move to a different monster when you tidy the strip — and reordering
+became a great deal more common the moment dragging started working, which is why the two
+reports arrived together.
+
+Tabs now carry an `ord`, assigned once when the tab is made and never recomputed. The
+next one is `max(ord) + 1` rather than `tabs.length + 1`: close Monster 2 of three and a
+length-based number would collide with the surviving Monster 3. It is not "lowest unused"
+either, since handing a new tab the number of one just closed is the same surprise as
+moving it, only delayed.
+
+Sessions saved before ordinals existed take theirs from their stored order, which is the
+order that session was already displaying — so upgrading renames nobody's tabs.
+
+The consequence is worth stating in the open, because it looks wrong until you see why:
+after a reorder the strip no longer reads 1, 2, 3 left to right. That is correct. The
+numbers identify monsters, so once you move things they are *expected* to disagree with
+the order — and a test asserts exactly that, rather than only asserting the weaker "names
+did not change".
+
+Both fixes were confirmed against deliberate mutations — the old positional label, and
+the old different-fight rule — each of which turns its own assertions red and nothing
+else.
+
 ## Where a score came from
 
 The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one

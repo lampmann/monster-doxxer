@@ -935,6 +935,18 @@ async function main() {
         await page.waitForTimeout(450);
       }
 
+      // Same gesture, but aimed at a raw point rather than another tab — dropping into
+      // empty strip has no tab to describe it relative to.
+      async function dragTo(fromId, x, y) {
+        const s = await (await page.$(sel(fromId))).boundingBox();
+        await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(x, y, { steps: 12 });
+        await page.waitForTimeout(180);
+        await page.mouse.up();
+        await page.waitForTimeout(450);
+      }
+
       await page.click("#tab-add"); await page.waitForTimeout(350);
       let ids = await order();
       assertEqual("two tabs to start", ids.length, 2);
@@ -997,21 +1009,44 @@ async function main() {
       await page.mouse.up();
       await page.waitForTimeout(400);
 
-      /* pmcrwf's own split control — the ⛓ button this one was modelled on — "did weird
-         shit" in practice and was pulled in favour of dragging a tab out; this port
-         carried the same button, so it got the same fix. See DESIGN.md, "The split
-         button, replaced by dragging a tab out". There's no button left to click, so
-         first split one tab off to have a different-fight tab to drag onto. */
-      ids = await order();
-      await page.click(sel(ids[0])); await page.waitForTimeout(250);
-      await page.selectOption("#in-fight", "__new"); await page.waitForTimeout(400);
-      assertEqual("splitting one out gives two fights", (await boxes()).length, 2);
+      /* LEAVING A FIGHT FROM THE DEFAULT STATE, WITH NO DROPDOWN TO BOOTSTRAP IT.
 
+         This is the assertion whose absence let the feature ship broken. The previous
+         version of this block reached for `#in-fight` → "+ a separate fight" FIRST, to
+         have a tab in a different fight to drag beside — because the rule at the time
+         only peeled a tab off when the tab it landed beside was in a different fight.
+         Every tab starts in "f1" together, so that rule could never create the second
+         fight it required, and dragging did nothing but reorder for ever. The test
+         passed because the dropdown had already done the one thing the drag could not.
+
+         So: no dropdown. Three tabs, all in the fight they were born in, and the drag
+         has to be able to break that on its own. Dropping outside every box is the
+         gesture, and the empty strip past the last box is a place that exists from the
+         first drag onward — which is what makes it able to bootstrap. */
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await page.waitForFunction(READY, null, { timeout: 90000 });
+      await page.click("#tab-add"); await page.waitForTimeout(350);
+      await page.click("#tab-add"); await page.waitForTimeout(350);
+      assertEqual("three fresh tabs, one fight, no dropdown touched", await boxes(), [3]);
+
+      const strip = await page.$eval("#doxx-tabs", el => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, height: r.height };
+      });
+      const addBox = await (await page.$("#tab-add")).boundingBox();
       ids = await order();
-      await drag(ids[2], ids[0], "right");
-      assertEqual("dragging the other pair's tab to an edge next to the lone one peels it off too",
-        new Set(await fights()).size, 3);
-      assertEqual("...and the strip now shows three separate fights", (await boxes()).length, 3);
+      await dragTo(ids[0], addBox.x + addBox.width + 60, strip.top + strip.height / 2);
+      assertEqual("dragging a tab past every box gives it a fight of its own",
+        new Set(await fights()).size, 2);
+      assertEqual("...peeling off that tab and no other", (await boxes()).sort(), [1, 2]);
+
+      // And the way back in, so the gesture is reversible without a dropdown either.
+      ids = await order();
+      await drag(ids[2], ids[0], "mid");
+      assertEqual("dropping it back on a tab's middle rejoins that fight",
+        new Set(await fights()).size, 1);
+      assertEqual("...one box again", await boxes(), [3]);
 
       /* Across every result on screen, not just the leader — the overflow showed up on
          low-scoring rows too, where a dropped negative category left the positives
@@ -1028,6 +1063,57 @@ async function main() {
         allAgree.every(x => x.rows === x.bar));
       assert("...and so do the coloured bands, so the bar is filled by what explains it",
         allAgree.every(x => x.bands === x.bar));
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a default tab name belongs to the tab, not to the slot");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* `tabLabel` read `S.tabs.indexOf(t) + 1`, so the fallback name was a property of
+         the POSITION. Drag the third tab to the front and it became "Monster 1" while the
+         tab that had been Monster 1 became Monster 2 — nothing about either creature had
+         changed, the labels just slid along underneath the drag. A name you are using to
+         keep track of one monster cannot move to a different monster when you tidy up. */
+      await page.click("#tab-add"); await page.waitForTimeout(350);
+      await page.click("#tab-add"); await page.waitForTimeout(350);
+
+      const named = () => page.evaluate(() =>
+        [...document.querySelectorAll(".doxx-tab")].map(t =>
+          ({ id: t.dataset.tab, name: t.textContent.replace(/\s*\u00d7\s*$/, "").trim() })));
+
+      const before = await named();
+      assertEqual("three tabs are numbered in the order they were made",
+        before.map(t => t.name), ["Monster 1", "Monster 2", "Monster 3"]);
+
+      // Drag the first tab to the end of the strip.
+      const sel2 = id => `.doxx-tab[data-tab="${id}"]`;
+      const src = await (await page.$(sel2(before[0].id))).boundingBox();
+      const dst = await (await page.$(sel2(before[2].id))).boundingBox();
+      await page.mouse.move(src.x + src.width / 2, src.y + src.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(dst.x + dst.width * 0.92, dst.y + dst.height / 2, { steps: 12 });
+      await page.waitForTimeout(180);
+      await page.mouse.up();
+      await page.waitForTimeout(450);
+
+      const after = await named();
+      assertEqual("the dragged tab really did move to the end",
+        after[after.length - 1].id, before[0].id);
+      assert("...and every tab still answers to the name it was created with",
+        before.every(b => (after.find(a => a.id === b.id) || {}).name === b.name));
+      /* Stated the other way round, because this is the part that was wrong: the strip
+         no longer reads 1,2,3 top to bottom, and that is correct. The numbers identify
+         monsters, so once you reorder they are expected to disagree with the order. */
+      assertEqual("...so the numbers now run in the tabs' order, not the strip's",
+        after.map(t => t.name), ["Monster 2", "Monster 3", "Monster 1"]);
+
+      await page.reload();
+      await page.waitForFunction(READY, null, { timeout: 90000 });
+      assertEqual("and a reload brings back the same names on the same tabs",
+        (await named()).map(t => t.name), after.map(t => t.name));
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();

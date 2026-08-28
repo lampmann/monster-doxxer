@@ -81,9 +81,26 @@
     acHit: "", acMiss: "", dcPass: "", dcFail: "", hpLived: "", hpDied: "" });
   const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     label: "", best: "", obs: blankObs(), ac: null, hp: null, retuned: false,
+    /* The number in "Monster 3" when nothing better is known. Assigned once, when the tab
+       is made, and never recomputed — see tabLabel. 0 means "not assigned yet", which is
+       what a tab saved before ordinals existed deserialises to. */
+    ord: 0,
     // Which fight this creature was in, and how many of it there were. Both feed the
     // party-plausibility band: one ogre and one of eight ogres are very different CRs.
     fight: "f1", count: 1 });
+
+  /* One more than the highest ordinal any tab is currently using. Not `tabs.length + 1`:
+     close Monster 2 of three and the next tab would collide with the surviving Monster 3.
+     Not "lowest unused" either — reusing the number of a tab you just closed is the same
+     surprise as moving one, just delayed. */
+  const nextOrd = tabs => tabs.reduce((m, t) => Math.max(m, Number(t.ord) || 0), 0) + 1;
+
+  /* Hand an ordinal to anything that hasn't got one. Only ever fires for tabs restored
+     from a session saved before ordinals existed: they take their stored order, which is
+     the order that session was already showing, so nobody's tabs get renamed by upgrading. */
+  function ensureOrdinals(tabs) {
+    tabs.forEach(t => { if (!Number(t.ord)) t.ord = nextOrd(tabs); });
+  }
 
   const S = {
     monsters: [], rarity: null, numerics: null, legacy: null, ontology: null, srcRows: [],
@@ -345,6 +362,9 @@
       const t = blankTab();
       S.tabs = [t]; S.activeId = t.id;
     }
+    // Every path above lands here, so one call covers a restored session, a pre-tabs
+    // session and a fresh install alike.
+    ensureOrdinals(S.tabs);
     if (d) {
       S.sources = d.sources || {};
       S.hideNamed = !!d.hideNamed;
@@ -432,7 +452,14 @@
     // looking at keeps showing what it resolved to instead of reverting to raw input.
     if (t.best) return t.best;
     if (t.obs && t.obs.heardName) return t.obs.heardName;
-    return "Monster " + (S.tabs.indexOf(t) + 1);
+    /* THE TAB'S OWN NUMBER, not its position in the strip.
+
+       This read `S.tabs.indexOf(t) + 1`, so the name was a property of the SLOT rather
+       than of the monster in it: drag the third tab to the front and it became "Monster
+       1" while the tab that had been Monster 1 became Monster 2. Nothing about the
+       creature changed; the labels just slid along underneath the drag. A name you chose
+       to keep track of something cannot move to something else when you tidy the strip. */
+    return "Monster " + (t.ord || 1);
   }
 
   /* TABS, GROUPED BY THE FIGHT THEY WERE IN — AND DRAGGABLE, THE WAY pmcrwf's ARE.
@@ -493,8 +520,11 @@
       const n = fightCount(f);
       /* The title sits on the BOX, the way pmcrwf's does, so the whole boxed run explains
          itself rather than only the 11px label at its left edge. */
-      html += `<span class="tab-group" title="these monsters were in one fight, which is ` +
-        `what sets the CR band — drag a tab out, or use split, to separate them">` +
+      /* `data-fight` is what the drop handler reads to answer "which box is the cursor
+         in", which is the whole basis of joining and leaving a fight — see fightBoxAt. */
+      html += `<span class="tab-group" data-fight="${esc(f)}" ` +
+        `title="these monsters were in one fight, which is what sets the CR band — ` +
+        `drag a tab out of this box to give it a fight of its own">` +
         `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
         `which is what sets the CR band">Fight ${group}</span>` +
         run.map(btn).join("") +
@@ -622,8 +652,23 @@
     const mid = best.r.left + best.r.width / 2;
     return { id: best.el.dataset.tab, intent: e.clientX < mid ? "before" : "after" };
   }
+  /* Which fight's box the cursor is inside, or null for none — "outside the fight",
+     literally. The dashed box is the thing on screen, so it is the thing that decides;
+     see the drop handler for why an index calculation could not do this job. */
+  function fightBoxAt(x, y) {
+    const box = [...document.querySelectorAll("#doxx-tabs .tab-group")].find(b => {
+      const r = b.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    });
+    return box ? box.dataset.fight : null;
+  }
+  // Every tab is always in some fight, so "is it on its own" is a tab count, not a
+  // creature count — fightCount sums `count` and would call one tab of eight ogres a crowd.
+  const fightTabCount = f => S.tabs.filter(t => (t.fight || "f1") === f).length;
+
   function clearTabDropMarks() {
     document.querySelectorAll(".doxx-tab").forEach(t => t.classList.remove("drop-group", "drop-before", "drop-after"));
+    document.querySelectorAll(".tab-group").forEach(g => g.classList.remove("losing"));
   }
 
   (() => {
@@ -657,6 +702,17 @@
       if (!tab) return;
       tab.classList.add(hit.intent === "group" ? "drop-group"
         : hit.intent === "before" ? "drop-before" : "drop-after");
+
+      /* Leaving a fight has no button any more, so the box has to say when a drop is
+         about to take a member out of it — otherwise the gesture is invisible until
+         after it has happened. */
+      const dragged = S.tabs.find(t => t.id === TAB_DRAG_ID);
+      const from = (dragged && dragged.fight) || "f1";
+      if (dragged && hit.intent !== "group" && fightTabCount(from) > 1
+          && fightBoxAt(e.clientX, e.clientY) !== from) {
+        const box = el.querySelector(`.tab-group[data-fight="${CSS.escape(from)}"]`);
+        if (box) box.classList.add("losing");
+      }
     });
     el.addEventListener("drop", e => {
       if (!TAB_DRAG_ID) return;
@@ -672,17 +728,35 @@
       if (hit.intent === "group") {
         changed = groupIntoFight(moved, hit.id);
       } else {
-        // An edge, not the middle, of a tab from a different fight — the same "drag it
-        // out" gesture pmcrwf uses, so moved is peeled off its fight on the way. Ported
-        // from pmcrwf's drop handler, which calls leaveGroup before reorderCharacter for
-        // the same reason: once moved has its own fight, moveTab's own same-fight check
-        // moves just that one tab instead of the whole fight it used to share.
+        /* WHERE IT LANDS DECIDES ITS FIGHT: inside a box, that fight; outside every box,
+           a fight of its own. Read before anything re-renders — after that the rectangles
+           these coordinates were measured against no longer exist.
+
+           THE RULE THIS REPLACES COULD NOT BOOTSTRAP. It peeled a tab off only when the
+           tab it was dropped beside was in a DIFFERENT fight. But every tab starts in
+           "f1" together, so from the default state there is no different fight to drop
+           beside — and the only gesture that could create one required one to already
+           exist. Dragging did nothing but reorder, for ever, which is exactly what
+           "grouping completely doesn't work" described.
+
+           Going by the box has no such circularity, because "outside every box" is a
+           place that exists from the very first drag: the empty strip past the last box.
+           It is also the rule pmcrwf ended up with, which is the point of the port. */
+        const landing = fightBoxAt(e.clientX, e.clientY);
         const movedTab = S.tabs.find(t => t.id === moved);
-        const dropTab = S.tabs.find(t => t.id === hit.id);
-        if (movedTab && dropTab && (movedTab.fight || "f1") !== (dropTab.fight || "f1")) {
-          splitFromFight(moved);
+        const was = (movedTab && movedTab.fight) || "f1";
+        let refought = false;
+        if (movedTab) {
+          if (landing && landing !== was) { movedTab.fight = landing; refought = true; }
+          // Already alone? Then "out" is where it is, and minting a fresh id every drag
+          // would churn the ids for no visible change.
+          else if (!landing && fightTabCount(was) > 1) { splitFromFight(moved); refought = true; }
         }
-        changed = moveTab(moved, hit.id, hit.intent);
+        const placed = moveTab(moved, hit.id, hit.intent);
+        // Joining puts it beside a tab of that fight, so it is contiguous already; this
+        // is belt and braces, and a no-op when it is.
+        if (refought && landing) keepFightContiguous(landing);
+        changed = placed || refought;
       }
       if (!changed) return;
 
@@ -1855,6 +1929,7 @@
     if (t.closest("#tab-add")) {
       syncActive();
       const fresh = blankTab();
+      fresh.ord = nextOrd(S.tabs);
       S.tabs.push(fresh);
       S.activeId = fresh.id;
       loadActive();
