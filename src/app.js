@@ -821,10 +821,10 @@
   })();
   const CATEGORY_BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
 
-  /* Each category's share of the score, in the same units the bar is drawn in. Anything
-     whose facet has no category falls into "other" rather than vanishing — a band that
-     silently dropped evidence would make the arithmetic lie. */
-  function scoreParts(r) {
+  /* Each category's signed contribution to the score, in the same units the score is.
+     Anything whose facet has no category falls into "other" rather than vanishing — a
+     band that silently dropped evidence would make the arithmetic lie. */
+  function categoryShares(r) {
     const parts = new Map();
     const add = (facet, w) => {
       const id = CATEGORY_OF[facet] || "other";
@@ -837,39 +837,75 @@
       else add(x.facet, x.weight / denom);
     });
     (r.against || []).forEach(x => add(x.facet, x.weight / denom));
-    return [...parts.entries()]
-      .map(([id, share]) => ({ id, share, cat: CATEGORY_BY_ID.get(id) }))
-      .filter(p => p.share > 0.0005)
-      .sort((a, b) => b.share - a.share);
+    return [...parts.entries()].map(([id, share]) => ({ id, share, cat: CATEGORY_BY_ID.get(id) }));
   }
 
-  function scoreBar(rel, r) {
+  /* THE ROWS HAVE TO ADD UP TO THE BAR. They did not, for two separate reasons, and both
+     produced totals a reader could see were wrong:
+
+       - The appearance bonus is added AFTER F7 normalisation, on purpose, so that a
+         description can never dilute the evidence (see DESIGN.md). A monster that
+         explains everything you reported AND looks the part therefore scores above 1 —
+         the bar clamps at 100%, the rows did not, and 67 + 33 + 21 came to 121%.
+       - A category with a net NEGATIVE contribution was filtered out of the display
+         entirely, so the surviving positives summed to more than the net. One case
+         showed a 0% bar over a tooltip claiming 41%.
+
+     So the positive contributions are scaled to whatever the bar is actually showing,
+     and rounded by largest remainder so the integers sum to it exactly rather than to
+     within a point or two. What is dropped is never silent: a category pulling the score
+     down is already named on the − line under the result, which is the place for it.
+
+     The consequence worth being honest about: these are shares OF THE DISPLAYED SCORE,
+     not raw contributions. For a monster whose score was capped, appearance's 24% of raw
+     shows as 19% of 100. The alternative is a breakdown that does not describe the thing
+     it is a breakdown of. */
+  function scoreParts(r, displayedPct) {
+    if (!r || displayedPct <= 0) return [];
+    const positives = categoryShares(r).filter(p => p.share > 0).sort((a, b) => b.share - a.share);
+    const total = positives.reduce((n, p) => n + p.share, 0);
+    if (!positives.length || total <= 0) return [];
+
+    const exact = positives.map(p => ({ ...p, pct: (p.share / total) * displayedPct }));
+    // Largest remainder: floor everything, then hand the leftover points to the biggest
+    // fractions, so the column sums to displayedPct and not to 99 or 102.
+    const out = exact.map(p => ({ ...p, whole: Math.floor(p.pct), rem: p.pct - Math.floor(p.pct) }));
+    let left = displayedPct - out.reduce((n, p) => n + p.whole, 0);
+    out.slice().sort((a, b) => b.rem - a.rem).forEach(p => { if (left > 0) { p.whole++; left--; } });
+    return out.filter(p => p.whole > 0).map(p => ({ id: p.id, cat: p.cat, pct: p.whole }));
+  }
+
+  function scoreBar(rel, r, raw) {
     const pct = Math.round(rel * 100);
     const label = `${pct}%`;
-    const parts = r ? scoreParts(r) : [];
+    const parts = scoreParts(r, pct);
 
-    /* Bands are drawn from the shares, then clipped to the filled width — a category
-       cannot paint past the score it helped produce. */
+    // Bands come from the same rounded numbers as the rows, so they fill the bar exactly.
     let run = 0;
     const bands = parts.map(p => {
-      const w = Math.max(0, Math.min(100 - run, p.share * 100));
-      const seg = `<span class="bar-seg" style="left:${run}%;width:${w}%;` +
+      const seg = `<span class="bar-seg" style="left:${run}%;width:${p.pct}%;` +
                   `background:${p.cat ? p.cat.colour : "#888"}"></span>`;
-      run += w;
+      run += p.pct;
       return seg;
     }).join("");
 
     const rows = parts.map(p =>
       `<div class="tip-row"><span class="tip-sw" style="background:${p.cat ? p.cat.colour : "#888"}"></span>` +
-      `<span class="tip-pct">${Math.round(p.share * 100)}%</span>` +
+      `<span class="tip-pct">${p.pct}%</span>` +
       `<span>${esc(p.cat ? p.cat.label : "other")}</span></div>`).join("");
+
+    /* A score above 1 is a real thing — everything you reported explained, plus an
+       appearance bonus on top — and the bar has nowhere to put it. Say so rather than
+       silently showing the same 100% as a monster that merely matched. */
+    const capped = typeof raw === "number" && raw > 1.005
+      ? `<div class="tip-note">explains everything you reported, and looks the part</div>` : "";
 
     return `<span class="barwrap">` +
       `<span class="bar-track">${bands}` +
       `<span class="bar-num">${label}</span>` +
       `<span class="bar-num on" style="clip-path:inset(0 ${100 - pct}% 0 0)">${label}</span>` +
       `</span>` +
-      (rows ? `<span class="bar-tip"><div class="tip-total">${label}</div>${rows}</span>` : "") +
+      (rows ? `<span class="bar-tip"><div class="tip-total">${label}</div>${rows}${capped}</span>` : "") +
       `</span>`;
   }
 
@@ -1464,7 +1500,7 @@
       return `<div class="result">
         <div class="result-head">
           <span class="result-rank">${i + 1}.</span>
-          ${scoreBar(rel, r)}
+          ${scoreBar(rel, r, r.score)}
           <span class="result-name"><button data-detail="${esc(r.key)}">${esc(r.name)}</button></span>
           <span class="result-meta">${esc(r.source)}${m && m.cr ? ", CR " + esc(m.cr) : ""}${
             r.alsoIn ? " (also " + esc(r.alsoIn.slice(0, 2).join(", ")) + ")" : ""}</span>

@@ -784,10 +784,16 @@ async function main() {
       assert("hovering gives the arithmetic behind it", tip && tip.rows.length >= 2);
       assert("...naming the modules the evidence came from",
         tip.rows.some(r => /Name/.test(r.label)) && tip.rows.some(r => /Observed effects/.test(r.label)));
-      /* The bands are only honest if they add up. Allow a point of rounding per row. */
+      /* THE PARTS SUM TO THE WHOLE, EXACTLY — not to within a rounding point.
+
+         They used to overflow, for two separate reasons a reader could see: the
+         appearance bonus is added after normalisation so a monster that explains
+         everything AND looks right scores above 1 (the bar clamps at 100%, the rows did
+         not, and 67 + 33 + 21 came to 121%); and a category with a net negative
+         contribution was dropped from the display, so the surviving positives summed to
+         more than the net — one case showed a 0% bar over a tooltip claiming 41%. */
       const sum = tip.rows.reduce((n, r) => n + r.pct, 0);
-      assert(`the parts sum to the whole (${sum} vs ${tip.total})`,
-        Math.abs(sum - tip.total) <= tip.rows.length);
+      assertEqual("the parts sum to the whole, exactly", sum, tip.total);
 
       // The swatch on each module heading is what ties a band to its source.
       const swatches = await page.evaluate(() =>
@@ -945,6 +951,22 @@ async function main() {
       await page.click(".tab-group-x");
       await page.waitForTimeout(400);
       assertEqual("clicking it gives that tab its own fight again", (await boxes()).length, 2);
+
+      /* Across every result on screen, not just the leader — the overflow showed up on
+         low-scoring rows too, where a dropped negative category left the positives
+         claiming more than the bar. */
+      const allAgree = await page.evaluate(() =>
+        [...document.querySelectorAll("#results .result")].map(res => {
+          const t = res.querySelector(".bar-tip");
+          const bar = parseInt(res.querySelector(".bar-num").textContent, 10);
+          const rows = t ? [...t.querySelectorAll(".tip-pct")].map(x => parseInt(x.textContent, 10)) : [];
+          const bands = [...res.querySelectorAll(".bar-seg")].map(x => Math.round(parseFloat(x.style.width)));
+          return { bar, rows: rows.reduce((a, c) => a + c, 0), bands: bands.reduce((a, c) => a + c, 0) };
+        }));
+      assert("every result's breakdown sums to its own bar",
+        allAgree.every(x => x.rows === x.bar));
+      assert("...and so do the coloured bands, so the bar is filled by what explains it",
+        allAgree.every(x => x.bands === x.bar));
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
