@@ -838,6 +838,58 @@ async function main() {
       assertEqual("with the monsters split between them", groups.map(g => g.tabs), [2, 1]);
       assert("each group is labelled", groups.every(g => /Fight \d/.test(g.label || "")));
 
+      /* THAT THE BOX IS DRAWN, not merely that it is in the DOM.
+
+         This is the assertion whose absence let the same defect through three rounds.
+         Every earlier check here counted `.tab-group` elements and the tabs inside them,
+         which the markup satisfied from the first round onward — while the box was
+         painted in `--border-hair` (#eee) around tabs bordered `--btn-border` (#999) on
+         a white page. A container lighter than its own contents is invisible, so the
+         feature kept being reported broken and kept passing its tests.
+
+         So: a real border, and one distinguishable from the ordinary tab chrome inside
+         it. Deliberately not asserting the exact colour or `dashed` — that is styling,
+         and the point is only that a grouping you set is a grouping you can see. */
+      const boxPaint = await page.evaluate(() => {
+        /* CONTRAST, NOT INEQUALITY. Asserting the border colour merely DIFFERS from the
+           background is the trap the old code passed: #eee is not #fff, so a string
+           comparison calls it visible, while a 1px #eee hairline on white is nothing a
+           human sees. Compare luminance instead — that is what "can you see it" means. */
+        const lum = c => {
+          const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
+            v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const ratio = (a, b) => {
+          const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+          return (x + 0.05) / (y + 0.05);
+        };
+        const g = document.querySelector("#doxx-tabs .tab-group");
+        const cs = getComputedStyle(g);
+        const bg = getComputedStyle(document.body).backgroundColor;
+        return { style: cs.borderTopStyle, width: parseFloat(cs.borderTopWidth),
+                 contrast: ratio(cs.borderTopColor, bg) };
+      });
+      assert("the fight box has an actual border",
+        boxPaint.style !== "none" && boxPaint.width >= 1);
+      /* 2:1 is deliberately a low bar — it is not a legibility standard, it is the line
+         between a border and a rumour. The hairline that shipped for three rounds sits
+         at about 1.1; the accent blue this now uses is above 7. */
+      assert("...drawn in something you can actually see against the page",
+        boxPaint.contrast >= 2);
+
+      // The × that deletes a tab has to answer the cursor — the port dropped its :hover.
+      const xHover = await page.evaluate(async () => {
+        const x = document.querySelector(".doxx-tab-x");
+        const before = getComputedStyle(x).opacity;
+        return { before, hasRule: [...document.styleSheets].some(sh => {
+          try { return [...sh.cssRules].some(r => /\.doxx-tab-x:hover/.test(r.selectorText || "")); }
+          catch (e) { return false; }
+        }) };
+      });
+      assert("the close \u00d7 brightens under the cursor", xHover.hasRule);
+
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
     }

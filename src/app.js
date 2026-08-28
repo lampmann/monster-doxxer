@@ -491,7 +491,10 @@
       while (i < S.tabs.length && (S.tabs[i].fight || "f1") === f) run.push(S.tabs[i++]);
       group++;
       const n = fightCount(f);
-      html += `<span class="tab-group">` +
+      /* The title sits on the BOX, the way pmcrwf's does, so the whole boxed run explains
+         itself rather than only the 11px label at its left edge. */
+      html += `<span class="tab-group" title="these monsters were in one fight, which is ` +
+        `what sets the CR band — drag a tab out, or use split, to separate them">` +
         `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
         `which is what sets the CR band">Fight ${group}</span>` +
         run.map(btn).join("") +

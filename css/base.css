@@ -124,14 +124,41 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 #doxx-tabs button { font: inherit; font-size: .85rem; padding: .15rem .5rem; }
 .doxx-tab.active { font-weight: bold; border-bottom-width: 2px; border-bottom-color: var(--link-border); }
 .doxx-tab-x { margin-left: .4rem; opacity: .55; }
+/* The port dropped this. Without it the × sits at 55% forever and never confirms it is a
+   target, so the one control on a tab that DELETES something was the only one giving no
+   feedback. pmcrwf's .char-tab-x:hover, verbatim. */
+.doxx-tab-x:hover { opacity: 1; color: var(--danger); }
 .doxx-tab .hint { margin-left: .3rem; }
 /* One box per fight, so a grouping you set is a grouping you can see. Only drawn when
-   there is more than one — see renderTabs. */
-.tab-group { display: inline-flex; align-items: center; gap: .25rem;
-             border: 1px solid var(--border-hair); border-radius: var(--radius);
-             padding: .2rem .3rem; }
+   there is more than one — see renderTabs.
+
+   DASHED, IN THE ACCENT BLUE, WHICH IS THE WHOLE POINT AND WAS THE BUG.
+
+   This box was drawn in `--border-hair` (#eee) around tabs whose own borders are
+   `--btn-border` (#999), on a white page. A container a shade lighter than its own
+   contents is not a container anyone sees: the run of tabs read as a run of tabs, and
+   the only thing marking a fight was the 11px "Fight 1" beside it.
+
+   Which is why this feature was reported broken three separate times and "fixed" three
+   times. Each round correctly diagnosed that the grouping was invisible, and each round
+   added or widened the markup — the box, then the label, then showing it from the first
+   pair rather than the second fight — while leaving it painted in a colour that cannot
+   be seen. The element was there the whole time. Nothing was drawing it.
+
+   pmcrwf uses `1px dashed var(--link-border)` and that is the reason its groups read at
+   a glance: dashed separates the box from the solid-bordered buttons inside it instead
+   of adding a fourth solid rectangle to the pile, and the accent blue is the one colour
+   on the page that means "this is a relationship, not a frame". Same declaration here.
+
+   `stretch` and the tighter padding are pmcrwf's too: the box hugs the tabs rather than
+   floating around them, and a box that hugs is read as holding its contents. */
+.tab-group { display: inline-flex; align-items: stretch; gap: .25rem;
+             border: 1px dashed var(--link-border); border-radius: var(--radius);
+             padding: .1rem .2rem; }
+/* Centred against tabs that now stretch, so the label sits on their midline. */
 .tab-group-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
-                   color: var(--muted-fg); padding-right: .1rem; }
+                   color: var(--muted-fg); padding-right: .1rem;
+                   display: flex; align-items: center; }
 /* Ported from pmcrwf's character-tab drag states. */
 .doxx-tab.dragging { opacity: .4; }
 .doxx-tab.drop-group { outline: 2px solid var(--link-border); outline-offset: 1px; }

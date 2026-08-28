@@ -1151,6 +1151,50 @@ target already share a fight, and the whole fight only when they do not — whic
 one case the block-move exists to protect, a drag that would otherwise silently split a
 fight in two.
 
+### The box was in the DOM for three rounds and was never once drawn
+
+A fourth report, and the shortest cause yet: the fight box was painted
+`1px solid var(--border-hair)` — `#eee` — around tabs whose own borders are
+`--btn-border`, `#999`, on a white page. A container a shade **lighter than its own
+contents** is not a container anyone sees. The run of tabs read as a run of tabs, and the
+only thing marking a fight was the 11px "Fight 1" caption beside it.
+
+That is the same complaint the three rounds above each set out to fix, and each of them
+diagnosed it correctly — the grouping is invisible, so a grouping you set looks exactly
+like one you did not. Each then changed the *markup*: added the box, added the label,
+then showed the box from the first pair rather than only once a second fight existed. The
+element was present and correct from the first of those rounds. Nothing was drawing it.
+
+pmcrwf paints the same box `1px dashed var(--link-border)`, and that one declaration is
+why its groups read at a glance:
+
+- **Dashed** distinguishes the box from the solid-bordered buttons inside it, instead of
+  contributing a fourth solid rectangle to a pile of them.
+- **The accent blue** is the one colour on the page that already means *a relationship*
+  rather than *a frame* — it is what marks the active tab and the drag feedback.
+
+Copied verbatim, along with `align-items: stretch` and pmcrwf's tighter padding: the box
+now hugs the tabs rather than floating around them, and a box that hugs is read as
+holding its contents.
+
+One straight omission from the original port fixed alongside it: `.doxx-tab-x` had no
+`:hover` rule, so the × that **deletes a tab** sat at 55% opacity permanently and was the
+only control on the strip that never acknowledged the cursor. pmcrwf's
+`.char-tab-x:hover` had it all along.
+
+**Why the suite kept passing.** The existing assertions counted `.tab-group` elements and
+the tabs inside each one — both of which the markup satisfied from round one, while the
+box was invisible. The new assertion measures the border's **contrast against the page**,
+because that is what "can you see it" actually means. The first draft of it compared the
+border colour to the background for *inequality* and passed against the broken CSS, which
+is the bug in miniature: `#eee` is not `#fff`, so a string comparison calls a hairline
+visible. The check is a luminance ratio with the bar at 2:1 — not a legibility standard,
+just the line between a border and a rumour. The shipped hairline sits at about 1.1; the
+accent blue is above 7.
+
+Both new assertions were confirmed to fail against the previous stylesheet before the fix
+was kept. An assertion never seen red is not known to test anything.
+
 ## Where a score came from
 
 The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one
