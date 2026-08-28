@@ -1316,6 +1316,52 @@ What the caption was really carrying is the creature count, which is the part th
 matters because it sets the CR band. That moved onto the box's own tooltip, so hovering
 anywhere in the group says it.
 
+### The way out was six pixels tall
+
+"Tabs sometimes do not leave groups." Measured on a five-tab strip, dragging one straight
+down — the obvious gesture for *get this out* — behaved like this:
+
+| dragged down | marks shown | result |
+|---|---|---|
+| 6px, 12px | none | stayed (still on the box) |
+| 20px | red box + bar | **left** |
+| 30px, 60px | red box, **stale** | stayed |
+
+Leaving meant dropping outside every box, and vertically the only such place was the
+6.6px between the box's bottom edge and the strip's. 20px landed in that sliver. 30px
+landed past `#doxx-tabs`, which then received no `dragover` and no `drop` at all — while
+the marks drawn as the cursor crossed the sliver stayed on screen. So an overshoot showed
+you the red box and then did nothing, which is precisely how a bug comes to look
+intermittent: the feedback and the outcome had come apart.
+
+The report guessed the cause was reordering being preferred over leaving. It was a fair
+inference from the outside, and the measurement above says otherwise: in the failing
+cases no handler ran at all. Both are true at once — the gesture did nothing, *and*
+nothing chose to do nothing.
+
+`dragover` and `drop` now sit on the **document** rather than the strip, so the rest of
+the page is the way out. The rule is one sentence — on the strip you are rearranging or
+regrouping, anywhere else you are leaving — and the target for "leaving" is the size of
+the window instead of six pixels. Both handlers return immediately unless a tab drag is
+in progress, so nothing else on the page changes behaviour.
+
+**Leaving in place had to close the hole behind it.** A tab dropped off the strip keeps
+its position, which is right for one taken from the end of a run and wrong for one taken
+from the middle: its old fight is then split across it, same fight in two runs, drawn as
+two boxes because `renderTabs` boxes each contiguous run. The first version of this fix
+did exactly that and the tests caught it as `[1,2,2]` where `[1,4]` was expected. The
+departing tab's old fight is now re-spliced, which pushes the leaver out to just past the
+group it left — the smallest move that keeps the picture honest. The on-strip path never
+needed it: `moveTab` puts the tab at the drop point, which is outside every box by
+construction, so it always lands on a boundary.
+
+**What was deliberately not changed.** A drag that stays *on* the box and resolves to the
+position the tab already occupies still does nothing. Inverting that — treating a no-op
+reorder as "leave" — would make small in-box adjustments eject unpredictably and would
+remove the only way to abandon a drag by putting the tab back. Releasing over your own
+tab is already an explicit no-op for the same reason. With the whole page now meaning
+"out", the no-op case no longer has to carry that job.
+
 ## Where a score came from
 
 The bar read 24% and nothing else, so two monsters tied at 24% looked identical when one

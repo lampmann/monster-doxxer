@@ -1095,12 +1095,50 @@ async function main() {
         new Set(await fights()).size, 2);
       assertEqual("...taking only itself", (await boxes()).sort(), [1, 4]);
 
+      /* STRAIGHT DOWN, WHICH IS WHAT ANYONE DOES WHEN THEY MEAN "GET THIS OUT".
+
+         Reported as "tabs sometimes do not leave groups". Leaving meant dropping outside
+         every box, and vertically the only such place was the 6.6px between the box's
+         bottom edge and the strip's — so 20px down landed in that sliver and worked,
+         30px down landed past #doxx-tabs where it receives no drop at all, and the marks
+         drawn while the cursor crossed the sliver stayed on screen. An overshoot showed
+         the red box and then did nothing, which is exactly how it reads as intermittent.
+
+         The listeners moved to the document, so the rest of the page is the way out. The
+         numbers below are the ones that were measured failing: a 6px window either side
+         of a boundary you cannot see is not a target, and the assertion is that depth no
+         longer matters at all. */
+      for (const dy of [30, 60, 200]) {
+        await page.evaluate(() => localStorage.clear());
+        await page.reload();
+        await page.waitForFunction(READY, null, { timeout: 90000 });
+        for (let i = 0; i < 4; i++) { await page.click("#tab-add"); await page.waitForTimeout(280); }
+        ids = await order();
+        const mid = await (await page.$(sel(ids[2]))).boundingBox();
+        await dragTo(ids[2], mid.x + mid.width / 2, mid.y + mid.height / 2 + dy);
+        assertEqual(`dragged ${dy}px straight down, it leaves the fight`,
+          new Set(await fights()).size, 2);
+        assertEqual("...taking only itself", (await boxes()).sort(), [1, 4]);
+      }
+
+      /* Still on the box, so still in it. The cursor has not left anything yet, and a
+         short twitch downwards must not eject a tab you were only nudging. */
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await page.waitForFunction(READY, null, { timeout: 90000 });
+      for (let i = 0; i < 4; i++) { await page.click("#tab-add"); await page.waitForTimeout(280); }
+      ids = await order();
+      const nudge = await (await page.$(sel(ids[2]))).boundingBox();
+      await dragTo(ids[2], nudge.x + nudge.width / 2, nudge.y + nudge.height / 2 + 6);
+      assertEqual("a small twitch that stays on the box changes nothing",
+        new Set(await fights()).size, 1);
+
       // The other half of the rule: staying inside the box is still just a reorder.
       ids = await order();
       const inside = await (await page.$(sel(ids[3]))).boundingBox();
       await dragTo(ids[1], inside.x + inside.width * 0.92, inside.y + inside.height / 2);
-      assert("a drag that stays inside the box still splits nobody off",
-        (await boxes()).includes(4));
+      assertEqual("a drag that stays inside the box still splits nobody off",
+        await boxes(), [5]);
 
 
       /* Across every result on screen, not just the leader — the overflow showed up on

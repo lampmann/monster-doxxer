@@ -709,11 +709,45 @@
     /* The mark is drawn from the SAME resolution the drop uses, so what you see is what
        you get — including in the gaps, where the previous version showed nothing and
        then did nothing. */
-    el.addEventListener("dragover", e => {
+    /* Marks the box the drag would take a tab out of. Leaving has no button any more, so
+       the box has to say so before the release, not after. */
+    function markLosing(id) {
+      const dragged = S.tabs.find(t => t.id === id);
+      const from = (dragged && dragged.fight) || "f1";
+      if (!dragged || fightTabCount(from) <= 1) return;
+      const box = el.querySelector(`.tab-group[data-fight="${CSS.escape(from)}"]`);
+      if (box) box.classList.add("losing");
+    }
+
+    /* ON THE DOCUMENT, NOT THE STRIP, AND THAT IS THE FIX.
+
+       Leaving a fight meant dropping outside every box, and vertically the only such
+       place was the 6.6px of the strip's own bottom padding — the gap between the box's
+       bottom edge and the strip's. Drag a tab straight down, which is what anyone does
+       when they mean "get this out", and 20px landed in that sliver while 30px landed
+       past the strip entirely, where #doxx-tabs receives no dragover and no drop at all.
+       Worse, the marks drawn while the cursor crossed the sliver stayed on screen, so an
+       overshoot showed the red box and then did nothing: "sometimes it doesn't leave".
+
+       Listening on the document makes the whole rest of the page the way out. The rule
+       is now one sentence — on the strip you are rearranging or regrouping, anywhere
+       else you are leaving — and the target for "leaving" is the size of the window
+       rather than six pixels. The handlers are inert unless a tab drag is in progress,
+       so nothing else on the page changes behaviour. */
+    const overStrip = e => {
+      const r = el.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX <= r.right
+          && e.clientY >= r.top && e.clientY <= r.bottom;
+    };
+
+    document.addEventListener("dragover", e => {
       if (!TAB_DRAG_ID) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       clearTabDropMarks();
+
+      if (!overStrip(e)) { markLosing(TAB_DRAG_ID); return; }
+
       const hit = dropTargetAt(e, TAB_DRAG_ID);
       if (!hit || hit.id === TAB_DRAG_ID) return;
       const tab = el.querySelector(`.doxx-tab[data-tab="${CSS.escape(hit.id)}"]`);
@@ -721,23 +755,39 @@
       tab.classList.add(hit.intent === "group" ? "drop-group"
         : hit.intent === "before" ? "drop-before" : "drop-after");
 
-      /* Leaving a fight has no button any more, so the box has to say when a drop is
-         about to take a member out of it — otherwise the gesture is invisible until
-         after it has happened. */
-      const dragged = S.tabs.find(t => t.id === TAB_DRAG_ID);
-      const from = (dragged && dragged.fight) || "f1";
-      if (dragged && hit.intent !== "group" && fightTabCount(from) > 1
-          && fightBoxAt(e.clientX, e.clientY) !== from) {
-        const box = el.querySelector(`.tab-group[data-fight="${CSS.escape(from)}"]`);
-        if (box) box.classList.add("losing");
+      if (hit.intent !== "group" && fightBoxAt(e.clientX, e.clientY)
+            !== ((S.tabs.find(t => t.id === TAB_DRAG_ID) || {}).fight || "f1")) {
+        markLosing(TAB_DRAG_ID);
       }
     });
-    el.addEventListener("drop", e => {
+    document.addEventListener("drop", e => {
       if (!TAB_DRAG_ID) return;
       e.preventDefault();
       const moved = TAB_DRAG_ID;
       TAB_DRAG_ID = null;
       clearTabDropMarks();
+
+      /* Dropped off the strip: leave the fight, and stay where you are in the order.
+         There is no sensible position to read out of a point that is nowhere near the
+         bar, and the gesture was never about position — it was about getting out. */
+      if (!overStrip(e)) {
+        const t = S.tabs.find(x => x.id === moved);
+        if (!t) return;
+        const was = t.fight || "f1";
+        if (fightTabCount(was) <= 1) return;
+        splitFromFight(moved);
+        /* AND CLOSE THE HOLE IT LEFT. Staying put is right for a tab that came from the
+           end of a run, but one taken out of the MIDDLE leaves its old fight split across
+           it — same fight, two runs, drawn as two boxes, because renderTabs boxes each
+           contiguous run. Re-splicing the fight it left pushes the leaver out to just
+           past its old group, which is the smallest move that keeps the picture honest.
+           The on-strip path never needed this: moveTab puts the tab at the drop point,
+           which is outside every box by construction, so it lands on a boundary. */
+        keepFightContiguous(was);
+        renderFightPicker(); renderBand();
+        persist(); renderResults(); renderSuggestions();
+        return;
+      }
 
       const hit = dropTargetAt(e, moved);
       if (!hit || hit.id === moved) return;
