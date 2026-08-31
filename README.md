@@ -87,7 +87,12 @@ returns the Helmed Horror, while *Antimagic Susceptibility* on its own returns t
 animated objects.
 
 **Opening a result** shows its stat block and, on a second tab, the book's own description
-of it.
+of it &mdash; with the monster's token beside it, if you have the images
+(`python3 build/fetch_images.py --tokens`).
+
+**How far it got in a turn** is a floor, not a target. Moving less than your speed is what
+happens on nearly every turn, so anything faster fits just as well; only something too slow
+to have crossed the ground is argued against.
 
 **Books.** Click a source once to **include** it, again to **exclude** it, again to clear. Include
 when you know which books your DM owns. Exclude to stop an adventure you're halfway through from
@@ -125,8 +130,9 @@ that is weighed in full.
 
 ## The numbers
 
-**The dice are better evidence than anyone's memory**, so the Numbers box takes them
-directly. Type the attack totals that hit and the ones that missed, and the tool works out
+**The dice are better evidence than anyone's memory**, so the Numbers box takes only them
+&mdash; there is nowhere to type a remembered AC or hit-point total, because the rolls give
+both without anyone having to estimate, and measure better. Type the attack totals that hit and the ones that missed, and the tool works out
 the Armour Class exactly:
 
 > *"16, 8, 13, which hit?"* — *"16 hits, the rest miss."* → **AC is between 14 and 16.**
