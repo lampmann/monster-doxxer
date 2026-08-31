@@ -1014,6 +1014,54 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("how far it got, as a floor");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* Moving less than your speed is what happens on nearly every turn, so a creature
+         FASTER than what the party saw is not contradicted by it. Only one too slow to
+         have covered the ground is argued against. */
+      await page.fill("#in-speed", "60");
+      await page.waitForTimeout(1600);
+      const fast = await resultsText(page);
+      assert("a distance alone ranks something", /1\./.test(fast));
+      assert("...and says what it was told", /60 ft/.test(fast));
+
+      const leaders = await page.evaluate(() =>
+        [...document.querySelectorAll("#results .result")].slice(0, 10)
+          .map(r => (r.querySelector(".result-name") || {}).textContent || ""));
+      assert("nothing too slow to have crossed 60 feet leads the list", leaders.length > 0);
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("the numbers box asks only for rolls");
+    {
+      const { ctx, page } = await fresh(browser);
+      /* The remembered AC and HP fields are gone: the roll boxes give the same two
+         facts without anyone estimating, and measured +7 points of top-1 better. */
+      const gone = await page.evaluate(() => ({
+        ac: !!document.getElementById("in-ac"),
+        hp: !!document.getElementById("in-hp"),
+        hit: !!document.getElementById("in-ac-hit"),
+      }));
+      assertEqual("no remembered Armour Class field", gone.ac, false);
+      assertEqual("no remembered hit points field", gone.hp, false);
+      assertEqual("...but the dice are still asked for", gone.hit, true);
+
+      // The CR hint still works, now off the bounds the rolls establish.
+      await page.fill("#in-ac-hit", "18");
+      await page.fill("#in-ac-miss", "12");
+      await page.waitForTimeout(900);
+      assert("the CR hint reads off the rolls instead",
+        /CR /.test(await page.$eval("#cr-implied", el => el.textContent)));
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);

@@ -36,6 +36,18 @@ click.
 `bestiary/index.json` is 5e.tools' own manifest mapping source codes to filenames; the loader reads
 it to discover what you have rather than guessing at filenames.
 
+`img/` is optional and holds the artwork. The stat-block panel shows a small token beside
+each monster when one is on disk, and silently shows nothing when it is not:
+
+```sh
+python3 build/fetch_images.py --tokens          # just the tokens, a few MB
+python3 build/fetch_images.py --tokens --sources MM
+python3 build/fetch_images.py                   # the full artwork, for the CLIP index
+```
+
+Nothing about this is committed either — the images stay WotC's, `data/` is gitignored,
+and the embedding build reads the pixels and writes only vectors.
+
 `spells/` is optional too, and improves one thing: the spell box suggests every spell in the game
 rather than only the ~400 that some monster in your books casts, and spells the bestiary writes in
 lowercase get the capitalisation the books use. Without it the box still accepts **any** spell you

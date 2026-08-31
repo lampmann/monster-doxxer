@@ -35,7 +35,7 @@ const NAMES = require("../src/names.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0, combat: 0, spells: 0, reprep: 0, kin: false, kinHeard: 0 };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0, combat: 0, spells: 0, reprep: 0, kin: false, kinHeard: 0, speed: 0, speedFull: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -54,6 +54,8 @@ function parseArgs(argv) {
     else if (a === "--heard") out.heard = Number(next());
     else if (a === "--misheard") out.misheard = Number(next());
     else if (a === "--boss-drift") out.bossDrift = Number(next());
+    else if (a === "--speed") out.speed = Number(next());
+    else if (a === "--speed-full") out.speedFull = true;
     else if (a === "--kin") out.kin = true;
     else if (a === "--kin-heard") out.kinHeard = Number(next());
     else if (a === "--combat") out.combat = Number(next());
@@ -82,6 +84,7 @@ const HELP = `eval/run.js — corrupt real statblocks, measure top-5 recall
   --heard <0..1>    rate at which the party caught a name the DM said
   --misheard <0..1> ...of which this share are the WRONG name entirely
   --boss-drift <0..1> rate at which the DM promoted an ordinary monster to a boss
+  --speed <0..1>      rate at which the party says how far it got in a turn
   --kin               spread a heard name to monsters that READ like it
   --kin-heard <0..1>  rate at which the DM named a RELATIVE, not the creature
   --combat <0..1>     rate at which the party describes one action it watched
@@ -191,6 +194,7 @@ function opts(args, extra) {
                bossDriftRate: args.bossDrift, rollRate: args.rolls,
                combatRate: args.combat, spellRate: args.spells, reprepRate: args.reprep,
                kinMishearRate: args.kinHeard, kinNames: args.kinNames,
+               speedRate: args.speed, speedFull: args.speedFull,
                isColour: w => APP.COLOURS.has(APP.stem(w)),
                isMorphology: w => APP.MORPHOLOGY.has(APP.stem(w)),
                isVisual: APP.isVisual },
@@ -218,17 +222,23 @@ function sweep(monsters, rarity, args, key) {
     nameWeight: [3, 6, 9, 12, 20, 40],
     appearanceCap: [0, 0.1, 0.25, 0.4, 0.6],
     volatileMissFactor: [0, 0.1, 0.25, 0.5, 0.75, 1.0],
+    speedWeight: [0, 1, 2, 3, 4, 6],
+    speedSigma: [5, 10, 15, 25],
   };
   const grid = GRIDS[key];
   if (!grid) {
     console.log(`no grid for "${key}". Sweepable: ${Object.keys(GRIDS).join(", ")}`);
     process.exit(1);
   }
-  const original = S.TUNING[key];
+  /* The constants live in two tables — TUNING for the evidence weights, NUMERIC for the
+     numbers — and writing to the wrong one is a sweep that silently measures nothing and
+     prints a flat table you would believe. Pick by where the key actually is. */
+  const table = Object.prototype.hasOwnProperty.call(S.NUMERIC, key) ? S.NUMERIC : S.TUNING;
+  const original = table[key];
   console.log(`\nsweeping ${key} (current ${original}), n=${args.n} seed=${args.seed}\n`);
   const rows = [];
   grid.forEach(v => {
-    S.TUNING[key] = v;
+    table[key] = v;
     // maxWeight feeds the rarity table, which is built once — rebuild it or the sweep
     // measures nothing at all.
     const rr = key === "maxWeight" ? S.buildRarity(monsters) : rarity;
@@ -236,7 +246,7 @@ function sweep(monsters, rarity, args, key) {
     rows.push({ v, res });
     console.log(`  ${key} = ${String(v).padEnd(6)}  ${line(res)}`);
   });
-  S.TUNING[key] = original;
+  table[key] = original;
   const best = rows.slice().sort((a, b) => b.res.top5 - a.res.top5 || b.res.mrr - a.res.mrr)[0];
   console.log(`\n  best top-5 at ${key} = ${best.v} (${best.res.top5.toFixed(1)}%), currently ${original}`);
   const cur = rows.find(x => x.v === original);

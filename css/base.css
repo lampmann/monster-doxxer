@@ -283,6 +283,12 @@ th, td { text-align: left; padding: 1px 4px; }
 .why ul { margin: .1rem 0; padding-left: 1.1rem; }
 
 /* ----- the detail panel's two tabs ----- */
+/* The token floats beside the stat block's opening lines rather than sitting above
+   them, so a monster with no image on disk loses nothing but the picture. */
+.sb-token { float: right; width: 84px; height: 84px; object-fit: contain;
+            margin: 0 0 .3rem .5rem; border: 1px solid var(--border-hair);
+            border-radius: var(--radius); background: var(--bg); }
+
 .dtabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border-hair);
          margin-bottom: .4rem; }
 .dtab { border: 1px solid transparent; border-bottom: 0; background: none; color: var(--muted-fg);
@@ -297,6 +303,18 @@ th, td { text-align: left; padding: 1px 4px; }
 /* The six ability scores, on one line, wrapping on a narrow column. */
 .sb-abils { display: flex; flex-wrap: wrap; gap: .1rem .8rem; margin: .25rem 0; font-size: .85rem; }
 .sb-abils i { color: var(--muted-fg); font-style: normal; }
+
+/* ----- the Info tab's richer shapes ----- */
+.info-item { margin: .2rem 0; }
+.info-tablewrap { overflow-x: auto; margin: .3rem 0 .5rem; }
+.info-table { border-collapse: collapse; font-size: .82rem; width: 100%; }
+.info-table th, .info-table td { border: 1px solid var(--border-hair); padding: .1rem .35rem;
+                                 text-align: left; vertical-align: top; }
+.info-table th { font-weight: bold; color: var(--muted-fg); font-size: .75rem; }
+.dbody blockquote { margin: .4rem 0 .4rem .6rem; padding-left: .5rem;
+                    border-left: 2px solid var(--border-hair); color: var(--muted-fg); font-style: italic; }
+.dbody blockquote footer { font-style: normal; font-size: .78rem; }
+.info-inset { border-left: 2px solid var(--link-border); padding-left: .5rem; margin: .35rem 0; }
 
 /* ----- F13 suggestions ----- */
 .sugg { border-top: 1px solid var(--border-hair); padding: .3rem 0; }

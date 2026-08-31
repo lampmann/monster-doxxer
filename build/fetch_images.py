@@ -2,6 +2,7 @@
 """Fetch just the monster artwork, one file at a time, resumably.
 
     python3 build/fetch_images.py                 # everything the fluff references
+    python3 build/fetch_images.py --tokens        # just the stat-block tokens, far smaller
     python3 build/fetch_images.py --sources MM    # one book, for a quick trial
     python3 build/fetch_images.py --limit 50      # a handful, to prove it works
 
@@ -53,6 +54,35 @@ def wanted(sources=None):
                 if len(parts) < 2 or parts[1].upper() not in sources:
                     continue
             paths.add(path)
+    return sorted(paths)
+
+
+def wanted_tokens(sources=None):
+    """Every token path the BESTIARY (not the fluff) says exists.
+
+    Tokens are a different manifest from the artwork: a monster carries `hasToken`, and
+    the file sits at bestiary/tokens/<SOURCE>/<Name>.webp. They are small — a fraction of
+    the artwork — and they are what the stat block panel shows, so they are worth
+    fetching on their own without pulling several gigabytes of full-size images.
+    """
+    import json
+    import glob
+    paths = set()
+    for path in sorted(glob.glob(os.path.join(DATA, "bestiary", "bestiary-*.json"))):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                blob = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        for mon in (blob.get("monster") or []):
+            if not isinstance(mon, dict) or not mon.get("hasToken"):
+                continue
+            src, name = mon.get("source"), mon.get("name")
+            if not src or not name:
+                continue
+            if sources and src.upper() not in sources:
+                continue
+            paths.add("bestiary/tokens/%s/%s.webp" % (src, name))
     return sorted(paths)
 
 
@@ -142,6 +172,8 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", default=DEFAULT_BASE, help="mirror to fetch from")
     ap.add_argument("--sources", help="comma-separated source codes, e.g. MM,VGM")
+    ap.add_argument("--tokens", action="store_true",
+                    help="fetch the small stat-block tokens instead of the full artwork")
     ap.add_argument("--limit", type=int, help="stop after this many files")
     ap.add_argument("--timeout", type=int, default=45)
     ap.add_argument("--passes", type=int, default=3,
@@ -151,7 +183,7 @@ def main():
     args = ap.parse_args()
 
     sources = {s.strip().upper() for s in args.sources.split(",")} if args.sources else None
-    paths = wanted(sources)
+    paths = wanted_tokens(sources) if args.tokens else wanted(sources)
     if args.limit:
         paths = paths[:args.limit]
     if not paths:

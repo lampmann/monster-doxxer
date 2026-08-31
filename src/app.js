@@ -73,14 +73,14 @@
     /* What it did with its turn. One row per action rather than three bags of chips,
        because the fields have to be true OF THE SAME ACTION to mean anything — see
        scoreCombat. Rows are created empty and an empty row is not an observation. */
-    attacks: [], saves: [],
+    attacks: [], saves: [], speed: null,
     /* What it cast, and how. Spell names are held loosely — see VOLATILE_FACETS in
        score.js — while the shape of the spellcasting is weighed in full. */
     spells: [], castingKind: [], castingAbility: "", castingClass: [],
     // The bounds the party's dice established.
     acHit: "", acMiss: "", dcPass: "", dcFail: "", hpLived: "", hpDied: "" });
   const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    label: "", best: "", obs: blankObs(), ac: null, hp: null, retuned: false,
+    label: "", best: "", obs: blankObs(), retuned: false,
     // Which fight this creature was in, and how many of it there were. Both feed the
     // party-plausibility band: one ogre and one of eight ogres are very different CRs.
     fight: "f1", count: 1 });
@@ -94,7 +94,7 @@
     srcVisible: null,         // group -> the codes currently shown, for the bulk buttons
     // The active tab's fields, mirrored here so the rest of the app reads them unchanged.
     obs: blankObs(),
-    ac: null, hp: null, retuned: false,
+    retuned: false,
     tabs: [], activeId: "",
     sources: {},              // { CODE: "ignore" | "include" | "exclude" } — shared
     party: { level: null, size: 4 },   // a fact about the table, so shared across tabs
@@ -318,7 +318,7 @@
   function syncActive() {
     const t = S.tabs.find(x => x.id === S.activeId);
     if (!t) return;
-    t.obs = S.obs; t.ac = S.ac; t.hp = S.hp; t.retuned = S.retuned;
+    t.obs = S.obs; t.retuned = S.retuned;
   }
 
   function persist() {
@@ -362,17 +362,14 @@
     if (!t) return;
     S.activeId = t.id;
     S.obs = Object.assign(blankObs(), t.obs);
-    S.ac = t.ac == null ? null : t.ac;
-    S.hp = t.hp == null ? null : t.hp;
     S.retuned = !!t.retuned;
     S.sizeFromProse = "";
     S.selected = null;
-    $("in-ac").value = S.ac == null ? "" : S.ac;
-    $("in-hp").value = S.hp == null ? "" : S.hp;
     $("in-retuned").checked = S.retuned;
     $("in-appearance").value = S.obs.appearance || "";
     $("in-name").value = S.obs.heardName || "";
     { const el = $("in-spell"); if (el) el.value = ""; }
+    { const el = $("in-speed"); if (el) el.value = S.obs.speed == null ? "" : S.obs.speed; }
     $("sym-search").value = "";
     $("in-count").value = t.count || 1;
     // The roll boxes belong to the monster, so they follow a tab switch like everything
@@ -694,7 +691,7 @@
   // book filter are separate work and losing them to a mis-click would be its own bug.
   function clearSession() {
     const t = S.tabs.find(x => x.id === S.activeId);
-    if (t) { t.obs = blankObs(); t.ac = t.hp = null; t.retuned = false; t.label = ""; }
+    if (t) { t.obs = blankObs(); t.retuned = false; t.label = ""; }
     loadActive();
     persist(); renderAll();
   }
@@ -1264,8 +1261,10 @@
     if (S.obs.size) obs.size = S.obs.size;
     if (S.obs.appearance) obs.appearance = S.obs.appearance;
     if (S.obs.heardName) obs.heardName = S.obs.heardName;
-    if (typeof S.ac === "number") obs.ac = S.ac;
-    if (typeof S.hp === "number") obs.hp = S.hp;
+    /* AC and HP as remembered NUMBERS are no longer asked for — the roll boxes below
+       give the same two facts without anyone having to estimate, and measured better
+       (+7 top-1). The scorer still understands obs.ac and obs.hp: the evaluation
+       harness supplies them, and they are the path the ranges were measured against. */
 
     /* Combat rows. Empty rows are dropped rather than passed through: a row the user
        opened and did not fill in is not an observation, and scoring it as one would
@@ -1294,6 +1293,9 @@
       const total = counts.reduce((a, b) => a + b, 0);
       if (total > 1 && total <= 10) obs.attacksPerTurn = String(total);
     }
+
+    // How far it got in a turn — a floor, never a target. See scoreNumerics.
+    if (typeof S.obs.speed === "number" && S.obs.speed > 0) obs.speed = S.obs.speed;
 
     // What it cast. Spell names go in loosely priced; the shape of the casting does not.
     if (S.obs.spells.length) obs.spells = S.obs.spells.slice();
@@ -1327,26 +1329,33 @@
     show("hp-range-read", window.fromFields(S.obs.hpDied, S.obs.hpLived), "Its hit points");
   }
 
+  /* "Those numbers fight like a CR N creature."
+
+     It used to read the two remembered numbers, which no longer exist — the roll boxes
+     replaced them, and measured better. So it reads the bounds those rolls establish
+     instead: the tightest upper bound on AC is the best point estimate of it, and the
+     middle of a bracketed HP range is the best estimate of that. Same hint, from
+     evidence nobody had to remember. */
   function renderCrHint() {
     const el = $("cr-implied");
-    const implied = S.numerics && (typeof S.hp === "number" || typeof S.ac === "number")
-      ? S.numerics.inferCr({ ac: S.ac == null ? undefined : S.ac, hp: S.hp == null ? undefined : S.hp })
+    if (!el) return;
+    const point = range => {
+      if (!range || range.contradiction) return undefined;
+      if (range.hi != null && range.lo != null) return Math.round((range.lo + 1 + range.hi) / 2);
+      if (range.hi != null) return range.hi;
+      if (range.lo != null) return range.lo + 1;
+      return undefined;
+    };
+    const ac = point(window.fromFields(S.obs.acHit, S.obs.acMiss));
+    const hp = point(window.fromFields(S.obs.hpDied, S.obs.hpLived));
+    const implied = S.numerics && (ac != null || hp != null)
+      ? S.numerics.inferCr({ ac, hp })
       : null;
     el.textContent = implied
-      ? `Those numbers fight like a CR ${implied.cr < 1 ? implied.cr.toFixed(2) : implied.cr.toFixed(1)} creature.`
+      ? `Those rolls fight like a CR ${implied.cr < 1 ? implied.cr.toFixed(2) : implied.cr.toFixed(1)} creature.`
       : "";
   }
 
-  /* WHAT ARGUED FOR AND AGAINST, AS TIGHT AS IT GOES.
-
-     This was "for: ..." and "against: ...", semicolon-separated, with every entry on the
-     against side carrying "— the statblock doesn't have this". Which is what against
-     MEANS: repeating it once per item spent most of the line restating the heading.
-
-     A + and a - carry the same information in one character, and the colour already
-     says it twice over. The `why` is kept only where it says something the sign does
-     not — a volatile miss, a contradicted damage type, the nearest action a combat row
-     could find. */
   function evidenceList(items, cls) {
     if (!items.length) return "";
     const sign = cls === "for" ? "+" : "\u2212";
@@ -1598,7 +1607,19 @@
       ((m.spells || []).length ? `<div class="hint">${esc(m.spells.map(spellTitle).join(", "))}</div>` : "") +
       `</div>`).join("");
 
-    return `<div class="sb-line hint">${esc(m.size.join("/"))} ${esc(m.type)}` +
+    /* THE TOKEN, IF THERE IS ONE ON DISK.
+
+       Never in this repo: the artwork is WotC's, so data/ is where it lives and most
+       sessions will not have it. So this is written to fail invisibly — the element
+       removes itself on error rather than leaving a broken-image icon in the corner of
+       every stat block, which would be worse than showing nothing at all. */
+    const token = m.hasToken
+      ? `<img class="sb-token" alt="" loading="lazy" ` +
+        `src="data/img/bestiary/tokens/${encodeURIComponent(m.source)}/${encodeURIComponent(m.name)}.webp" ` +
+        `onerror="this.remove()">`
+      : "";
+
+    return token + `<div class="sb-line hint">${esc(m.size.join("/"))} ${esc(m.type)}` +
       `${m.typeTags.length ? " (" + esc(m.typeTags.join(", ")) + ")" : ""}, ${esc(m.alignment)} ` +
       `&mdash; ${esc(m.source)}${m.page ? " p." + m.page : ""}</div>` +
       line("AC", m.acText || m.ac) +
@@ -1619,8 +1640,24 @@
       group("Reactions", m.reactions) + group("Legendary actions", m.legendary);
   }
 
-  /* The book's own Info text, whole. The search index takes four paragraphs of this;
-     a reader who has opened the panel wants all of it. */
+  /* The book's own Info text, whole. The search index takes four paragraphs of this; a
+     reader who has opened the panel wants all of it.
+
+     FIVE NODE SHAPES, NOT ONE. The first version walked `entries` and `items` and
+     nothing else, which quietly lost a great deal:
+
+       - `{ type: "item", name: "Habitat:", entry: "..." }` carries its content under
+         `entry`, singular. 514 of them. The name rendered as a heading and the text
+         under it vanished, which is the empty "HABITAT:" and "TREASURE:" a playtester
+         saw on the Guardian Naga — a 2024 Monster Manual shape the older books do not
+         use, so it was invisible until those books were loaded.
+       - Tables were dropped whole. 298 of them, 183 with captions — and the prose
+         around them says things like "Roll on the Guardian Naga Lore table", which is
+         nonsense with no table under it.
+       - Quotes and read-aloud insets came through as undifferentiated paragraphs.
+
+     Everything is rendered by shape now, and anything unrecognised still recurses, so a
+     node type nobody has seen yet loses its wrapper rather than its content. */
   function infoHtml(m) {
     const f = S.fluff && S.fluff[String(m.name).toLowerCase() + "|" + String(m.source || "").toLowerCase()];
     if (!f || !f.entries) {
@@ -1628,17 +1665,70 @@
              `none &mdash; it is the part of the books that is prose rather than rules, and ` +
              `plenty of statblocks never got any.</span>`;
     }
+    const tx = t => esc(window.stripTags ? window.stripTags(String(t)) : String(t));
+
+    /* A table cell can be a bare string or another node; flatten it to text rather than
+       nesting block markup inside a <td>. */
+    const cell = c => {
+      if (c == null) return "";
+      if (typeof c === "string" || typeof c === "number") return tx(c);
+      if (c.roll) {
+        return c.roll.exact != null ? tx(c.roll.exact)
+          : `${tx(c.roll.min)}\u2013${tx(c.roll.max)}`;
+      }
+      return tx(JSON.stringify(c.entry || c.entries || ""));
+    };
+
     const out = [];
     const walk = node => {
-      if (typeof node === "string") {
+      if (node == null) return;
+      if (typeof node === "string" || typeof node === "number") {
         const t = String(node).trim();
-        if (t) out.push(`<p>${esc(window.stripTags ? window.stripTags(t) : t)}</p>`);
+        if (t) out.push(`<p>${tx(t)}</p>`);
         return;
       }
       if (Array.isArray(node)) { node.forEach(walk); return; }
-      if (!node || typeof node !== "object") return;
-      if (node.name) out.push(`<div class="sb-group">${esc(node.name)}</div>`);
-      walk(node.entries || node.items || []);
+      if (typeof node !== "object") return;
+
+      switch (node.type) {
+        case "table": {
+          if (node.caption) out.push(`<div class="sb-group">${tx(node.caption)}</div>`);
+          const head = (node.colLabels || []).length
+            ? `<thead><tr>${node.colLabels.map(h => `<th>${tx(h)}</th>`).join("")}</tr></thead>` : "";
+          const body = (node.rows || [])
+            .map(row => `<tr>${(Array.isArray(row) ? row : [row]).map(c => `<td>${cell(c)}</td>`).join("")}</tr>`)
+            .join("");
+          out.push(`<div class="info-tablewrap"><table class="info-table">${head}<tbody>${body}</tbody></table></div>`);
+          return;
+        }
+        case "item": {
+          // name + `entry`, singular — the shape that was losing its text entirely.
+          const label = node.name ? `<b>${tx(node.name)}</b> ` : "";
+          const body = node.entry != null ? tx(node.entry) : "";
+          if (label || body) out.push(`<p class="info-item">${label}${body}</p>`);
+          walk(node.entries || node.items);
+          return;
+        }
+        case "quote": {
+          const by = node.by ? `<footer>&mdash; ${tx(node.by)}</footer>` : "";
+          out.push(`<blockquote>${(node.entries || []).map(e => `<p>${tx(e)}</p>`).join("")}${by}</blockquote>`);
+          return;
+        }
+        case "inset":
+        case "insetReadaloud": {
+          if (node.name) out.push(`<div class="sb-group">${tx(node.name)}</div>`);
+          out.push(`<div class="info-inset">`);
+          walk(node.entries || node.items);
+          out.push(`</div>`);
+          return;
+        }
+        case "image": return;      // the artwork is shown in the stat block, not here
+        default: {
+          if (node.name) out.push(`<div class="sb-group">${tx(node.name)}</div>`);
+          if (node.entry != null) walk(node.entry);
+          walk(node.entries || node.items);
+        }
+      }
     };
     walk(f.entries);
     return out.join("") || `<span class="hint">No description text for this one.</span>`;
@@ -2046,7 +2136,9 @@
     if (e.target.dataset && e.target.dataset.row) { editRow(e.target); return; }
     if (ROLL_FIELDS[e.target.id]) {
       S.obs[ROLL_FIELDS[e.target.id]] = e.target.value;
-      persist(); renderRanges(); renderResults(); renderSuggestions();
+      // The CR hint reads off these bounds now that the remembered numbers are gone, so
+      // it has to follow them — it used to hang off the two fields that were deleted.
+      persist(); renderRanges(); renderCrHint(); renderResults(); renderSuggestions();
       return;
     }
     if (e.target.id === "in-name") {
@@ -2077,11 +2169,10 @@
       persist(); renderResults(); renderSuggestions();
       return;
     }
-    if (e.target.id === "in-ac" || e.target.id === "in-hp") {
+    if (e.target.id === "in-speed") {
       const v = e.target.value === "" ? null : Number(e.target.value);
-      const ok = v == null || (Number.isFinite(v) && v > 0);
-      if (e.target.id === "in-ac") S.ac = ok ? v : null; else S.hp = ok ? v : null;
-      persist(); renderCrHint(); renderResults(); renderSuggestions();
+      S.obs.speed = Number.isFinite(v) && v > 0 ? v : null;
+      persist(); renderResults(); renderSuggestions();
     }
   });
 

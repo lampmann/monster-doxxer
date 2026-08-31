@@ -110,7 +110,16 @@
       .replace(/{@hit ([^}|]+)(?:\|[^}]*)?}/gi, (m, n) =>
         (/^-/.test(n.trim()) ? n.trim() : "+" + n.trim()))
       .replace(/{@dc ([^}|]+)(?:\|[^}]*)?}/gi, (m, n) => "DC " + n.trim())
-      .replace(/{@\w+ ([^}]+)}/g, (m, p) => { const a = p.split("|"); return (a.length > 2 && a[a.length - 1]) ? a[a.length - 1] : a[0]; })
+      /* Most tags put an optional display override LAST — {@spell fireball|phb|Fireball}.
+         Two do not: {@filter Desert|bestiary|environment=desert} and
+         {@book Chapter 3|XPHB|3} lead with the words and follow with targeting, so the
+         general rule rendered them as "environment=desert" and "3". 458 filter tags in
+         the fluff alone. */
+      .replace(/{@(\w+) ([^}]+)}/g, (m, tag, p) => {
+        const a = p.split("|");
+        if (/^(?:filter|book|adventure|deity|footnote)$/i.test(tag)) return a[0];
+        return (a.length > 2 && a[a.length - 1]) ? a[a.length - 1] : a[0];
+      })
       .replace(/{@\w+}/g, "");
   }
 
@@ -498,6 +507,10 @@
       traitTags: raw.traitTags || [], actionTags: raw.actionTags || [],
       damageTags: asArray(raw.damageTags).map(t => DMG_TAG[t] || String(t).toLowerCase()),
       srd: !!raw.srd || !!raw.basicRules,
+      /* Whether 5e.tools ships a token for this one. The image itself is never in this
+         repo — see data/README.md — so this is only ever "there may be a file to look
+         for", and the UI hides the element when there is not. */
+      hasToken: !!raw.hasToken,
       partial: !!raw._partialCopy, copiedFrom: raw._copiedFrom || "",
       hasAttacks: actions.some(a => a.isAttack),
 

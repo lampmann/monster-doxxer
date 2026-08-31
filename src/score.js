@@ -311,6 +311,32 @@
        for the same reason — it is a number the DM can retune, and F6 scales it too. */
     dcWeight: 3.2,
     dcSigma: 2.5,        // DC points, same shape as AC: both are d20 targets
+    /* HOW FAR IT MOVED, which is the one number here that is one-sided. See
+       scoreNumerics: a creature faster than what the party saw is not contradicted by
+       it, because moving less than your speed is what everybody does every turn. Only a
+       creature too SLOW to have covered the ground is argued against. Lower weight than
+       AC or HP because speeds are coarse — fourteen distinct walk speeds across the
+       whole corpus and half of everything is 30 — so it rarely separates much. */
+    /* MEASURED, and the measurement depends on a modelling choice worth stating.
+
+       Generated as a distance uniform over EVERY 5-ft step up to the creature's speed,
+       speed is worth nothing at all — the sweep is flat, because most such numbers are
+       too small to rule anything out and half the corpus moves 30 anyway. Generated as
+       the top half of its speed, on the reasoning that a party volunteers a distance
+       when the distance was worth mentioning, it is worth about a point:
+
+           speedWeight   top-1   top-5   top-20
+           0             40.7%   66.0%   84.0%
+           3             41.7%   67.0%   84.7%
+           6             41.7%   67.7%   84.7%
+
+       The harness prefers 6 and this takes 3, for the same reason acWeight takes 3.2
+       rather than the 6 its own sweep wanted: the harness reads speed straight off the
+       statblock with no GM in the way, and a real table has Dash, difficult terrain and
+       a GM who narrates a chase without measuring it. 3 sits on the flat of the curve
+       and in the same range as the other numerics. */
+    speedWeight: 3.0,
+    speedSigma: 10,      // feet of shortfall; 5 is a step, 30 is a different creature
     retunedFactor: 0.05, // F6: the "assume this was rebuilt" toggle
     minPerCr: 8,         // below this a CR bucket is too thin to trust alone
     /* "raw" | "residual" | "joint" | "off". raw is the default and F5 is off; the
@@ -482,7 +508,9 @@
        true, and acting on either half would be inventing evidence. */
     const live = r => (r && !r.contradiction && (r.lo != null || r.hi != null)) ? r : null;
     const acRange = live(obs.acRange), hpRange = live(obs.hpRange), dcRange = live(obs.dcRange);
-    if (!hasAc && !hasHp && !acRange && !hpRange && !dcRange) return out;
+    const speed = Number(obs.speed);
+    const hasSpeed = Number.isFinite(speed) && speed > 0;
+    if (!hasAc && !hasHp && !acRange && !hpRange && !dcRange && !hasSpeed) return out;
 
     // F6 — the user says the DM rebuilds statblocks, so the numbers barely count.
     const scale = o.retuned ? NUMERIC.retunedFactor : 1;
@@ -606,6 +634,32 @@
                         weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
       }
     }
+    /* HOW FAR IT MOVED — A SOFT MINIMUM, not a target.
+
+       "It crossed forty feet in one turn" says the creature's speed is AT LEAST forty.
+       It says nothing about the upper end, because moving less than your full speed is
+       what happens on almost every turn of the game — so a creature with speed 80 is
+       perfectly consistent with having moved 40, and must not be penalised for it. Only
+       being too SLOW to have covered the ground is evidence against, and even that is
+       soft: a Dash doubles it, difficult terrain halves it, and a GM narrating a chase
+       is not measuring.
+
+       Matched against the monster's FASTEST speed of any kind, since the party is
+       reporting a distance and not a mode — which way it moved is what the movement
+       chips are for. */
+    if (hasSpeed) {
+      const speeds = Object.keys(m.speeds || {}).map(k => m.speeds[k])
+        .filter(n => typeof n === "number" && n > 0);
+      const best = speeds.length ? Math.max.apply(null, speeds) : 0;
+      const w = NUMERIC.speedWeight * (opts && opts.retuned ? NUMERIC.retunedFactor : 1);
+      out.supplied += w;
+      const shortfall = Math.max(0, speed - best);
+      const fit = shortfall === 0 ? 1 : gaussian(shortfall, NUMERIC.speedSigma);
+      out.credit += w * fit;
+      out.hits.push({ facet: "speed", value: `moved ${speed} ft.`,
+                      weight: +(w * fit).toFixed(3), fit: +fit.toFixed(2) });
+    }
+
     return out;
   }
 
@@ -1375,6 +1429,7 @@
        someone who types only that must not be told they have said nothing. */
     if (["acRange", "hpRange", "dcRange"].some(k => obs[k] &&
         (obs[k].lo != null || obs[k].hi != null))) return true;
+    if (Number.isFinite(Number(obs.speed)) && Number(obs.speed) > 0) return true;
     if ([].concat(obs.attacks || [], obs.saves || [])
         .some(r => r && Object.keys(r).some(k => r[k] !== "" && r[k] != null))) return true;
     // Appearance alone is thin evidence, but it is evidence — and it is what someone

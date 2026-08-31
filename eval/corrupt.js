@@ -85,6 +85,8 @@ const DEFAULTS = {
   garbleRate: 0.4,        // ...and wrote down wrong, having heard it rather than read it
   mishearRate: 0.1,       // ...or got completely wrong. See below.
   kinMishearRate: 0,      // ...or named a RELATIVE of it: "a ghost" for a Specter.
+  speedRate: 0,           // probability the party says how far it got in a turn
+  speedFull: false,       // ...and reports its FULL speed, the best case
   bossDriftRate: 0,       // probability the DM added legendary/lair to a monster without it
   rollRate: 0,            // probability the party reports DICE instead of remembered numbers
   combatRate: 0,          // probability the party describes one action it watched — see below
@@ -314,6 +316,34 @@ function corrupt(m, r, opts) {
         obs[e.isAttack ? "attacks" : "saves"] = [row];
         notes.push(`${e.isAttack ? "attack" : "save"}: ${e.name || "an action"}`);
       }
+    }
+  }
+
+  /* HOW FAR IT GOT IN A TURN, which is a FLOOR and has to be generated like one.
+
+     A party reports the ground they watched it cover, and almost nobody moves their full
+     speed every turn — they close to melee, they round a corner, the GM says "it reaches
+     you". So the observation is the monster's real top speed reduced by some amount, in
+     the 5-foot steps the game is written in, and only sometimes the whole thing.
+     Generating it as "exactly its speed" would flatter the feature badly: the scorer's
+     whole claim is that a creature FASTER than what you saw is not contradicted by it,
+     and that claim is only tested when the reported figure is short. */
+  if (o.speedRate > 0 && r() < o.speedRate) {
+    const speeds = Object.keys(m.speeds || {}).map(k => m.speeds[k])
+      .filter(n => typeof n === "number" && n > 0);
+    if (speeds.length) {
+      const top = Math.max.apply(null, speeds);
+      const steps = Math.floor(top / 5);
+      /* Uniform over the TOP HALF of its speed. A party volunteers a distance when the
+         distance was worth mentioning — "it crossed the whole room" — not when the thing
+         shuffled five feet, and it is the long move that carries information anyway.
+         Uniform over every step models an average turn and mostly generates numbers too
+         small to rule anything out, which understates the feature rather than testing
+         it. `speedFull` reports its whole speed every time, for the ceiling. */
+      const lo = o.speedFull ? steps : Math.max(1, Math.ceil(steps / 2));
+      const seen = 5 * (lo + Math.floor(r() * (steps - lo + 1)));
+      obs.speed = Math.min(top, seen);
+      notes.push(`speed: covered ${obs.speed} of ${top} ft.`);
     }
   }
 
