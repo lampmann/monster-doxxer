@@ -384,6 +384,99 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("the trait catalogue: a second way into the same module");
+    {
+      const { ctx, page } = await fresh(browser);
+
+      /* Default is still the sentences. The trait list is the specialist path — most
+         parties never hear a trait's name — and making it the landing state would put
+         jargon in front of the people the ontology exists for. */
+      const start = await page.evaluate(() => ({
+        mode: document.querySelector(".mode-btn.on").dataset.symmode,
+        traitRows: document.querySelectorAll(".trait-row").length,
+        symRows: document.querySelectorAll("#sym-results .sym-hit").length,
+      }));
+      assertEqual("the sentences are what you land on", start.mode, "words");
+      assertEqual("...and no trait rows are showing", start.traitRows, 0);
+      assert("...and the sentence list is", start.symRows > 90);
+
+      await page.click('[data-symmode="traits"]');
+      await page.waitForTimeout(400);
+      const browsing = await page.evaluate(() => ({
+        rows: document.querySelectorAll(".trait-row").length,
+        groups: document.querySelectorAll("#sym-results .sym-group").length,
+        glossed: [...document.querySelectorAll(".trait-row")]
+          .filter(r => (r.querySelector(".trait-desc") || {}).textContent).length,
+        outside: [...document.querySelectorAll(".trait-row")]
+          .filter(r => /./.test((r.querySelector(".trait-hit") || {}).textContent || "") &&
+                       !r.querySelector(".trait-hit .trait-desc")).length,
+      }));
+      assert("switching shows the whole catalogue", browsing.rows > 100);
+      assert("...grouped by what the trait does", browsing.groups > 5);
+      /* The gloss is the entire answer to "a trait list makes you know the jargon
+         first". An entry without one is a bare name and defeats the feature. */
+      assertEqual("every trait carries its description", browsing.glossed, browsing.rows);
+      assertEqual("...beside the button, not inside it", browsing.outside, browsing.rows);
+
+      /* The search reads the descriptions, so the name is not a precondition. */
+      await page.fill("#sym-search", "wounds closed");
+      await page.waitForTimeout(500);
+      const found = await page.evaluate(() =>
+        [...document.querySelectorAll(".trait-hit")].map(b => b.textContent.trim()));
+      assert("a trait is findable from what you saw, without its name",
+        found.some(t => /^Regeneration$/i.test(t)));
+      assert("...and the list narrowed to do it", found.length < browsing.rows);
+
+      await page.evaluate(() => {
+        const b = [...document.querySelectorAll(".trait-hit")]
+          .find(x => /^Regeneration$/i.test(x.textContent.trim()));
+        if (b) b.click();
+      });
+      await page.waitForTimeout(900);
+
+      const picked = await page.evaluate(() => ({
+        chip: [...document.querySelectorAll("#sym-chosen .chip")].map(c => c.textContent.trim()),
+        on: [...document.querySelectorAll(".trait-hit.on")].map(b => b.textContent.trim()),
+      }));
+      assert("the chosen trait becomes a chip", picked.chip.some(c => /Regeneration/.test(c)));
+      assert("...and the button reads as set", picked.on.some(c => /Regeneration/.test(c)));
+
+      const ranked = await resultsText(page);
+      assert("a named trait alone is enough evidence to rank",
+        !/Nothing observed yet/i.test(ranked) && ranked.length > 40);
+
+      /* Both lists feed one chip strip, because they answer the same question and the
+         party should see everything it has said in one place. */
+      await page.click('[data-symmode="words"]');
+      await page.waitForTimeout(400);
+      const acrossModes = await page.evaluate(() => ({
+        mode: document.querySelector(".mode-btn.on").dataset.symmode,
+        chip: [...document.querySelectorAll("#sym-chosen .chip")].map(c => c.textContent.trim()),
+        query: document.getElementById("sym-search").value,
+      }));
+      assertEqual("switching back returns the sentences", acrossModes.mode, "words");
+      assert("the trait chip survives the switch",
+        acrossModes.chip.some(c => /Regeneration/.test(c)));
+      /* The two vocabularies do not overlap, so a carried-over query lands on an empty
+         state that reads as "this list has nothing in it". */
+      assertEqual("the search box is cleared on the way across", acrossModes.query, "");
+
+      // The chip removes what it names, from either mode.
+      await page.evaluate(() => {
+        const c = [...document.querySelectorAll("#sym-chosen .chip")]
+          .find(x => /Regeneration/.test(x.textContent));
+        if (c) c.click();
+      });
+      await page.waitForTimeout(700);
+      const cleared = await page.evaluate(() =>
+        [...document.querySelectorAll("#sym-chosen .chip")].map(c => c.textContent.trim()));
+      assertEqual("the chip clears the trait it names", cleared, []);
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("playtest feedback: damage options toggle off");
     {
       const { ctx, page } = await fresh(browser);

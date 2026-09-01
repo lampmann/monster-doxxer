@@ -14,6 +14,7 @@ const fs = require("fs");
 const path = require("path");
 const N = require("../src/normalize.js");
 const SY = require("../src/symptoms.js");
+const TR = require("../src/traits.js");
 const SRC = require("../src/sources.js");
 const APP = require("../src/appearance.js");
 const EM = require("../src/embeddings.js");
@@ -78,6 +79,7 @@ function load(opts) {
   const { monsters, skipped } = N.ingest(lists);
   const compiled = SY.compile(readJson(ONTOLOGY));
   SY.tagAll(monsters, compiled);
+  TR.tagTraits(monsters);
 
   /* Optional: book/adventure titles and publication dates, for F16's filter labels and
      the legacy tiebreak. Absent, the ranking still works and simply ties differently —

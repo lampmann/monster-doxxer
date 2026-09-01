@@ -68,7 +68,7 @@
      the "two monsters, one set of observations" failure the handoff flagged from the
      start. Everything else — which books your DM owns, how big your party is — is a fact
      about the TABLE and is shared, because retyping it per monster would be absurd. */
-  const blankObs = () => ({ symptoms: [], mechanics: [], type: "", size: "", movement: [], senses: [],
+  const blankObs = () => ({ symptoms: [], mechanics: [], traits: [], type: "", size: "", movement: [], senses: [],
     condImmune: [], damage: {}, appearance: "", heardName: "",
     /* What it did with its turn. One row per action rather than three bags of chips,
        because the fields have to be true OF THE SAME ACTION to mean anything — see
@@ -91,6 +91,10 @@
     fluff: null,              // name|source -> the book's Info text, for the detail panel
     loreIndex: null,          // built on demand — see loreIndex()
     detailTab: "stat",        // which tab the detail panel is showing
+    /* Which of the two ways of answering "what did it do" the box is showing. A
+       preference about how you like to answer, not a fact about the monster, so it is
+       shared across tabs and survives switching creature. */
+    symMode: "words",
     srcVisible: null,         // group -> the codes currently shown, for the bulk buttons
     // The active tab's fields, mirrored here so the rest of the app reads them unchanged.
     obs: blankObs(),
@@ -209,6 +213,8 @@
     const ont = await getJsonOptional("ontology/symptoms.json");
     S.ontology = window.compile(ont || { symptoms: [] });
     window.tagAll(S.monsters, S.ontology);
+    // Named traits, from the statblock's own trait names and 5e.tools' curated tags.
+    window.tagTraits(S.monsters);
 
     S.rarity = window.buildRarity(S.monsters);
     S.numerics = window.buildNumerics(S.monsters);
@@ -326,7 +332,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         tabs: S.tabs, activeId: S.activeId, sources: S.sources, party: S.party,
-        hideNamed: S.hideNamed,
+        hideNamed: S.hideNamed, symMode: S.symMode,
       }));
     } catch (e) { /* private browsing, quota — not worth interrupting a fight over */ }
   }
@@ -348,6 +354,7 @@
     if (d) {
       S.sources = d.sources || {};
       S.hideNamed = !!d.hideNamed;
+      if (d.symMode === "words" || d.symMode === "traits") S.symMode = d.symMode;
       if (d.party) S.party = Object.assign({ level: null, size: 4 }, d.party);
     }
     $("in-hide-named").checked = S.hideNamed;
@@ -806,7 +813,7 @@
     { id: "name",     label: "Name",              colour: "#1a56c4",
       facets: ["name"] },
     { id: "symptom",  label: "Observed effects",  colour: "#7b2d8e",
-      facets: ["symptom", "mechanic"] },
+      facets: ["symptom", "mechanic", "trait"] },
     { id: "look",     label: "Appearance and lore", colour: "#0f7b6c",
       facets: ["appearance"] },
     { id: "creature", label: "Creature",          colour: "#a8571a",
@@ -1125,6 +1132,69 @@
     return `<div class="sym-row">${parent}<span class="sym-subs">${subs}</span></div>`;
   }
 
+  /* ============================================================
+     THE SECOND WAY IN: TRAITS BY NAME.
+
+     The sentence list exists because players report consequences, not mechanics. That
+     is still true and still the default. But it is not true of EVERY table: some GMs
+     say "make a save against its Frightful Presence" out loud, and some players have
+     read the book. Those parties know the name, and making them reverse-engineer which
+     vague sentence the tool filed it under throws away the best evidence they have.
+
+     The objection to a trait list is that you have to know the jargon first. The answer
+     is the gloss on every entry, which the search box reads as well as the name — so
+     "wounds closed" finds Regeneration without the word ever being typed — and the
+     functional grouping, which does the same job for browsing.
+
+     Measured: with the party naming its traits, top-5 goes 66.0% -> 73.5% and the trait
+     facet ablates at -7.0 points, second only to symptoms. Symptoms still ablate at
+     -15.7, more than twice the next facet down, so this ADDS a path rather than
+     replacing one. Both are live at once; a party that has both says both.
+     ============================================================ */
+  const traitOn = key => (S.obs.traits || []).includes(key);
+
+  function toggleTrait(key) {
+    const list = S.obs.traits || (S.obs.traits = []);
+    const i = list.indexOf(key);
+    if (i >= 0) list.splice(i, 1); else list.push(key);
+  }
+
+  /* One catalogue entry: the name as a button, the gloss beside it as plain text.
+     The gloss is NOT inside the button. It is the thing you read to decide, and a
+     four-line clickable target reads as a paragraph you have somehow armed. */
+  function traitRow(e) {
+    return `<div class="trait-row">` +
+      `<button class="trait-hit${traitOn(e.key) ? " on" : ""}" data-trait="${esc(e.key)}">` +
+      `${esc(e.name)}</button>` +
+      `<span class="trait-desc">${esc(e.desc)}</span></div>`;
+  }
+
+  function renderTraitList(box, q) {
+    if (!q) {
+      box.innerHTML = window.TRAIT_GROUPS.map(g =>
+        `<div class="sym-group"><div class="sym-group-label">${esc(g.label)}</div>` +
+        g.traits.map(t => traitRow(window.TRAIT_BY_KEY[t.n])).join("") +
+        `</div>`).join("");
+      return;
+    }
+    const hits = window.searchTraits(q, 14);
+    box.innerHTML = hits.length
+      ? hits.map(traitRow).join("")
+      : `<span class="hint">No trait matches that. The box reads the descriptions too, so ` +
+        `try what you saw &mdash; &ldquo;wounds closed&rdquo;, &ldquo;it grabbed me&rdquo; &mdash; ` +
+        `or clear it to browse all ${window.TRAIT_ALL.length}.</span>`;
+  }
+
+  /* Which of the two lists the box is showing. Not per-tab: it is a preference about
+     how you like to answer, not a fact about the monster, so it does not belong in
+     the observation and does not reset when you switch creature. */
+  const MODE_HINT = {
+    words: "Say what happened. The tool works out which mechanics could have caused it, " +
+      "so vague is fine and guessing at the rules is not needed.",
+    traits: "If you know what the trait was called, name it. Search reads the descriptions " +
+      "as well as the names, so you can find one without knowing what it is called.",
+  };
+
   function renderSymptoms() {
     /* Both halves of the selection, in one strip: whole symptoms and the partial ones.
        A partial selection says which mechanics survived, because "It vanished" and "It
@@ -1148,11 +1218,24 @@
              `title="narrowed to ${esc(names.join(", "))}">` +
              `${esc(s ? s.player : id)} <span class="chip-narrow">(${esc(names.join(", "))})</span>` +
              `</button>`;
+    })).concat((S.obs.traits || []).map(k => {
+      const e = window.TRAIT_BY_KEY[k];
+      return `<button class="chip on trait" data-trait-remove="${esc(k)}" ` +
+             `title="${esc(e ? e.desc : "remove")}">${esc(e ? e.name : k)}</button>`;
     })).join("");
     $("sym-chosen").innerHTML = chosen;
 
     const q = $("sym-search").value.trim();
     const box = $("sym-results");
+
+    /* The mode switch, and the box below it. Both lists feed the same chip strip above,
+       because they are answers to the same question and the party should see everything
+       it has said in one place regardless of which way it said it. */
+    document.querySelectorAll("[data-symmode]").forEach(b =>
+      b.classList.toggle("on", b.dataset.symmode === S.symMode));
+    const modeHint = $("sym-mode-hint");
+    if (modeHint) modeHint.textContent = MODE_HINT[S.symMode] || "";
+    if (S.symMode === "traits") { renderTraitList(box, q); return; }
 
     /* WITH AN EMPTY BOX, SHOW EVERYTHING, GROUPED.
 
@@ -1252,6 +1335,8 @@
       symptoms: S.obs.symptoms.slice(),
       // Partial selections — see the symptom/mechanic model above.
       mechanics: (S.obs.mechanics || []).slice(),
+      // Traits named outright, from the catalogue. See the trait facet in score.js.
+      traits: (S.obs.traits || []).slice(),
       movement: S.obs.movement.slice(),
       senses: S.obs.senses.slice(),
       condImmune: S.obs.condImmune.slice(),
@@ -1388,6 +1473,14 @@
       const s = S.ontology.byId[x.value.slice(0, i)];
       const mech = cap(x.value.slice(i + 2));
       return s ? `${s.player} (${mech})` : mech;
+    }
+    /* Trait keys are lowercase because that is what the facet compares. Title-cased
+       back for display, through the catalogue where it has the entry and the same
+       casing rule where it does not — the index carries every trait name in the
+       corpus, not only the 170 the catalogue offers. */
+    if (x.facet === "trait") {
+      const e = window.TRAIT_BY_KEY && window.TRAIT_BY_KEY[x.value];
+      return e ? e.name : (window.traitTitle ? window.traitTitle(x.value) : cap(x.value));
     }
     if (x.facet === "spell") return spellTitle(x.value);
     if (x.facet === "damage") {
@@ -1815,6 +1908,31 @@
       return;
     }
 
+    const modeBtn = t.closest("[data-symmode]");
+    if (modeBtn) {
+      S.symMode = modeBtn.dataset.symmode;
+      /* The search box is cleared on the way across. The two lists have completely
+         different vocabularies — "it vanished" against the sentences, "Misty Escape"
+         against the names — so carrying a query over lands you on an empty state that
+         looks like the new list has nothing in it. */
+      $("sym-search").value = "";
+      persist(); renderSymptoms();
+      return;
+    }
+
+    const traitBtn = t.closest("[data-trait]");
+    if (traitBtn) {
+      toggleTrait(traitBtn.dataset.trait);
+      persist(); renderSymptoms(); renderResults(); renderSuggestions();
+      return;
+    }
+    const traitRm = t.closest("[data-trait-remove]");
+    if (traitRm) {
+      toggleTrait(traitRm.dataset.traitRemove);
+      persist(); renderSymptoms(); renderResults(); renderSuggestions();
+      return;
+    }
+
     /* One mechanic under a symptom. Checked before the parent, since a sub-button sits
        inside the same row and `closest` would otherwise walk past it. */
     const mech = t.closest("[data-mech]");
@@ -2181,7 +2299,7 @@
   document.addEventListener("keydown", e => {
     if (e.target.id !== "sym-search" || e.key !== "Enter") return;
     e.preventDefault();
-    const first = $("sym-results").querySelector("[data-sym-toggle]");
+    const first = $("sym-results").querySelector("[data-sym-toggle],[data-trait]");
     if (first) first.click();
   });
 

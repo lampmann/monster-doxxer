@@ -40,6 +40,8 @@
    ============================================================ */
 "use strict";
 
+const TRAITS = require("../src/traits.js");
+
 const UNMODELLED = [
   "two monsters merged into one set of observations",
   "a homebrew monster that is not in the corpus at all",
@@ -94,6 +96,8 @@ const DEFAULTS = {
   spellRate: 0,           // probability the party names spells it cast
   spellRecall: 0.4,       // ...and what fraction of its list they caught
   reprepRate: 0,          // probability the DM had swapped one of those spells out
+  traitRate: 0,           // probability the party can NAME a trait it saw — see below
+  traitRecall: 0.5,       // ...and how many of the ones it has they can name
 };
 
 /* ON heardRate — a name the party heard.
@@ -271,6 +275,28 @@ function corrupt(m, r, opts) {
      of an action and not all of it. What they cannot do is invent a pairing, which is
      why there is no stray-rate here: the failure mode this models is forgetting, and
      misremembering is already modelled everywhere else. */
+  /* NAMING A TRAIT OUTRIGHT.
+
+     Off by default, and it should be: most parties never hear the word "Regeneration",
+     which is the whole reason the symptom ontology exists. But some do — the GM says it,
+     or a player has read the book — and that party knows something no sentence in the
+     ontology can express. This generates that case so the trait facet can be priced.
+
+     Only CATALOGUED traits are drawn. The index carries every trait name in the corpus,
+     but the UI offers 170, and a harness that generated the other 1,087 would measure
+     evidence no user can enter — an optimistic number about a path that does not exist.
+
+     Recall is per-trait rather than all-or-nothing, because a party that names one trait
+     is not thereby a party that names all six. */
+  if (o.traitRate > 0 && r() < o.traitRate) {
+    const named = (m.traitNames || []).filter(k => TRAITS.TRAIT_BY_KEY[k]);
+    const kept = named.filter(() => r() < o.traitRecall);
+    if (kept.length) {
+      obs.traits = kept;
+      notes.push(`traits: ${kept.join(", ")} (the party knew the names)`);
+    }
+  }
+
   if (o.combatRate > 0 && r() < o.combatRate) {
     const usable = (m.everyEntry || []).filter(e =>
       (e.isAttack && e.atkKinds.length) || e.saveAbil);

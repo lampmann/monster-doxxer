@@ -35,7 +35,7 @@ const NAMES = require("../src/names.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
-  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0, combat: 0, spells: 0, reprep: 0, kin: false, kinHeard: 0, speed: 0, speedFull: false };
+  const out = { n: 400, seed: 1, show: 0, sweep: "", ablate: false, suggest: false, quiet: false, stray: 0, swap: 1, crShift: 0, mode: "", describe: 0, synonyms: 0, heard: 0, misheard: 0.1, bossDrift: 0, rolls: 0, combat: 0, spells: 0, reprep: 0, kin: false, kinHeard: 0, speed: 0, speedFull: false, traits: 0 };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -61,6 +61,7 @@ function parseArgs(argv) {
     else if (a === "--combat") out.combat = Number(next());
     else if (a === "--spells") out.spells = Number(next());
     else if (a === "--reprep") out.reprep = Number(next());
+    else if (a === "--traits") out.traits = Number(next());
     else if (a === "--rolls") out.rolls = Number(next());
     else if (a === "--quiet") out.quiet = true;
     else if (a === "--help" || a === "-h") { console.log(HELP); process.exit(0); }
@@ -193,6 +194,7 @@ function opts(args, extra) {
                heardRate: args.heard, mishearRate: args.misheard, allNames: args.allNames,
                bossDriftRate: args.bossDrift, rollRate: args.rolls,
                combatRate: args.combat, spellRate: args.spells, reprepRate: args.reprep,
+               traitRate: args.traits,
                kinMishearRate: args.kinHeard, kinNames: args.kinNames,
                speedRate: args.speed, speedFull: args.speedFull,
                isColour: w => APP.COLOURS.has(APP.stem(w)),
@@ -258,7 +260,11 @@ function sweep(monsters, rarity, args, key) {
 /* Price each facet by removing it. A facet whose removal costs nothing is not
    earning its place in the query form. */
 function ablate(monsters, rarity, args) {
-  const FACETS = ["symptoms", "movement", "senses", "condImmune", "type", "size", "damage", "damageDealt", "typeTags"];
+  /* `traits` is only in the query when --traits is passed, and an absent field
+     ablates to zero — which reads as "worthless" rather than "not tested". Included
+     unconditionally anyway, so `--ablate --traits 1` prices it in the same table as
+     everything else rather than needing its own run. */
+  const FACETS = ["symptoms", "movement", "senses", "condImmune", "type", "size", "damage", "damageDealt", "typeTags", "traits"];
   const base = measure(monsters, rarity, opts(args));
   console.log(`\nablation, n=${args.n} seed=${args.seed}`);
   console.log(`  everything            ${line(base)}\n`);

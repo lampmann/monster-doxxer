@@ -36,10 +36,14 @@
 
     <div class="module">
       <h2>Observed effects<span class="cat-sw" data-cat="symptom"></span></h2>
-      <span class="hint block">Describe what you saw, in your own words. This is the strongest
-        evidence the tool has &mdash; far stronger than any stat. What <em>kind</em> of damage it
-        dealt belongs in <em>Attacks and saves</em> below, where it can be tied to the attack that
-        dealt it.</span>
+      <span class="hint block">What it did. This is the strongest evidence the tool has &mdash;
+        far stronger than any stat. What <em>kind</em> of damage it dealt belongs in
+        <em>Attacks and saves</em> below, where it can be tied to the attack that dealt it.</span>
+      <div class="sym-mode">
+        <button type="button" class="mode-btn on" data-symmode="words">In your own words</button>
+        <button type="button" class="mode-btn" data-symmode="traits">By trait name</button>
+      </div>
+      <span class="hint block" id="sym-mode-hint"></span>
       <input type="text" class="txt" id="sym-search" autocomplete="off">
       <div class="sym-chosen" id="sym-chosen"></div>
       <div id="sym-results"></div>
@@ -203,6 +207,7 @@
 
 <script src="src/normalize.js"></script>
 <script src="src/symptoms.js"></script>
+<script src="src/traits.js"></script>
 <script src="src/appearance.js"></script>
 <script src="src/embeddings.js"></script>
 <script src="src/names.js"></script>

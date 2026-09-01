@@ -218,6 +218,15 @@
        its parent by construction, since it is one of several things that could have
        caused it, so F1 prices it higher without being told to. */
     mechanic:    m => (m.mechanics || []),
+    /* A trait BY NAME, from the catalogue in src/traits.js. Distinct from `mechanic`,
+       which is one candidate cause of a symptom and is therefore phrased as the
+       ontology phrases it. This is what the book calls the trait, attached at index
+       time from the statblock's own trait names and 5e.tools' curated tags, and it is
+       an exact string match rather than a guess — so unlike a symptom it carries no
+       confidence discount. Priced by F1 like everything else: Magic Resistance is 17%
+       of the corpus and worth little, Labyrinthine Recall is 12 monsters and worth a
+       great deal. */
+    trait:       m => (m.traitNames || []),
     /* Damage interactions are facets so that the rarity table COUNTS them. They are
        scored through the cost matrix below rather than by set membership, but a weight
        is only meaningful if something counted the feature: an uncounted key falls to the
@@ -1011,7 +1020,7 @@
      ============================================================ */
   const SET_FIELDS = {                 // observation field -> facet it scores against
     movement: "movement", senses: "sense", condImmune: "condImmune",
-    symptoms: "symptom", mechanics: "mechanic", typeTags: "typeTag", damageDealt: "damageDealt",
+    symptoms: "symptom", mechanics: "mechanic", traits: "trait", typeTags: "typeTag", damageDealt: "damageDealt",
     saveAbilities: "saveAbility", attackKinds: "attackKind",
     spells: "spell", castingKind: "castingKind", castingClass: "castingClass",
   };
