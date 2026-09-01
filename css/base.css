@@ -335,7 +335,10 @@ th, td { text-align: left; padding: 1px 4px; }
 .error { border: 1px solid var(--danger-border); color: var(--danger); padding: .4rem .6rem; margin-bottom: .75rem; }
 
 /* ----- bounds from the dice (src/ranges.js) ----- */
-.rolls { margin-top: .6rem; border-top: 1px solid var(--border-hair); padding-top: .5rem; }
+/* No border-top: with the remembered AC and HP fields gone this block is the first thing
+   in the module, so its rule landed immediately under the heading's own and drew two
+   grey bars a couple of pixels apart. */
+.rolls { margin-top: .2rem; }
 .rolls-head { font-size: .8rem; font-weight: 600; margin-bottom: .15rem; }
 .rollrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem; margin-bottom: .3rem; }
 .rolllabel { font-size: .8rem; color: var(--muted-fg); }
