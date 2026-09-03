@@ -35,18 +35,13 @@ whole bestiary with its reasoning shown.
 "Regeneration". So the bestiary is indexed by *observable consequence* — 111 hand-written symptoms
 in [`ontology/symptoms.json`](ontology/symptoms.json), each mapping to the set of mechanics that
 could have produced it, with a likelihood on every edge because an observation almost never has
-one cause.
+one cause. It is the single most valuable thing in the project and it indexes the whole corpus.
 
-That file is the single most valuable thing in the project, and it is not a close call. Ablation
-says removing it costs 24 points of top-5 recall; the next facet down costs 6.
-
-**Except when the players do hear the name.** Some GMs say "make a save against its Frightful
-Presence" out loud, and some players have read the book — and a party that knows the name knows
-something no sentence in the ontology can express. So the same box offers a second list: 170
-named traits in [`src/traits.js`](src/traits.js), grouped by what they do, each with a one-line
-description of the effect. The search reads the descriptions as well as the names, so "wounds
-closed" finds Regeneration and "it grabbed me" finds Grappler — you never have to know the
-jargon to use it. Naming traits takes top-5 from 66.0% to 73.5%.
+**But you enter observations by trait name.** 170 named traits in
+[`src/traits.js`](src/traits.js), grouped by what they do, each with a one-line description of
+the effect — and the search reads the descriptions as well as the names, so "wounds closed"
+finds Regeneration and "it grabbed me" finds Grappler. You never have to know the jargon to
+use it. Naming traits takes top-5 from 66.0% to 73.5%.
 
 ## Using it
 

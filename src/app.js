@@ -91,10 +91,6 @@
     fluff: null,              // name|source -> the book's Info text, for the detail panel
     loreIndex: null,          // built on demand — see loreIndex()
     detailTab: "stat",        // which tab the detail panel is showing
-    /* Which of the two ways of answering "what did it do" the box is showing. A
-       preference about how you like to answer, not a fact about the monster, so it is
-       shared across tabs and survives switching creature. */
-    symMode: "words",
     srcVisible: null,         // group -> the codes currently shown, for the bulk buttons
     // The active tab's fields, mirrored here so the rest of the app reads them unchanged.
     obs: blankObs(),
@@ -332,7 +328,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         tabs: S.tabs, activeId: S.activeId, sources: S.sources, party: S.party,
-        hideNamed: S.hideNamed, symMode: S.symMode,
+        hideNamed: S.hideNamed,
       }));
     } catch (e) { /* private browsing, quota — not worth interrupting a fight over */ }
   }
@@ -354,7 +350,6 @@
     if (d) {
       S.sources = d.sources || {};
       S.hideNamed = !!d.hideNamed;
-      if (d.symMode === "words" || d.symMode === "traits") S.symMode = d.symMode;
       if (d.party) S.party = Object.assign({ level: null, size: 4 }, d.party);
     }
     $("in-hide-named").checked = S.hideNamed;
@@ -1020,38 +1015,28 @@
   }
 
   /* ============================================================
-     A SYMPTOM AND THE MECHANICS UNDER IT.
+     SYMPTOMS: STILL SCORED, NO LONGER OFFERED.
 
-     A symptom is vague on purpose: the players never hear the name, so "one specific
-     spell had no effect whatsoever" has to cover Spell Immunity, an immunity to one
-     named spell, and Antimagic Susceptibility at once. But GMs do sometimes say the
-     name out loud, and a party that heard it knows something far more specific than
-     the sentence can express — and, until now, had no way to say it.
+     The sentence list is gone from the form — see the trait catalogue below for what
+     replaced it and what that cost. What stays is everything BEHIND it:
 
-     So every mechanic under a symptom is its own button. The parent and its children
-     are a select-all relationship: the parent on means all of them, turning one child
-     off narrows the claim, turning the last one on widens it back. The invariant the
-     rest of the code depends on is that a symptom is EITHER in `symptoms` (all of it)
-     or has keys in `mechanics` (some of it), never both — so the existing, measured
-     symptom path is untouched whenever the parent button is used.
+       - the ontology still tags every monster at index time, so the rarity table
+         still counts symptoms and `mechanic` keys and prices them correctly
+       - the scorer still reads obs.symptoms and obs.mechanics, and the evaluation
+         harness still generates them, so the measured symptom path is intact and
+         `--ablate` still prices it
+       - a session saved while the list existed still carries its symptoms, and they
+         still rank, still appear as chips, and can still be removed
 
-     Symptoms with a single candidate get no children: the parent already is the
-     mechanic, and a lone sub-button that can never disagree with its parent is noise.
+     What is gone is only the way to ADD one. These helpers are what the chip strip
+     needs to keep that promise; the list rendering itself is in git, one revert away.
      ============================================================ */
   const mechNames = s => (window.mechanicsOf ? window.mechanicsOf(s, 99).shown : []);
   const mechKeys = s => mechNames(s).map(m => window.mechanicKey(s.id, m));
-  const hasSubs = s => mechNames(s).length > 1;
 
-  /* "all" | "some" | "none" — everything the UI draws is derived from this rather than
-     stored, so the two halves of the selection cannot drift apart. */
-  function symState(sym) {
-    if (S.obs.symptoms.includes(sym.id)) return "all";
-    return mechKeys(sym).some(k => S.obs.mechanics.includes(k)) ? "some" : "none";
-  }
-  const mechOn = (sym, key) =>
-    S.obs.symptoms.includes(sym.id) || S.obs.mechanics.includes(key);
-
-  // Drop every trace of a symptom, whichever half it was recorded in.
+  /* Remove a symptom however it was stored. The invariant the chip strip relies on is
+     that a symptom is EITHER in `symptoms` (all of it) or has keys in `mechanics`
+     (narrowed to some of them), never both — so clearing has to sweep both. */
   function clearSym(sym) {
     const i = S.obs.symptoms.indexOf(sym.id);
     if (i >= 0) S.obs.symptoms.splice(i, 1);
@@ -1059,97 +1044,23 @@
     S.obs.mechanics = S.obs.mechanics.filter(k => !keys.includes(k));
   }
 
-  /* Re-record a symptom from the set of its mechanics that should be on, collapsing to
-     whichever of the two representations fits. This is the only writer of either list
-     for symptom state, which is what keeps the invariant true. */
-  function setSym(sym, onKeys) {
-    clearSym(sym);
-    const all = mechKeys(sym);
-    if (!onKeys.length) return;
-    if (onKeys.length === all.length) { S.obs.symptoms.push(sym.id); return; }
-    S.obs.mechanics = S.obs.mechanics.concat(onKeys);
-  }
-
-  function toggleSymptom(sym) {
-    if (symState(sym) === "all") clearSym(sym);
-    else setSym(sym, mechKeys(sym));
-  }
-
-  function toggleMechanic(sym, key) {
-    const all = mechKeys(sym);
-    // "all" is stored as the symptom alone, so expand it before narrowing.
-    const on = symState(sym) === "all" ? all.slice()
-      : all.filter(k => S.obs.mechanics.includes(k));
-    const i = on.indexOf(key);
-    if (i >= 0) on.splice(i, 1); else on.push(key);
-    setSym(sym, on);
-  }
-
-  /* THE SENTENCE, THEN THE MECHANIC IT MEANS.
-
-     Eleven sentences in the offence group read as near-synonyms of each other, because
-     the ontology deliberately never says "Pack Tactics" — the players never heard the
-     name. That is right for the sentence and wrong for the person choosing between
-     them, who has no way to tell what any of them will actually look for. The bracket
-     restores it without putting the jargon in the player's mouth.
-
-     Read straight off the candidate list, so it cannot drift from what the symptom
-     really matches. */
-  /* Symptoms another module asks for better. The ten damage-type sentences — "It burned
-     me", "It hit me with cold" — are the same question an attack row's damage-type
-     field asks, except the row pairs it to one action and this does not. Both would be
-     scored, which is the same evidence twice; and offering both invites the user to
-     answer in the weaker place. The ontology says which, via `collectedBy`, so this
-     stays a data decision rather than app.js hardcoding a group name.
-
-     The symptom is NOT deleted: the tagger still uses it to index the corpus, and the
-     rarity table still counts it. Only the player-facing list drops it. */
-  const collectedElsewhere = s => !!(s && s.collectedBy);
-
-  /* One symptom, as a parent button plus a button per mechanic under it. A row rather
-     than one button, because a button cannot contain another button. */
-  function symRow(sym) {
-    const st = symState(sym);
-    const cls = st === "all" ? " on" : st === "some" ? " part" : "";
-    const parent = `<button class="sym-hit${cls}" data-sym-toggle="${esc(sym.id)}">` +
-      `${esc(sym.player)}</button>`;
-    /* A symptom with ONE mechanic gets its name as plain text, not as a button. The
-       button would be a control that can never disagree with its parent — clicking it
-       and clicking the sentence do the same thing — but the NAME still has to be
-       there, because it is what tells apart eleven sentences that read alike. */
-    const names = mechNames(sym);
-    if (!hasSubs(sym)) {
-      const only = names.length ? ` <span class="sym-mech">(${esc(names[0])})</span>` : "";
-      return `<div class="sym-row">${parent.replace("</button>", only + "</button>")}</div>`;
-    }
-    const subs = names.map(name => {
-      const key = window.mechanicKey(sym.id, name);
-      return `<button class="sym-sub${mechOn(sym, key) ? " on" : ""}" ` +
-        `data-mech="${esc(key)}" data-mech-sym="${esc(sym.id)}" ` +
-        `title="only this mechanic, rather than any of the ${names.length}">` +
-        `${esc(name)}</button>`;
-    }).join("");
-    return `<div class="sym-row">${parent}<span class="sym-subs">${subs}</span></div>`;
-  }
-
   /* ============================================================
-     THE SECOND WAY IN: TRAITS BY NAME.
+     THE TRAIT CATALOGUE — now the only way in.
 
-     The sentence list exists because players report consequences, not mechanics. That
-     is still true and still the default. But it is not true of EVERY table: some GMs
-     say "make a save against its Frightful Presence" out loud, and some players have
-     read the book. Those parties know the name, and making them reverse-engineer which
-     vague sentence the tool filed it under throws away the best evidence they have.
+     It shipped alongside the symptom sentences and replaced them a round later, at the
+     owner's call. The objection to a trait list is that you have to know the jargon
+     first, which is the exact failure the sentences existed to avoid; the answer is
+     that every entry carries a gloss of what the trait DOES, the search box reads the
+     gloss as well as the name — "wounds closed" finds Regeneration without the word
+     ever being typed — and the entries are grouped by function so browsing works the
+     same way.
 
-     The objection to a trait list is that you have to know the jargon first. The answer
-     is the gloss on every entry, which the search box reads as well as the name — so
-     "wounds closed" finds Regeneration without the word ever being typed — and the
-     functional grouping, which does the same job for browsing.
-
-     Measured: with the party naming its traits, top-5 goes 66.0% -> 73.5% and the trait
-     facet ablates at -7.0 points, second only to symptoms. Symptoms still ablate at
-     -15.7, more than twice the next facet down, so this ADDS a path rather than
-     replacing one. Both are live at once; a party that has both says both.
+     WHAT IT COST, RECORDED HONESTLY. Measured with both lists live, symptoms ablated at
+     -15.7 points of top-5 and traits at -7.0. Symptoms was the larger of the two and is
+     no longer enterable, so the tool is giving up the evidence a party has when it can
+     describe what happened but cannot name it. Everything behind the sentences is still
+     there — see the block above — so this is a UI decision, not a deletion, and the
+     numbers can be re-measured against `--traits` at any time.
      ============================================================ */
   const traitOn = key => (S.obs.traits || []).includes(key);
 
@@ -1185,16 +1096,6 @@
         `or clear it to browse all ${window.TRAIT_ALL.length}.</span>`;
   }
 
-  /* Which of the two lists the box is showing. Not per-tab: it is a preference about
-     how you like to answer, not a fact about the monster, so it does not belong in
-     the observation and does not reset when you switch creature. */
-  const MODE_HINT = {
-    words: "Say what happened. The tool works out which mechanics could have caused it, " +
-      "so vague is fine and guessing at the rules is not needed.",
-    traits: "If you know what the trait was called, name it. Search reads the descriptions " +
-      "as well as the names, so you can find one without knowing what it is called.",
-  };
-
   function renderSymptoms() {
     /* Both halves of the selection, in one strip: whole symptoms and the partial ones.
        A partial selection says which mechanics survived, because "It vanished" and "It
@@ -1228,57 +1129,8 @@
     const q = $("sym-search").value.trim();
     const box = $("sym-results");
 
-    /* The mode switch, and the box below it. Both lists feed the same chip strip above,
-       because they are answers to the same question and the party should see everything
-       it has said in one place regardless of which way it said it. */
-    document.querySelectorAll("[data-symmode]").forEach(b =>
-      b.classList.toggle("on", b.dataset.symmode === S.symMode));
-    const modeHint = $("sym-mode-hint");
-    if (modeHint) modeHint.textContent = MODE_HINT[S.symMode] || "";
-    if (S.symMode === "traits") { renderTraitList(box, q); return; }
-
-    /* WITH AN EMPTY BOX, SHOW EVERYTHING, GROUPED.
-
-       This used to render nothing at all until you typed something that happened to
-       match, which made the single most valuable input in the tool — worth four times
-       what any other facet is — look like an empty text field that does nothing. You
-       cannot search a list of 111 sentences you have never seen. Browsing is the
-       default; searching narrows it. */
-    if (!q) {
-      const groups = new Map();
-      S.ontology.symptoms.forEach(s => {
-        if (collectedElsewhere(s)) return;
-        const g = s.group || "other";
-        if (!groups.has(g)) groups.set(g, []);
-        groups.get(g).push(s);
-      });
-      if (!groups.size) { box.innerHTML = `<span class="hint">Nothing to pick from.</span>`; return; }
-      box.innerHTML = [...groups.entries()]
-        .sort((a, b) => b[1].length - a[1].length)
-        .map(([g, list]) =>
-          `<div class="sym-group"><div class="sym-group-label">${esc(GROUP_LABELS[g] || g)}</div>` +
-          list.map(s => symRow(s)).join("") +
-          `</div>`).join("");
-      return;
-    }
-
-    const hits = window.lookup(S.ontology, q, 12)
-      .filter(h => !collectedElsewhere(S.ontology.byId[h.id]));
-    box.innerHTML = hits.length
-      ? hits.map(h => symRow(S.ontology.byId[h.id] || h)).join("")
-      : `<span class="hint">Nothing matches that yet. Try plainer words &mdash; ` +
-        `&ldquo;it vanished&rdquo;, &ldquo;my sword bounced off&rdquo; &mdash; or clear the box ` +
-        `to browse all ${S.ontology.symptoms.length}.</span>`;
+    renderTraitList(box, q);
   }
-
-  /* The ontology's group keys are terse because they are data. These are what a player
-     reads above each block. An unknown group falls through to its own key. */
-  const GROUP_LABELS = {
-    durability: "Staying alive", damage: "Damage it dealt", condition: "What it did to us",
-    movement: "How it moved", senses: "What it noticed", turn: "Its turn",
-    reaction: "When we hit it", offence: "How it fought", disguise: "Before we knew",
-    multiply: "When it was hurt", meta: "Odder things",
-  };
 
   /* F16's tri-state filter, grouped Books / Adventures / Other. */
   function renderSources() {
@@ -1908,18 +1760,6 @@
       return;
     }
 
-    const modeBtn = t.closest("[data-symmode]");
-    if (modeBtn) {
-      S.symMode = modeBtn.dataset.symmode;
-      /* The search box is cleared on the way across. The two lists have completely
-         different vocabularies — "it vanished" against the sentences, "Misty Escape"
-         against the names — so carrying a query over lands you on an empty state that
-         looks like the new list has nothing in it. */
-      $("sym-search").value = "";
-      persist(); renderSymptoms();
-      return;
-    }
-
     const traitBtn = t.closest("[data-trait]");
     if (traitBtn) {
       toggleTrait(traitBtn.dataset.trait);
@@ -1933,30 +1773,6 @@
       return;
     }
 
-    /* One mechanic under a symptom. Checked before the parent, since a sub-button sits
-       inside the same row and `closest` would otherwise walk past it. */
-    const mech = t.closest("[data-mech]");
-    if (mech) {
-      const sym = S.ontology.byId[mech.dataset.mechSym];
-      if (sym) {
-        toggleMechanic(sym, mech.dataset.mech);
-        persist(); renderSymptoms(); renderResults(); renderSuggestions();
-      }
-      return;
-    }
-    const symBtn = t.closest("[data-sym-toggle]");
-    if (symBtn) {
-      const sym = S.ontology.byId[symBtn.dataset.symToggle];
-      if (sym) {
-        toggleSymptom(sym);
-        /* The search box is NOT cleared and the row is NOT removed from the list.
-           Both used to happen, and both are wrong now: the mechanics under a symptom
-           live on that row, so a row that vanishes the moment you select it can never
-           be narrowed. The chip strip above is the summary; the list is the control. */
-        persist(); renderSymptoms(); renderResults(); renderSuggestions();
-      }
-      return;
-    }
     const dtab = t.closest("[data-dtab]");
     if (dtab) {
       e.preventDefault();
@@ -2299,7 +2115,7 @@
   document.addEventListener("keydown", e => {
     if (e.target.id !== "sym-search" || e.key !== "Enter") return;
     e.preventDefault();
-    const first = $("sym-results").querySelector("[data-sym-toggle],[data-trait]");
+    const first = $("sym-results").querySelector("[data-trait]");
     if (first) first.click();
   });
 

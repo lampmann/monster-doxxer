@@ -115,28 +115,24 @@ crashed every facet that lowercased it; `damageTags` were passed through as 5e.t
 letters, so an observation of `fire` could never match `"F"`; and a symptom candidate whose regex
 failed to compile matched *every* monster rather than none.
 
-## Two ways to answer "what did it do"
+## Traits, and the sentence list that used to be there
 
-The symptom ontology exists because players report consequences, not mechanics: nobody says
-"it has Regeneration", they say the wounds closed. That is still the default and still the
-strongest facet in the tool.
+The symptom ontology was built because players report consequences, not mechanics: nobody
+says "it has Regeneration", they say the wounds closed. It is still the highest-value
+hand-curated asset in the project and it still indexes the whole corpus. But it is no
+longer how you enter an observation. The form asks for named traits instead.
 
-But it is not true of every table. Some GMs say "make a save against its Frightful Presence"
-out loud; some players have read the book. A party that knows the name knows something no
-sentence in the ontology can express, and making them reverse-engineer which vague sentence
-the tool filed it under discards the best evidence they have. So `src/traits.js` adds a
-catalogue of 170 named traits as a second entry point in the same module, scored through its
-own `trait` facet.
+`src/traits.js` is a catalogue of 170 named traits grouped by function, each with a
+one-line gloss of what the trait does.
 
 **The objection to a trait list is that it makes you know the jargon first**, which is the
-exact failure the ontology was built to avoid. Two things answer it. Every entry carries a
-one-line gloss of what the trait does, and the search box reads the gloss as well as the name
-— so "wounds closed" finds Regeneration and "it grabbed me" finds Grappler without the name
-ever being typed. And the entries are grouped by function ("It shrugged off our magic", "It
-would not stay down", "We could not land a hit"), which does the same job for browsing.
+exact failure the sentences existed to avoid. Two things answer it. The search box reads
+the gloss as well as the name — "wounds closed" finds Regeneration, "it grabbed me" finds
+Grappler, without either name being typed. And the entries are grouped by what they do
+("It shrugged off our magic", "It would not stay down", "We could not land a hit"), which
+does the same job for browsing.
 
-**It adds a path rather than replacing one.** With the party naming its traits, top-5 goes
-66.0% → 73.5% and top-1 42.3% → 49.0%. Ablated in that condition:
+**What the change cost, measured.** With both lists live, ablation priced them:
 
 ```
 without symptoms     -15.7 points of top-5
@@ -145,30 +141,40 @@ without damageDealt   -4.7
 without type          -4.3
 ```
 
-The two overlap — symptoms ablate at -28.0 when traits are absent and -15.7 when they are not
-— but symptoms remains more than twice the next facet down, and the pair together beat either
-alone. Both lists are live at once and feed one chip strip: a party with both says both.
+Symptoms was the larger of the two and is now unenterable, so the tool gives up the
+evidence a party has when it can describe what happened but cannot name it. That is the
+owner's call and it is recorded here rather than argued: naming traits on its own takes
+top-5 from 66.0% to 73.5% against a baseline with neither, so the form is not worse than
+it was before either list existed — it is worse than it was with both.
+
+**Nothing behind the sentences was deleted.** The ontology still tags every monster at
+index time, so the rarity table still counts `symptom` and `mechanic` keys and prices them
+correctly. The scorer still reads `obs.symptoms` and `obs.mechanics`. `eval/run.js` still
+generates and ablates them. A session saved while the list existed still ranks, still shows
+its symptoms as chips, and can still have them removed — there is a browser test for
+exactly that. Restoring the list is a revert, not a rebuild.
 
 **The index carries every trait name in the corpus, not just the catalogued 170.** 1,257
-canonical names, so F1 prices each against its true frequency — Magic Resistance is 17% of the
-corpus and worth little, Labyrinthine Recall is twelve monsters and worth a great deal. Adding
-a catalogue entry therefore needs no reindexing.
+canonical names, so F1 prices each against its true frequency — Magic Resistance is 17% of
+the corpus and worth little, Labyrinthine Recall is twelve monsters and worth a great deal.
+Adding a catalogue entry therefore needs no reindexing.
 
 **Alias folding is load-bearing, not tidiness.** 5e.tools' tag spells it *Legendary
 Resistances* and the trait entry spells it *Legendary Resistance*; the six keen-sense traits
 are one mechanic named six ways; the data contains outright typos (*Aversion of Fire*). Left
 unfolded, the rarity table splits one 470-monster feature into two halves and prices each as
-twice as rare as it is. A test asserts no alias points at another alias, since one-step folding
-would leave the split in place anyway.
+twice as rare as it is. A test asserts no alias points at another alias, since one-step
+folding would leave the split in place anyway.
 
-**Action names are deliberately not indexed, only action tags.** Every statblock has a Bite or
-a Claw; indexing action names would bury the vocabulary under three features that distinguish
-nothing. The eight curated `actionTags` — Breath Weapon, Parry, Swallow — are the mechanics
-that live in the action block and are still what a player would call a trait.
+**Action names are deliberately not indexed, only action tags.** Every statblock has a Bite
+or a Claw; indexing action names would bury the vocabulary under three features that
+distinguish nothing. The eight curated `actionTags` — Breath Weapon, Parry, Swallow — are
+the mechanics that live in the action block and are still what a player would call a trait.
 
-**What the harness does not model here:** a party that names a trait the monster does not have.
-`--traits` draws only from the true statblock, so the figures above assume the name was heard
-correctly. The stray-observation mechanism covers the other set facets but not this one.
+**What the harness does not model here:** a party that names a trait the monster does not
+have. `--traits` draws only from the true statblock, so the figures above assume the name
+was heard correctly. The stray-observation mechanism covers the other set facets but not
+this one.
 
 ## Tabs, and what is shared between them
 

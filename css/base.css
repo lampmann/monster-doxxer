@@ -185,16 +185,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
    understood you, not to become the thing you read first. */
 .sym-mech { color: var(--muted-fg); font-size: .78rem; }
 #sym-results .sym-hit:hover .sym-mech { color: inherit; }
-/* ----- the two ways of answering, and the trait catalogue -----
-   The switch is a pair of buttons rather than a select: it has exactly two states and
-   which one you are in has to be readable without opening anything. */
-.sym-mode { display: flex; gap: .25rem; margin: .3rem 0 .2rem; }
-.mode-btn { font-size: .75rem; padding: .1rem .5rem; border-radius: var(--radius);
-            border: 1px solid var(--border-soft); background: none; color: var(--muted-fg); }
-.mode-btn:hover:not(.on) { color: var(--btn-fg); border-color: var(--btn-border); }
-.mode-btn.on { background: var(--link); color: #fff; border-color: var(--link-border); }
-.mode-btn.on:hover { box-shadow: inset 0 0 0 999px rgba(0,0,0,.12); }
-
+/* ----- the trait catalogue -----
 /* Name then gloss, on one line where it fits and wrapping where it does not. The gloss
    is deliberately outside the button: it is what you read to decide, and a whole
    paragraph that highlights on hover reads as something you have accidentally armed. */

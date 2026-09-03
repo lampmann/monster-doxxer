@@ -122,8 +122,11 @@ const resultsText = page => page.$eval("#results", el => el.textContent.replace(
 const tabsText = page => page.$eval("#doxx-tabs", el => el.textContent.replace(/\s+/g, " ").trim())
   .catch(() => "");
 
-/* Click a symptom by the sentence a player would read, via the search box. */
-async function pickSymptom(page, search, sentence) {
+/* Click a trait by name, via the search box. Named `pickSymptom` no longer: the
+   sentence list it used to drive is gone from the form and the trait catalogue is
+   the only way to say what the creature did. Everything downstream of the click is
+   unchanged — one observation, ranked, explained. */
+async function pickTrait(page, search, name) {
   await page.fill("#sym-search", search);
   await page.waitForTimeout(400);
   const clicked = await page.evaluate(s => {
@@ -131,7 +134,7 @@ async function pickSymptom(page, search, sentence) {
       .find(x => x.textContent.trim().toLowerCase().startsWith(s.toLowerCase()));
     if (b) { b.click(); return true; }
     return false;
-  }, sentence);
+  }, name);
   await page.waitForTimeout(700);
   return clicked;
 }
@@ -174,8 +177,8 @@ async function main() {
     section("one observation ranks, and explains itself");
     {
       const { ctx, page } = await fresh(browser);
-      const found = await pickSymptom(page, "healed between", "It healed between rounds");
-      assertEqual("the symptom search finds the sentence a player would say", found, true);
+      const found = await pickTrait(page, "wounds closed", "Regeneration");
+      assertEqual("the search finds a trait from what the party watched happen", found, true);
 
       const txt = await resultsText(page);
       assert("something is ranked", /1\./.test(txt));
@@ -183,8 +186,7 @@ async function main() {
          "against", so this asserts the structure rather than the punctuation. */
       assert("the result explains WHY it ranked (F14)",
         await page.evaluate(() => !!document.querySelector("#results .why .for")));
-      assert("...naming the observation back in the player's own words",
-        /healed between rounds/i.test(txt));
+      assert("...naming the observation back", /regeneration/i.test(txt));
       assertEqual("no JavaScript errors while ranking", page.__errors, []);
       await ctx.close();
     }
@@ -193,7 +195,7 @@ async function main() {
     section("evidence accumulates and narrows");
     {
       const { ctx, page } = await fresh(browser);
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       const before = await page.$$eval("#results .result", n => n.length);
 
       await pickChip(page, "pick-type", "giant");
@@ -214,7 +216,7 @@ async function main() {
       // A construct that healed itself and is hurt worse by psychic: individually
       // ordinary, jointly explained by nothing. Measured at ~0.375, below the floor.
       await pickChip(page, "pick-type", "construct");
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       await page.evaluate(() => {
         const r = document.querySelector('input[data-dmg="psychic"][value="vulnerable"]');
         if (r) r.click();
@@ -255,7 +257,7 @@ async function main() {
     section("F15 — evidence survives a reload");
     {
       const { ctx, page } = await fresh(browser);
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       await pickChip(page, "pick-type", "giant");
       const before = await resultsText(page);
 
@@ -268,7 +270,7 @@ async function main() {
       const chosen = await page.$eval("#results", () =>
         document.body.textContent.replace(/\s+/g, " "));
       assert("...because the observations came back, not because both are empty",
-        /healed between rounds/i.test(chosen));
+        /regeneration/i.test(chosen) && /giant/i.test(chosen));
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
     }
@@ -277,7 +279,7 @@ async function main() {
     section("tabs keep their evidence apart");
     {
       const { ctx, page } = await fresh(browser);
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       const first = await resultsText(page);
 
       const added = await page.evaluate(() => {
@@ -308,7 +310,7 @@ async function main() {
     section("F16 — excluding every book is survivable");
     {
       const { ctx, page } = await fresh(browser);
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       const rows = await page.evaluate(() => document.querySelectorAll("[data-src]").length);
       assert("the source filter rendered something to filter with", rows > 0);
 
@@ -339,84 +341,30 @@ async function main() {
 
 
     /* ---------------------------------------------------------- */
-    section("playtest feedback: the symptom list is browsable");
-    {
-      const { ctx, page } = await fresh(browser);
-      /* It used to render nothing until you typed a matching term, which made the
-         highest-value input in the tool look like a text box that did nothing. */
-      const b = await page.evaluate(() => ({
-        groups: document.querySelectorAll("#sym-results .sym-group").length,
-        options: document.querySelectorAll("#sym-results .sym-hit").length,
-      }));
-      assert("every symptom offered is listed before you type anything", b.options > 90);
-      /* The ten damage-type sentences moved into the attack rows, where the type can be
-         tied to the action that dealt it. Offering both would score the same evidence
-         twice and invite the user to answer in the weaker place. */
-      const dmgSentences = await page.evaluate(() =>
-        [...document.querySelectorAll("#sym-results .sym-hit")]
-          .filter(x => /it burned me|it hit me with cold|deafening boom/i.test(x.textContent)).length);
-      assertEqual("the damage-type sentences are not offered here any more", dmgSentences, 0);
-      assert("...grouped, rather than as one wall of sentences", b.groups > 5);
-
-      // Searching still narrows it.
-      await page.fill("#sym-search", "healed between");
-      await page.waitForTimeout(600);
-      const narrowed = await page.evaluate(() =>
-        document.querySelectorAll("#sym-results .sym-hit").length);
-      assert("typing narrows the list", narrowed > 0 && narrowed < b.options);
-
-      /* The sentences avoid naming the mechanic on purpose, which leaves several of
-         them reading as near-synonyms. The mechanics are named under each one. */
-      await page.fill("#sym-search", "friends were nearby");
-      await page.waitForTimeout(600);
-      const packTactics = await page.evaluate(() => {
-        const row = [...document.querySelectorAll("#sym-results .sym-row")]
-          .find(x => /friends were nearby/.test(x.textContent));
-        return row ? row.textContent : null;
-      });
-      assert("a symptom names the mechanic it looks for",
-        packTactics && /Pack Tactics/.test(packTactics));
-      assert("...after the player's own words, not instead of them",
-        packTactics && /friends were nearby/.test(packTactics));
-
-      assertEqual("no JavaScript errors", page.__errors, []);
-      await ctx.close();
-    }
-
-    /* ---------------------------------------------------------- */
-    section("the trait catalogue: a second way into the same module");
+    section("the trait catalogue is the way in");
     {
       const { ctx, page } = await fresh(browser);
 
-      /* Default is still the sentences. The trait list is the specialist path — most
-         parties never hear a trait's name — and making it the landing state would put
-         jargon in front of the people the ontology exists for. */
-      const start = await page.evaluate(() => ({
-        mode: document.querySelector(".mode-btn.on").dataset.symmode,
-        traitRows: document.querySelectorAll(".trait-row").length,
-        symRows: document.querySelectorAll("#sym-results .sym-hit").length,
-      }));
-      assertEqual("the sentences are what you land on", start.mode, "words");
-      assertEqual("...and no trait rows are showing", start.traitRows, 0);
-      assert("...and the sentence list is", start.symRows > 90);
-
-      await page.click('[data-symmode="traits"]');
-      await page.waitForTimeout(400);
+      /* It renders the whole catalogue before you type anything. A list you have to
+         guess your way into looks like a text box that does nothing — the failure the
+         sentence list had before it was made browsable, and the same fix applies. */
       const browsing = await page.evaluate(() => ({
         rows: document.querySelectorAll(".trait-row").length,
         groups: document.querySelectorAll("#sym-results .sym-group").length,
         glossed: [...document.querySelectorAll(".trait-row")]
           .filter(r => (r.querySelector(".trait-desc") || {}).textContent).length,
         outside: [...document.querySelectorAll(".trait-row")]
-          .filter(r => /./.test((r.querySelector(".trait-hit") || {}).textContent || "") &&
-                       !r.querySelector(".trait-hit .trait-desc")).length,
+          .filter(r => !r.querySelector(".trait-hit .trait-desc")).length,
+        legacy: document.querySelectorAll("#sym-results .sym-hit, .mode-btn").length,
       }));
-      assert("switching shows the whole catalogue", browsing.rows > 100);
+      assert("every trait is listed before you type anything", browsing.rows > 100);
       assert("...grouped by what the trait does", browsing.groups > 5);
       /* The gloss is the entire answer to "a trait list makes you know the jargon
          first". An entry without one is a bare name and defeats the feature. */
       assertEqual("every trait carries its description", browsing.glossed, browsing.rows);
       assertEqual("...beside the button, not inside it", browsing.outside, browsing.rows);
+      /* The sentence list and the switch between the two are gone: one list, no mode. */
+      assertEqual("there is no second list and no mode switch", browsing.legacy, 0);
 
       /* The search reads the descriptions, so the name is not a precondition. */
       await page.fill("#sym-search", "wounds closed");
@@ -427,6 +375,19 @@ async function main() {
         found.some(t => /^Regeneration$/i.test(t)));
       assert("...and the list narrowed to do it", found.length < browsing.rows);
 
+      /* One shared common word is not a match. Below the score floor this returned
+         five unrelated entries that each happened to share a word with the query. */
+      await page.fill("#sym-search", "zzzznothing at all");
+      await page.waitForTimeout(500);
+      const empty = await page.evaluate(() => ({
+        rows: document.querySelectorAll(".trait-row").length,
+        says: document.getElementById("sym-results").textContent,
+      }));
+      assertEqual("a query about nothing returns nothing", empty.rows, 0);
+      assert("...and says so, rather than looking broken", /no trait matches/i.test(empty.says));
+
+      await page.fill("#sym-search", "wounds closed");
+      await page.waitForTimeout(500);
       await page.evaluate(() => {
         const b = [...document.querySelectorAll(".trait-hit")]
           .find(x => /^Regeneration$/i.test(x.textContent.trim()));
@@ -444,33 +405,22 @@ async function main() {
       const ranked = await resultsText(page);
       assert("a named trait alone is enough evidence to rank",
         !/Nothing observed yet/i.test(ranked) && ranked.length > 40);
+      assert("...and the reasoning names the trait back",
+        /regeneration/i.test(ranked));
 
-      /* Both lists feed one chip strip, because they answer the same question and the
-         party should see everything it has said in one place. */
-      await page.click('[data-symmode="words"]');
-      await page.waitForTimeout(400);
-      const acrossModes = await page.evaluate(() => ({
-        mode: document.querySelector(".mode-btn.on").dataset.symmode,
-        chip: [...document.querySelectorAll("#sym-chosen .chip")].map(c => c.textContent.trim()),
-        query: document.getElementById("sym-search").value,
-      }));
-      assertEqual("switching back returns the sentences", acrossModes.mode, "words");
-      assert("the trait chip survives the switch",
-        acrossModes.chip.some(c => /Regeneration/.test(c)));
-      /* The two vocabularies do not overlap, so a carried-over query lands on an empty
-         state that reads as "this list has nothing in it". */
-      assertEqual("the search box is cleared on the way across", acrossModes.query, "");
-
-      // The chip removes what it names, from either mode.
+      // The chip removes what it names.
       await page.evaluate(() => {
         const c = [...document.querySelectorAll("#sym-chosen .chip")]
           .find(x => /Regeneration/.test(x.textContent));
         if (c) c.click();
       });
       await page.waitForTimeout(700);
-      const cleared = await page.evaluate(() =>
-        [...document.querySelectorAll("#sym-chosen .chip")].map(c => c.textContent.trim()));
-      assertEqual("the chip clears the trait it names", cleared, []);
+      const cleared = await page.evaluate(() => ({
+        chips: [...document.querySelectorAll("#sym-chosen .chip")].map(c => c.textContent.trim()),
+        on: document.querySelectorAll(".trait-hit.on").length,
+      }));
+      assertEqual("the chip clears the trait it names", cleared.chips, []);
+      assertEqual("...and the button in the list goes with it", cleared.on, 0);
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
@@ -500,7 +450,7 @@ async function main() {
     section("playtest feedback: named NPCs can be hidden");
     {
       const { ctx, page } = await fresh(browser);
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       const names = () => page.evaluate(() =>
         [...document.querySelectorAll("#results .result-name button")].map(x => x.textContent.trim()));
 
@@ -665,70 +615,46 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
-    section("playtest feedback: naming the mechanic directly");
+    section("evidence entered before the sentence list went still ranks");
     {
+      /* The sentence list and its per-mechanic sub-buttons were removed from the form,
+         but nothing behind them was: the ontology still tags the corpus, the scorer
+         still reads obs.symptoms and obs.mechanics, and a session saved while the list
+         existed must still rank and must still be removable. Written against storage
+         directly, since there is no longer a control that can produce this state. */
       const { ctx, page } = await fresh(browser);
-      /* A symptom is vague on purpose — the players never hear the name — but GMs do
-         say it out loud, and then the party knows something the sentence cannot
-         express. The parent and its mechanics are a select-all relationship. */
-      await page.fill("#sym-search", "specific spell had no effect");
+      /* Nothing is written to storage until something changes, so make a change first
+         and then edit what it wrote. Reaching into an empty key would silently test
+         nothing at all. */
+      await pickChip(page, "pick-type", "giant");
+      const seeded = await page.evaluate(() => {
+        const key = "monster-doxxer-session";
+        const d = JSON.parse(localStorage.getItem(key) || "null");
+        if (!d || !(d.tabs || []).length) return false;
+        d.tabs[0].obs.symptoms = ["it-healed-between-rounds"];
+        localStorage.setItem(key, JSON.stringify(d));
+        return true;
+      });
+      assert("the session could be seeded with an older version's evidence", seeded);
+      await page.reload();
+      await page.waitForFunction(READY, null, { timeout: 90000 });
+      await page.waitForTimeout(900);
+
+      const txt = await resultsText(page);
+      assert("a symptom saved by an older version still ranks",
+        !/nothing observed yet/i.test(txt) && /1\./.test(txt));
+      const chip = await page.$eval("#sym-chosen", el => el.textContent);
+      assert("...and is still shown, in the words it was chosen with",
+        /healed between rounds/i.test(chip));
+
+      await page.evaluate(() => {
+        const c = [...document.querySelectorAll("#sym-chosen .chip")]
+          .find(x => /healed between rounds/i.test(x.textContent));
+        if (c) c.click();
+      });
       await page.waitForTimeout(800);
-
-      // The search returns several rows; everything below is scoped to the one we mean.
-      const ROW = "One specific spell had no effect";
-      const inRow = body => page.evaluate(([label, b]) => {
-        const row = [...document.querySelectorAll("#sym-results .sym-row")]
-          .find(r => r.querySelector(".sym-hit").textContent.includes(label));
-        return row ? new Function("row", b)(row) : null;
-      }, [ROW, body]);
-
-      const subs = () => inRow(`return [...row.querySelectorAll(".sym-sub")]
-        .map(b => ({ text: b.textContent.trim(), on: b.classList.contains("on") }));`);
-      const parentOn = () => inRow(`const b = row.querySelector(".sym-hit");
-        return b.classList.contains("on") ? "all" : b.classList.contains("part") ? "some" : "none";`);
-      const clickIn = sel => page.evaluate(([label, t]) => {
-        const row = [...document.querySelectorAll("#sym-results .sym-row")]
-          .find(r => r.querySelector(".sym-hit").textContent.includes(label));
-        const el = t === ".sym-hit" ? row.querySelector(".sym-hit")
-          : [...row.querySelectorAll(".sym-sub")].find(b => new RegExp(t, "i").test(b.textContent));
-        el.click();
-      }, [ROW, sel]);
-
-      const before = await subs();
-      assertEqual("each mechanic under the sentence is its own button", before.length, 3);
-      assert("...named, so a GM's word can be matched to one",
-        before.some(b => /Antimagic Susceptibility/i.test(b.text)));
-      assert("...and none is selected yet", before.every(b => !b.on));
-
-      await clickIn(".sym-hit");
-      await page.waitForTimeout(900);
-      assertEqual("clicking the sentence selects all of its mechanics", await parentOn(), "all");
-      assert("...visibly, on the children too", (await subs()).every(b => b.on));
-
-      // Turning one child off narrows the claim; the parent goes half-selected.
-      await clickIn("Antimagic");
-      await page.waitForTimeout(900);
-      assertEqual("deselecting one mechanic leaves the sentence partly selected",
-        await parentOn(), "some");
-      assertEqual("...and exactly that one is off",
-        (await subs()).filter(b => !b.on).length, 1);
-      assert("the chip says which mechanics survived, since it is the only place you'd see it",
-        /Spell Immunity/i.test(await page.$eval("#sym-chosen", el => el.textContent)));
-
-      // Turning it back on widens it to the whole sentence again.
-      await clickIn("Antimagic");
-      await page.waitForTimeout(900);
-      assertEqual("selecting the last mechanic promotes it back to the whole sentence",
-        await parentOn(), "all");
-
-      /* THE POINT OF THE FEATURE: a narrowed claim ranks differently from the vague
-         one. Antimagic Susceptibility is the animated objects; Spell Immunity is the
-         Helmed Horror. The sentence alone cannot tell them apart. */
-      await clickIn("Spell Immunity");
-      await clickIn("immune to a named spell");
-      await page.waitForTimeout(1600);
-      assert("naming one mechanic ranks the creatures that have THAT one",
-        /flying sword|animated armor|rug of smothering/i.test(await resultsText(page)));
+      assertEqual("...and can still be taken back off",
+        await page.$eval("#sym-chosen", el => el.textContent.trim()), "");
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
@@ -853,7 +779,7 @@ async function main() {
          when one had earned it from a name and the other from three symptoms. */
       await page.fill("#in-name", "vampire");
       await page.waitForTimeout(500);
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       await pickChip(page, "pick-type", "Undead");
       await page.waitForTimeout(1600);
 
@@ -1158,7 +1084,7 @@ async function main() {
     section("clearing puts it back to the start");
     {
       const { ctx, page } = await fresh(browser);
-      await pickSymptom(page, "healed between", "It healed between rounds");
+      await pickTrait(page, "wounds closed", "Regeneration");
       const cleared = await page.evaluate(() => {
         const b = [...document.querySelectorAll("button")]
           .find(x => /^clear observations/i.test(x.textContent.trim()));
