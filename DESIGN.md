@@ -122,7 +122,7 @@ says "it has Regeneration", they say the wounds closed. It is still the highest-
 hand-curated asset in the project and it still indexes the whole corpus. But it is no
 longer how you enter an observation. The form asks for named traits instead.
 
-`src/traits.js` is a catalogue of 170 named traits grouped by function, each with a
+`src/traits.js` is a catalogue of 169 named traits in 18 functional groups, each with a
 one-line gloss of what the trait does.
 
 **The objection to a trait list is that it makes you know the jargon first**, which is the
@@ -144,7 +144,7 @@ without type          -4.3
 Symptoms was the larger of the two and is now unenterable, so the tool gives up the
 evidence a party has when it can describe what happened but cannot name it. That is the
 owner's call and it is recorded here rather than argued: naming traits on its own takes
-top-5 from 66.0% to 73.5% against a baseline with neither, so the form is not worse than
+top-5 from 66.0% to 73.3% against a baseline with neither, so the form is not worse than
 it was before either list existed — it is worse than it was with both.
 
 **Nothing behind the sentences was deleted.** The ontology still tags every monster at
@@ -154,7 +154,18 @@ generates and ablates them. A session saved while the list existed still ranks, 
 its symptoms as chips, and can still have them removed — there is a browser test for
 exactly that. Restoring the list is a revert, not a rebuild.
 
-**The index carries every trait name in the corpus, not just the catalogued 170.** 1,257
+**A wrong gloss is worse than no entry.** The gloss is the only thing a person reads
+before deciding, and it is what the search matches on, so an invented one sends people to
+the wrong trait and quietly poisons the index. Eighteen were wrong or loose in the first
+pass and were corrected against the corpus's own trait text: Disintegration is the
+creature crumbling on its OWN death, not something it did to us; Empowered Attacks is
+"counts as magical", not "hits harder"; Insanity is advantage on a save, not immunity;
+Psychic Defense is unarmoured AC and nothing psychic. Three of those errors had put the
+trait in the wrong group. One entry — Primal Bond, which is a ranger's beast-companion
+bookkeeping note — was dropped outright, since nothing about it is observable from the
+outside; it stays indexed like every other name. Check new entries against the real text.
+
+**The index carries every trait name in the corpus, not just the catalogued 169.** 1,257
 canonical names, so F1 prices each against its true frequency — Magic Resistance is 17% of
 the corpus and worth little, Labyrinthine Recall is twelve monsters and worth a great deal.
 Adding a catalogue entry therefore needs no reindexing.

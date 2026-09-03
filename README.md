@@ -37,11 +37,11 @@ in [`ontology/symptoms.json`](ontology/symptoms.json), each mapping to the set o
 could have produced it, with a likelihood on every edge because an observation almost never has
 one cause. It is the single most valuable thing in the project and it indexes the whole corpus.
 
-**But you enter observations by trait name.** 170 named traits in
+**But you enter observations by trait name.** 169 named traits in
 [`src/traits.js`](src/traits.js), grouped by what they do, each with a one-line description of
 the effect — and the search reads the descriptions as well as the names, so "wounds closed"
 finds Regeneration and "it grabbed me" finds Grappler. You never have to know the jargon to
-use it. Naming traits takes top-5 from 66.0% to 73.5%.
+use it. Naming traits takes top-5 from 66.0% to 73.3%.
 
 ## Using it
 
