@@ -140,10 +140,14 @@ the Armour Class exactly:
 
 > *"16, 8, 13, which hit?"* — *"16 hits, the rest miss."* → **AC is between 14 and 16.**
 
-The same two boxes appear for save DCs (saves you passed and failed) and hit points
-(damage it survived, damage that dropped it). Measured, this is worth **+7 points of top-1
-recall** over a remembered number — not because ranges are clever, but because dice don't
-lie and memory does.
+The same two boxes appear for save DCs (saves you passed and failed). Measured, this is
+worth **+7 points of top-1 recall** over a remembered number — not because ranges are
+clever, but because dice don't lie and memory does.
+
+Hit points work differently: one field for a running damage tally ("10,20,5"), and three
+buttons for how bad it looked afterward — **Alive**, **Bloodied**, **Dead**. "Bloodied" is
+5e's own term for at-or-below-half HP, which is enough on its own to bound a hidden
+maximum: bloodied at a tally of 30 means its HP is somewhere in (30, 60].
 
 It never becomes a filter. A monster outside the range is scored by how far outside, not
 removed: someone had bless up, the GM applied cover, a total went in the wrong box. And if

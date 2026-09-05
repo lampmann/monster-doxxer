@@ -78,7 +78,11 @@
        score.js — while the shape of the spellcasting is weighed in full. */
     spells: [], castingKind: [], castingAbility: "", castingClass: [],
     // The bounds the party's dice established.
-    acHit: "", acMiss: "", dcPass: "", dcFail: "", hpLived: "", hpDied: "" });
+    acHit: "", acMiss: "", dcPass: "", dcFail: "",
+    // A running tally of damage dealt so far, plus how bad it looked afterward —
+    // "" | "alive" | "bloodied" | "dead". Replaces the old two-box damage-survived /
+    // damage-that-dropped-it pair; see bloodiedBounds in ranges.js for why.
+    hpDamage: "", hpState: "" });
   const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     label: "", obs: blankObs(), retuned: false,
     // Which fight this creature was in, and how many of it there were. Both feed the
@@ -147,7 +151,7 @@
      point — a mistyped total is visible before it silently moves the ranking. */
   const ROLL_FIELDS = { "in-ac-hit": "acHit", "in-ac-miss": "acMiss",
     "in-dc-pass": "dcPass", "in-dc-fail": "dcFail",
-    "in-hp-lived": "hpLived", "in-hp-died": "hpDied" };
+    "in-hp-total": "hpDamage" };
 
   const DAMAGE_TYPES = ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic",
     "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
@@ -418,7 +422,7 @@
     const cur = (t && t.fight) || "f1";
     const ids = [...new Set(fightIds().concat([cur]))].sort();
     sel.innerHTML = ids.map((f, i) =>
-      `<option value="${esc(f)}"${f === cur ? " selected" : ""}>Fight ${i + 1}</option>`).join("") +
+      `<option value="${esc(f)}"${f === cur ? " selected" : ""}>Encounter ${i + 1}</option>`).join("") +
       `<option value="__new">+ a separate fight</option>`;
   }
 
@@ -493,8 +497,8 @@
       group++;
       const n = fightCount(f);
       html += `<span class="tab-group">` +
-        `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this fight, ` +
-        `which is what sets the CR band">Fight ${group}</span>` +
+        `<span class="tab-group-label" title="${n} creature${n === 1 ? "" : "s"} in this encounter, ` +
+        `which is what sets the CR band">Encounter ${group}</span>` +
         run.map(btn).join("") +
         `</span>`;
     }
@@ -1247,7 +1251,7 @@
        stays visible as one instead of being quietly resolved at save time. */
     const ac = window.fromFields(S.obs.acHit, S.obs.acMiss);
     const dc = window.fromFields(S.obs.dcPass, S.obs.dcFail);
-    const hp = window.fromFields(S.obs.hpDied, S.obs.hpLived);   // died = upper, lived = lower
+    const hp = window.bloodiedBounds(S.obs.hpDamage, S.obs.hpState);
     if (ac) obs.acRange = ac;
     if (dc) obs.dcRange = dc;
     if (hp) obs.hpRange = hp;
@@ -1265,7 +1269,9 @@
     };
     show("ac-range-read", window.fromFields(S.obs.acHit, S.obs.acMiss), "Its AC");
     show("dc-range-read", window.fromFields(S.obs.dcPass, S.obs.dcFail), "The DC");
-    show("hp-range-read", window.fromFields(S.obs.hpDied, S.obs.hpLived), "Its hit points");
+    show("hp-range-read", window.bloodiedBounds(S.obs.hpDamage, S.obs.hpState), "Its hit points");
+    document.querySelectorAll("[data-hpstate]").forEach(b =>
+      b.classList.toggle("on", b.dataset.hpstate === S.obs.hpState));
   }
 
   /* "Those numbers fight like a CR N creature."
@@ -1286,7 +1292,7 @@
       return undefined;
     };
     const ac = point(window.fromFields(S.obs.acHit, S.obs.acMiss));
-    const hp = point(window.fromFields(S.obs.hpDied, S.obs.hpLived));
+    const hp = point(window.bloodiedBounds(S.obs.hpDamage, S.obs.hpState));
     const implied = S.numerics && (ac != null || hp != null)
       ? S.numerics.inferCr({ ac, hp })
       : null;
@@ -1723,6 +1729,14 @@
       // A size the user clicked is theirs; stop F11 overwriting it on the next keystroke.
       if (field === "size") { S.sizeFromProse = ""; applyProseSize(); }
       persist(); renderPickers(); renderResults(); renderSuggestions();
+      return;
+    }
+
+    const hpstate = t.closest("[data-hpstate]");
+    if (hpstate) {
+      const val = hpstate.dataset.hpstate;
+      S.obs.hpState = S.obs.hpState === val ? "" : val;   // clicking the chosen one clears it
+      persist(); renderRanges(); renderCrHint(); renderResults(); renderSuggestions();
       return;
     }
 

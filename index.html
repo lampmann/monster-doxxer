@@ -134,12 +134,18 @@
         </div>
 
         <div class="rollrow">
-          <span class="rolllabel">Damage <b>survived</b></span>
-          <input type="text" class="txt roll" id="in-hp-lived" autocomplete="off">
-          <span class="rolllabel">damage that <b>dropped</b> it</span>
-          <input type="text" class="txt roll" id="in-hp-died" autocomplete="off">
+          <span class="rolllabel">Damage <b>dealt</b> so far</span>
+          <input type="text" class="txt roll" id="in-hp-total" autocomplete="off">
+          <span class="hpstate-group">
+            <button type="button" class="hpstate-btn" data-hpstate="alive">Alive</button>
+            <button type="button" class="hpstate-btn" data-hpstate="bloodied">Bloodied</button>
+            <button type="button" class="hpstate-btn" data-hpstate="dead">Dead</button>
+          </span>
           <span class="hint" id="hp-range-read"></span>
         </div>
+        <span class="hint block">Please input damage in the format of &ldquo;x,y,z&rdquo;, after
+          applying vulnerabilities, resistances, and immunities. The system automatically
+          calculates the total damage dealt.</span>
 
         <span class="hint block">A natural 20 always hits and a natural 1 always misses,
           whatever the AC &mdash; so leave those out, or the bound will be wrong.</span>

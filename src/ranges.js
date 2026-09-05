@@ -6,17 +6,23 @@
    exactly (13, 16]. Nobody has to estimate anything, and the DM cannot have
    misremembered it, because the table watched it happen.
 
-   THE SAME SHAPE THREE TIMES, which is why this is one module and not three:
+   THE SAME SHAPE TWICE, which is why this is one module and not two:
 
      ARMOUR CLASS   an attack hits when the roll is at least the AC.
                     hit at 16  -> AC <= 16      miss at 13 -> AC > 13
      SAVE DC        a save succeeds when the roll is at least the DC.
                     passed on 18 -> DC <= 18    failed on 12 -> DC > 12
-     HIT POINTS     it drops when cumulative damage reaches its total.
-                    survived 40 -> HP > 40      died at 55 -> HP <= 55
 
-   In all three the successes give an INCLUSIVE upper bound and the failures give an
-   EXCLUSIVE lower bound, so `bounds()` is written once and used for all of them.
+   Successes give an INCLUSIVE upper bound and failures give an EXCLUSIVE lower bound,
+   so `bounds()` is written once and used for both.
+
+   HIT POINTS USED TO BE A THIRD COPY OF THIS SHAPE — "damage survived" and "damage
+   that dropped it" as two independent totals — and that was the wrong model. It
+   assumed two separate data points (a hit that didn't finish it, a hit that later
+   did), when what a party actually has is ONE running tally of damage dealt and ONE
+   fact about how it looked afterward. `bloodiedBounds` below replaces it: same (lo,
+   hi] output, built from a damage total and a life-state button instead of two boxes
+   of dice. See its own comment for the arithmetic.
 
    WHAT THIS IS NOT. It is not a filter. A monster outside the range is not removed,
    it is scored by how far outside it sits — see scoreNumerics. The bounds are only
@@ -162,6 +168,35 @@
     return bounds(s, f);
   }
 
+  /* HP FROM A DAMAGE TALLY AND HOW BADLY HURT IT LOOKED.
+
+     "Bloodied" is 5e's own word for at-or-below-half HP, which turns out to be the
+     cheapest possible bound on a hidden maximum: one running total of damage dealt,
+     plus which side of that line it's on.
+
+         still standing (not bloodied) -> HP > 2 * total   (took less than half its max)
+         bloodied, still up            -> total < HP <= 2 * total
+         dead                          -> HP <= total
+
+     Read the middle row against the 5e rule directly: bloodied means remaining HP is
+     at or below half of the max but above zero. remaining = max - total, so
+     0 < max - total <= max/2 rearranges to total < max <= 2*total — exactly the (lo,
+     hi] shape everything else here already uses, which is why distance()/inRange()/
+     describe() need no changes at all to score it.
+
+     No state ever produces a contradiction, unlike bounds()/spreadBounds() above: an
+     empty or non-positive total is refused outright (no evidence, not bad evidence),
+     and every valid state is self-consistent by construction — there is only one
+     number in play, not two independent ones that could disagree. */
+  function bloodiedBounds(damageText, state) {
+    const total = parseRolls(damageText).reduce((a, b) => a + b, 0);
+    if (total <= 0 || !state) return null;
+    if (state === "dead") return { lo: null, hi: total };
+    if (state === "bloodied") return { lo: total, hi: total * 2 };
+    if (state === "alive") return { lo: total * 2, hi: null };
+    return null;
+  }
+
   /* NAMESPACED ON PURPOSE. These land on `window` in the browser, flattened alongside
      every other module's exports, so a name like `describe` or `width` is a collision
      waiting to happen — `describe` already clashed with appearance.js's, and whichever
@@ -175,6 +210,7 @@
     rangeWidth: width,
     describeRange: describe,
     spreadBounds,
+    bloodiedBounds,
     fromFields,
   };
 });

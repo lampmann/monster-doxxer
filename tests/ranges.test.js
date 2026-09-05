@@ -98,7 +98,7 @@ section("impossible input is reported, never reconciled");
     touching.contradiction, true);
 }
 
-section("the same maths for saves and hit points");
+section("the same maths for saving throws");
 {
   // "What's the DC?" / "I'll only tell you if you pass or fail." Rolled 18, passed.
   const dc = R.rollBounds([18], []);
@@ -110,13 +110,45 @@ section("the same maths for saves and hit points");
   assertEqual("a failed save floors it", dc2.lo, 12);
   assertEqual("DC 12 itself is excluded — you would have passed", R.inRange(12, dc2), false);
   assertEqual("DC 13 is the lowest it can be", R.inRange(13, dc2), true);
+}
 
-  // "still standing after 40" / "dropped at 55"
-  const hp = R.rollBounds([55], [40]);
-  assertEqual("surviving damage floors the hit points", hp.lo, 40);
-  assertEqual("dying caps them", hp.hi, 55);
-  assertEqual("exactly 55 hp is consistent with dropping at 55", R.inRange(55, hp), true);
-  assertEqual("40 is not — it was still standing", R.inRange(40, hp), false);
+section("hit points, from a damage tally and how it looked (bloodiedBounds)");
+{
+  // Dead at a running total of 30: HP was at most 30.
+  const dead = R.bloodiedBounds("10, 20", "dead");
+  assertEqual("dead caps HP at the total dealt", dead.hi, 30);
+  assertEqual("no floor — it could have had exactly 1 hp left", dead.lo, null);
+  assertEqual("HP 30 is consistent with dying at 30", R.inRange(30, dead), true);
+  assertEqual("HP 31 is not — that shouldn't have dropped it", R.inRange(31, dead), false);
+
+  // Bloodied at 30 total: half its max is at most 30, and it still has at least 1 hp,
+  // so its max is somewhere in (30, 60].
+  const bloodied = R.bloodiedBounds("30", "bloodied");
+  assertEqual("bloodied floors HP just above the total", bloodied.lo, 30);
+  assertEqual("...and caps it at double the total", bloodied.hi, 60);
+  assertEqual("HP 60 is consistent with being exactly half-dead at 30", R.inRange(60, bloodied), true);
+  assertEqual("HP 30 is not — that would mean it's dead, not bloodied", R.inRange(30, bloodied), false);
+  assertEqual("HP 61 is not — bloodied means at HALF or below", R.inRange(61, bloodied), false);
+
+  // Still standing (not bloodied) at 15 total: more than half its max is still above 15.
+  const alive = R.bloodiedBounds("15", "alive");
+  assertEqual("still standing floors HP above double the total", alive.lo, 30);
+  assertEqual("no cap — it could be nearly untouched", alive.hi, null);
+  assertEqual("HP 31 fits — more than half its max is left", R.inRange(31, alive), true);
+  assertEqual("HP 30 does not — that's exactly half, i.e. bloodied", R.inRange(30, alive), false);
+
+  // Commas, spaces, or both — same tolerant parsing as every other roll box — and the
+  // three numbers SUM rather than bound each other, since this is one running tally,
+  // not independent hit/miss data points.
+  assertEqual("commas and spaces both work, and the totals sum",
+    R.bloodiedBounds("10,20 5", "dead").hi, 35);
+
+  assertEqual("an empty box is no evidence, not a claim of zero damage",
+    R.bloodiedBounds("", "dead"), null);
+  assertEqual("a total with no state selected is no evidence either",
+    R.bloodiedBounds("30", ""), null);
+  assertEqual("junk with no numbers in it is no evidence",
+    R.bloodiedBounds("no idea", "alive"), null);
 }
 
 section("straight from two text boxes");

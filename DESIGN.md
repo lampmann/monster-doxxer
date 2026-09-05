@@ -769,17 +769,32 @@ The party does not know the Armour Class and never will. But they know exactly w
 they rolled and exactly which rolls landed, and that pins AC to **(13, 16]** — no
 estimating, no remembering, and nothing the GM can fudge after the fact.
 
-`src/ranges.js` exists because the same shape shows up three times:
+`src/ranges.js` exists because the same shape shows up twice:
 
 | Evidence | Bound |
 |---|---|
 | hit at 16, missed at 13 | AC ∈ (13, 16] |
 | passed a save on 18, failed on 12 | DC ∈ (12, 18] |
-| survived 40 damage, dropped at 55 | HP ∈ (40, 55] |
 
 Successes give an **inclusive upper** bound, failures an **exclusive lower** one, every
-time. One function, three uses, and the off-by-one that would otherwise be invisible is
+time. One function, both uses, and the off-by-one that would otherwise be invisible is
 pinned by tests at every boundary.
+
+**HP used to be a third copy of this shape and no longer is.** "Damage survived" and
+"damage that dropped it" as two independent totals assumed two separate data points — a
+hit that didn't finish it, a later hit that did — and that isn't what a party actually
+tracks mid-fight. What they have is one running tally of damage dealt and one fact about
+how bad it looks. `bloodiedBounds(damageText, state)` reads it off "bloodied," which 5e
+already defines as at-or-below-half HP:
+
+```
+still standing (not bloodied)   HP > 2 × total
+bloodied, still up               total < HP ≤ 2 × total
+dead                              HP ≤ total
+```
+
+Same (lo, hi] output as everything else, so `distance`/`inRange`/`describe` needed no
+changes to score it — only the derivation changed, not the shape.
 
 ### It is measured, and it is worth a lot
 

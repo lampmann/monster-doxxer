@@ -879,7 +879,7 @@ async function main() {
         })));
       assertEqual("...and the tab strip now shows two fights", groups.length, 2);
       assertEqual("with the monsters split between them", groups.map(g => g.tabs), [2, 1]);
-      assert("each group is labelled", groups.every(g => /Fight \d/.test(g.label || "")));
+      assert("each group is labelled", groups.every(g => /Encounter \d/.test(g.label || "")));
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
@@ -1067,6 +1067,48 @@ async function main() {
         [...document.querySelectorAll("#results .result")].slice(0, 10)
           .map(r => (r.querySelector(".result-name") || {}).textContent || ""));
       assert("nothing too slow to have crossed 60 feet leads the list", leaders.length > 0);
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("hit points: a damage tally and a life-state button, not two rolls");
+    {
+      const { ctx, page } = await fresh(browser);
+
+      const btn = state => `[data-hpstate="${state}"]`;
+      const onStates = () => page.evaluate(() =>
+        [...document.querySelectorAll("[data-hpstate].on")].map(b => b.dataset.hpstate));
+
+      await page.fill("#in-hp-total", "10,20");
+      await page.click(btn("bloodied"));
+      await page.waitForTimeout(700);
+      assert("bloodied at a running total of 30 bounds HP between half and double that",
+        /between 31 and 60/.test(await page.$eval("#hp-range-read", e => e.textContent)));
+      assertEqual("the bloodied button shows as chosen", await onStates(), ["bloodied"]);
+
+      // Mutually exclusive: picking a different state replaces it, never adds to it.
+      await page.click(btn("dead"));
+      await page.waitForTimeout(700);
+      assert("dead at the same total caps HP at the total instead",
+        /at most 30/.test(await page.$eval("#hp-range-read", e => e.textContent)));
+      assertEqual("only one state is ever on at a time", await onStates(), ["dead"]);
+
+      // Clicking the chosen state again clears it, same as every other single-select
+      // control in the form (Type, Size, the source filter's tri-state, ...).
+      await page.click(btn("dead"));
+      await page.waitForTimeout(700);
+      assertEqual("clicking it again deselects it", await onStates(), []);
+      assertEqual("...and the bound disappears with it",
+        await page.$eval("#hp-range-read", e => e.textContent.trim()), "");
+
+      // "Alive" (not bloodied) reads the other direction: a floor, not a cap.
+      await page.fill("#in-hp-total", "15");
+      await page.click(btn("alive"));
+      await page.waitForTimeout(700);
+      assert("still standing at 15 total means more than double that survived",
+        /at least 31/.test(await page.$eval("#hp-range-read", e => e.textContent)));
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
