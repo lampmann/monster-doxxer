@@ -240,15 +240,33 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
-    section("a confident match does name itself on the tab");
+    section("only a heard name or a manual rename labels the tab");
     {
+      /* Naming a tab used to also happen automatically, from whatever was currently
+         winning — so a single trait pick that happened to nail a rare monster (Reactive
+         Heads, which only a Hydra has) renamed the tab before the party had said
+         anything resembling a name. A tab is where you track what you don't yet know;
+         a tool-supplied guess sitting in that slot reads as confirmed fact. */
       const { ctx, page } = await fresh(browser);
-      await page.fill("#in-name", "owlbear");
+      const before = await tabsText(page);
+      assert("starts unnamed", /Monster 1/.test(before));
+
+      await pickTrait(page, "reactive heads", "Reactive Heads");
       await page.waitForTimeout(900);
       const txt = await resultsText(page);
-      assert("a heard name finds the creature", /owlbear/i.test(txt));
-      const tabs = await tabsText(page);
-      assert("...and the tab labels itself with the winner", /owlbear/i.test(tabs));
+      assert("the trait alone finds the creature", /hydra/i.test(txt));
+      const afterTrait = await tabsText(page);
+      assert("...but the tab does not rename itself off the back of it",
+        !/hydra/i.test(afterTrait) && /Monster 1/.test(afterTrait));
+
+      // The Name box still does — that is the one path left that counts as "a person said so".
+      await page.fill("#in-name", "owlbear");
+      await page.waitForTimeout(900);
+      const txt2 = await resultsText(page);
+      assert("a heard name finds the creature", /owlbear/i.test(txt2));
+      const afterName = await tabsText(page);
+      assert("...and the tab labels itself from it", /owlbear/i.test(afterName));
+
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
     }

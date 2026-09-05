@@ -80,7 +80,7 @@
     // The bounds the party's dice established.
     acHit: "", acMiss: "", dcPass: "", dcFail: "", hpLived: "", hpDied: "" });
   const blankTab = () => ({ id: "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    label: "", best: "", obs: blankObs(), retuned: false,
+    label: "", obs: blankObs(), retuned: false,
     // Which fight this creature was in, and how many of it there were. Both feed the
     // party-plausibility band: one ogre and one of eight ogres are very different CRs.
     fight: "f1", count: 1 });
@@ -422,14 +422,16 @@
       `<option value="__new">+ a separate fight</option>`;
   }
 
-  /* A tab shows what it is about without being named: whatever is currently winning.
-     Naming it yourself wins, because "Goblin" beside a tab you know is a disguised
-     doppelganger is worse than no label at all. */
+  /* A tab's label is something the PARTY said, never something the tool concluded. It used
+     to also fall back to the current top result — "whatever is winning" — which sounds
+     convenient and is exactly backwards: a tab is where you keep track of what you don't
+     yet know, and a tool-supplied guess sitting in that slot reads as confirmed fact the
+     moment it appears, long before the evidence supports it. One trait picked at random
+     was enough to rename a tab to a rare monster it barely resembled. So naming a tab is
+     now only ever something a person did: typed a name in the Name box, or renamed the
+     tab directly. */
   function tabLabel(t) {
     if (t.label) return t.label;
-    // `best` is remembered from the last time this tab was ranked, so a tab you are not
-    // looking at keeps showing what it resolved to instead of reverting to raw input.
-    if (t.best) return t.best;
     if (t.obs && t.obs.heardName) return t.obs.heardName;
     return "Monster " + (S.tabs.indexOf(t) + 1);
   }
@@ -1359,8 +1361,6 @@
 
     if (!window.hasEvidence(obs)) {
       S.ranked = [];
-      const empty = S.tabs.find(x => x.id === S.activeId);
-      if (empty) empty.best = "";
       box.innerHTML = `<span class="hint">Nothing observed yet. Start with what it did &mdash; ` +
         `that box is worth more than all the others together.</span>`;
       renderTabs();
@@ -1476,14 +1476,6 @@
       </div>`;
     }).join("");
 
-    /* Drawn here rather than in renderAll: a tab is labelled by whatever is currently
-       winning, so the label has to follow the ranking it reads — and doing it at the end
-       of the one function that re-ranks means every handler updates it for free. */
-    const cur = S.tabs.find(x => x.id === S.activeId);
-    /* A tab is labelled by whatever is winning, but a leader below the no-match floor is
-       not something to put a name to on a tab the user reads at a glance — it would be
-       the most confident-looking part of the screen making the least supported claim. */
-    if (cur) cur.best = conf === "ok" ? shown[0].name : "";
     renderTabs();
   }
 
