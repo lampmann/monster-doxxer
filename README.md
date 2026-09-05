@@ -49,18 +49,3 @@ If none of the launcher's auto-detected servers are available, any static file s
 **monster-doxxer:** just `git pull` lul
 
 **5e.tools data:** re-copy the new `bestiary/` folder over your existing `data/bestiary/`.
-
-## Hosting a public copy
-
-The app is static HTML/CSS/JS with no backend, so any static host works - GitHub Pages,
-Cloudflare Pages, Netlify, all free at this size. `.github/workflows/pages.yml` deploys the repo
-to GitHub Pages automatically on every push (one-time setup: **Settings -> Pages -> Source: GitHub
-Actions** on the repo, so the first workflow run has somewhere to deploy to).
-
-**What actually gets hosted is the empty shell.** `data/` is gitignored - nothing from the
-sourcebooks is ever in the repository, on purpose, so nothing from them is ever in the deploy
-either (see `DESIGN.md`, "What may be committed"). A visitor to the hosted page with no bestiary
-loaded gets a folder picker instead of a dead end: drop 5e.tools' `data` folder onto the page (or
-click through to a folder picker) and it loads from there, entirely in the browser. Nothing is
-uploaded anywhere - there's no server-side code to upload it *to* - so this works without ever
-putting WotC's content anywhere but the visitor's own machine.
