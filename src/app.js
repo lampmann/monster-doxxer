@@ -205,13 +205,10 @@
     const el = $("fatal");
     el.hidden = false;
     el.innerHTML =
-      `<p>No bestiary found. Put 5e.tools' data in <code>data/</code> and reload &mdash; see ` +
-      `<code>data/README.md</code> &mdash; or give it to the tool directly, right here. ` +
-      `(Nothing from the books is bundled with this tool, on purpose.)</p>` +
+      `<p>No bestiary found. Please upload the 5etools folder.</p>` +
       `<div id="data-drop" class="dropzone" tabindex="0">` +
       `Drop the folder here, or <button type="button" id="data-pick">choose a folder</button>` +
       `<input type="file" id="data-picker" webkitdirectory multiple hidden>` +
-      `<div class="hint">Stays in this browser tab. Nothing is uploaded.</div>` +
       `</div>` +
       `<div class="hint" id="data-drop-err"></div>`;
 
@@ -2173,6 +2170,14 @@
     const first = $("sym-results").querySelector("[data-trait]");
     if (first) first.click();
   });
+
+  /* Without this, a drop that lands even a pixel outside #data-drop falls through to
+     the browser's own handling of a dropped folder, which is to navigate the TAB to it
+     — a native directory listing instead of the app, which is what a drop is not
+     precisely on the small zone actually did. Blocking it document-wide makes the zone's
+     own listener the only thing that can ever act on a drop, wherever it lands. */
+  document.addEventListener("dragover", e => e.preventDefault());
+  document.addEventListener("drop", e => e.preventDefault());
 
   load().catch(err => fatal("Failed to load: " + esc(err.message)));
 })();
