@@ -1,5 +1,5 @@
 /* ============================================================
-   Monster Doxxer — the browser app.
+   monster doxxer — the browser app.
 
    Everything here is presentation and wiring. All the ranking lives in
    src/score.js and src/symptoms.js, which know nothing about the DOM and are

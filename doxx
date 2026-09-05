@@ -1,6 +1,6 @@
 #!/bin/sh
 # ============================================================
-#  Monster Doxxer launcher (macOS / Linux / Git Bash)
+#  monster doxxer launcher (macOS / Linux / Git Bash)
 #
 #      doxx          start (or reuse) the server, then open the tool
 #      doxx stop     stop the server on the port
@@ -48,7 +48,7 @@ open_browser() {
 case "${1:-start}" in
   help|-h|--help)
     cat <<EOF
-doxx — Monster Doxxer launcher
+doxx — monster doxxer launcher
 
   doxx          start the server (or reuse a running one) and open the tool
   doxx stop     stop the server on port $PORT

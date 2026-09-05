@@ -1,9 +1,9 @@
-# Monster Doxxer
+# monster doxxer
 
 You fought something. You don't know what it was. You know roughly how hard it was to hit, what
 bounced off it, how it moved, and that it did *something* the DM described but wouldn't name.
 
-Monster Doxxer takes those observations and ranks the D&D 5e (2014) bestiary by how well each
+monster doxxer takes those observations and ranks the D&D 5e (2014) bestiary by how well each
 monster explains them.
 
 **Status: early, but usable, and the numbers are measured.** The normalisation pipeline, the
@@ -69,7 +69,7 @@ To make `doxxer` work from anywhere, add the repo folder to your user `PATH` onc
 
 ```powershell
 [Environment]::SetEnvironmentVariable(
-  "Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\path\to\Monster-Doxxer", "User")
+  "Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\path\to\monster-doxxer", "User")
 ```
 
 Then open a **new** terminal — `PATH` is read at startup, so the window you ran that in

@@ -1,6 +1,6 @@
 @echo off
 rem ============================================================
-rem  Monster Doxxer - Windows launcher.
+rem  monster doxxer - Windows launcher.
 rem
 rem    doxxer            start the server (or reuse one) and open the tool
 rem    doxxer stop       stop the server
@@ -54,7 +54,7 @@ if errorlevel 1 (
 echo doxxer: serving %ROOT%
 rem A separate minimised window, so closing this prompt does not kill the server
 rem and `doxxer stop` has something to find.
-start "Monster Doxxer server" /MIN /D "%ROOT%" %SERVER_CMD%
+start "monster doxxer server" /MIN /D "%ROOT%" %SERVER_CMD%
 
 rem Wait for it rather than racing the browser to a socket that isn't listening.
 set /a tries=0
@@ -153,7 +153,7 @@ exit /b 1
 
 rem ---------------------------------------------------------- help
 :help
-echo Monster Doxxer - Windows launcher
+echo monster doxxer - Windows launcher
 echo.
 echo   doxxer          start the server ^(or reuse one^) and open the tool
 echo   doxxer stop     stop the server on port %PORT%
