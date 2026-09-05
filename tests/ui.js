@@ -168,7 +168,7 @@ async function main() {
       assert("the status line reports a corpus", /\d[\d,]* monsters/.test(status));
       assert("...and a symptom ontology", /\d+ symptoms/.test(status));
       assertEqual("nothing has been observed yet, and it says so",
-        /nothing observed yet/i.test(await resultsText(page)), true);
+        /no observations yet/i.test(await resultsText(page)), true);
       assertEqual("no JavaScript errors on load", page.__errors, []);
       await ctx.close();
     }
@@ -308,7 +308,7 @@ async function main() {
 
       const second = await resultsText(page);
       assert("the new tab starts empty rather than inheriting the first's evidence",
-        /nothing observed yet/i.test(second) || second !== first);
+        /no observations yet/i.test(second) || second !== first);
 
       // Back to the first tab: its evidence must still be there.
       await page.evaluate(() => {
@@ -420,7 +420,7 @@ async function main() {
 
       const ranked = await resultsText(page);
       assert("a named trait alone is enough evidence to rank",
-        !/Nothing observed yet/i.test(ranked) && ranked.length > 40);
+        !/No observations yet/i.test(ranked) && ranked.length > 40);
       assert("...and the reasoning names the trait back",
         /regeneration/i.test(ranked));
 
@@ -660,7 +660,7 @@ async function main() {
 
       const txt = await resultsText(page);
       assert("a symptom saved by an older version still ranks",
-        !/nothing observed yet/i.test(txt) && /1\./.test(txt));
+        !/no observations yet/i.test(txt) && /1\./.test(txt));
       const chip = await page.$eval("#sym-chosen", el => el.textContent);
       assert("...and is still shown, in the words it was chosen with",
         /healed between rounds/i.test(chip));
@@ -1194,7 +1194,7 @@ async function main() {
       await page.waitForTimeout(800);
       assertEqual("the clear control exists", cleared, true);
       assert("clearing empties the evidence",
-        /nothing observed yet/i.test(await resultsText(page)));
+        /no observations yet/i.test(await resultsText(page)));
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
     }

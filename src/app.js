@@ -1373,8 +1373,7 @@
 
     if (!window.hasEvidence(obs)) {
       S.ranked = [];
-      box.innerHTML = `<span class="hint">Nothing observed yet. Start with what it did &mdash; ` +
-        `that box is worth more than all the others together.</span>`;
+      box.innerHTML = `<span class="hint">No observations yet.</span>`;
       renderTabs();
       return;
     }
