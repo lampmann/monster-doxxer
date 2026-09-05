@@ -371,7 +371,6 @@
     S.retuned = !!t.retuned;
     S.sizeFromProse = "";
     S.selected = null;
-    $("in-retuned").checked = S.retuned;
     $("in-appearance").value = S.obs.appearance || "";
     $("in-name").value = S.obs.heardName || "";
     { const el = $("in-spell"); if (el) el.value = ""; }
@@ -1923,10 +1922,6 @@
       S.hideNamed = e.target.checked;
       persist(); renderResults(); renderSuggestions();
       return;
-    }
-    if (e.target.id === "in-retuned") {
-      S.retuned = e.target.checked;
-      persist(); renderResults(); renderSuggestions();
     }
   });
 
