@@ -1034,8 +1034,13 @@
        - a session saved while the list existed still carries its symptoms, and they
          still rank, still appear as chips, and can still be removed
 
-     What is gone is only the way to ADD one. These helpers are what the chip strip
-     needs to keep that promise; the list rendering itself is in git, one revert away.
+     "What to try next" used to be the one live path that could still ADD a symptom —
+     answering yes/no on a suggested one wrote straight into obs.symptoms. It now offers
+     trait-kind tests instead (see suggest()'s traits option in discriminate.js), so that
+     path is closed too. What remains is read-only: nothing left in the running app can
+     put a NEW symptom into an observation, only carry an old one forward. These helpers
+     are what the chip strip needs to keep that promise; the list rendering itself is in
+     git, one revert away.
      ============================================================ */
   const mechNames = s => (window.mechanicsOf ? window.mechanicsOf(s, 99).shown : []);
   const mechKeys = s => mechNames(s).map(m => window.mechanicKey(s.id, m));
@@ -1496,7 +1501,7 @@
     if (!S.ranked.length || !window.suggest) { mod.hidden = true; return; }
 
     const tests = window.suggest(S.ranked, {
-      ontology: S.ontology, observation: currentObservation(), limit: 3,
+      traits: window.TRAIT_ALL, observation: currentObservation(), limit: 3,
     });
     if (!tests.length) { mod.hidden = true; return; }
     mod.hidden = false;
@@ -1506,7 +1511,7 @@
       // reader translate between them.
       damage: DMG_STATES,
       condition: [["immune", "it was immune"], ["affected", "it worked"]],
-      symptom: [["yes", "yes, that happened"], ["no", "no"]],
+      trait: [["yes", "yes, it had that"], ["no", "no"]],
     };
 
     $("suggestions").innerHTML = tests.map((t, i) => {
@@ -1835,7 +1840,7 @@
       const next = window.applyAnswer(currentObservation(), test, ans.dataset.outcome);
       S.obs.damage = next.damage || S.obs.damage;
       S.obs.condImmune = next.condImmune || S.obs.condImmune;
-      S.obs.symptoms = next.symptoms || S.obs.symptoms;
+      S.obs.traits = next.traits || S.obs.traits;
       persist(); renderAll();
       return;
     }

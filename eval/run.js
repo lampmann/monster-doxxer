@@ -32,6 +32,7 @@ const S = require("../src/score.js");
 const D = require("../src/discriminate.js");
 const APP = require("../src/appearance.js");
 const NAMES = require("../src/names.js");
+const T = require("../src/traits.js");
 
 /* ---------- args ---------- */
 function parseArgs(argv) {
@@ -336,7 +337,7 @@ function suggestion(monsters, rarity, args) {
     if (!c) continue;
 
     const baseRanked = S.rank(monsters, c.obs, rarity, scoreOpts);
-    const menu = D.suggest(baseRanked, { ontology: args.ontology, observation: c.obs });
+    const menu = D.suggest(baseRanked, { traits: args.traits, observation: c.obs });
     if (!menu.length) { noAdvice++; continue; }
     gainSum += menu[0].gain;
 
@@ -378,6 +379,7 @@ function main() {
   args.numerics = S.buildNumerics(monsters);
   args.legacy = S.buildLegacy(monsters, sourceDates);
   args.ontology = ontology;
+  args.traits = T.TRAIT_ALL;
   args.volatileSymptoms = ontology.volatileIds;
   args.appearanceIndex = appearanceIndex;
   args.documents = documents;

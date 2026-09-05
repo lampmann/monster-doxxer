@@ -21,24 +21,21 @@ function mon(name, over) {
     name, source: "T", key: name + "|T",
     type: "undead", typeAlt: [], typeTags: [], size: ["medium"], speeds: { walk: 30 },
     senseTags: [], conditionImmune: [], traitTags: [], actionTags: [], damageTags: [],
-    resist: [], immune: [], vulnerable: [], symptoms: [],
+    resist: [], immune: [], vulnerable: [], traitNames: [],
   }, over);
 }
 // A result as rank() emits it, with the monster kept.
 const res = (m, score) => ({ key: m.key, name: m.name, source: m.source, score, monster: m });
 
-const ONTOLOGY = {
-  byId: {
-    "it-healed-between-rounds": { id: "it-healed-between-rounds", player: "It healed between rounds", testable: true },
-    "i-couldnt-move-at-all": { id: "i-couldnt-move-at-all", player: "I couldn't move or act at all", testable: true },
-    "it-came-back-later": { id: "it-came-back-later", player: "We killed it and it came back later", testable: false },
-  },
-  symptoms: [
-    { id: "it-healed-between-rounds", player: "It healed between rounds", testable: true },
-    { id: "i-couldnt-move-at-all", player: "I couldn't move or act at all", testable: true },
-    { id: "it-came-back-later", player: "We killed it and it came back later", testable: false },
-  ],
-};
+/* A stand-in for src/traits.js's TRAIT_ALL — every catalogued trait is a candidate
+   test, unlike the old symptom ontology, which needed a `testable` flag because some
+   symptoms describe things a party cannot watch for mid-fight (a rejuvenation that
+   takes three days). A trait is always something you can watch for, so there is
+   nothing to filter here. */
+const TRAITS = [
+  { key: "regeneration", name: "Regeneration", desc: "closed its own wounds every round" },
+  { key: "misty escape", name: "Misty Escape", desc: "turned to mist when badly hurt" },
+];
 
 /* Two candidates the evidence cannot separate, differing in exactly one testable way. */
 const WIGHT = mon("Wight", { immune: ["poison"], conditionImmune: ["poisoned"] });
@@ -66,7 +63,7 @@ section("F13 — information, measured");
 /* ---------- what gets suggested ---------- */
 section("F13 — a test that splits the field is suggested");
 {
-  const out = D.suggest(PAIR, { ontology: ONTOLOGY });
+  const out = D.suggest(PAIR, { traits: TRAITS });
   assert("there is something to suggest", out.length > 0);
 
   const radiant = out.find(t => t.kind === "damage" && t.value === "radiant");
@@ -83,61 +80,59 @@ section("F13 — a test that splits the field is suggested");
 section("F13 — a test that tells you nothing is never suggested");
 {
   // Neither has any interaction with cold, so hitting it with cold splits nothing.
-  const out = D.suggest(PAIR, { ontology: ONTOLOGY });
+  const out = D.suggest(PAIR, { traits: TRAITS });
   assert("a damage type both candidates answer the same way is absent",
     !out.some(t => t.kind === "damage" && t.value === "cold"));
   assert("every suggestion carries real information", out.every(t => t.gain > 0));
 
   const identical = [res(mon("A"), 0.5), res(mon("B"), 0.5)];
   assertEqual("two indistinguishable candidates yield no advice at all",
-    D.suggest(identical, { ontology: ONTOLOGY }).length, 0);
+    D.suggest(identical, { traits: TRAITS }).length, 0);
 }
 
 section("F13 — only tests a party can actually run");
 {
   const flyer = mon("Wyvern", { speeds: { walk: 20, fly: 80 }, senseTags: ["Darkvision"] });
   const walker = mon("Zombie", {});
-  const out = D.suggest([res(flyer, 0.7), res(walker, 0.7)], { ontology: ONTOLOGY });
+  const out = D.suggest([res(flyer, 0.7), res(walker, 0.7)], { traits: TRAITS });
 
   // A fly speed splits these perfectly and is useless advice: you cannot make it fly.
   assert("movement is never suggested, however well it would split the field",
     !out.some(t => t.kind === "movement" || /\bfly\b/i.test(t.label)));
   assert("neither are senses", !out.some(t => /darkvision|blindsight/i.test(t.label)));
   assert("every suggestion is one of the three kinds a party can perform",
-    out.every(t => ["damage", "condition", "symptom"].includes(t.kind)));
+    out.every(t => ["damage", "condition", "trait"].includes(t.kind)));
 }
 
-section("F13 — symptoms only when the ontology says they're testable");
+section("F13 — every catalogued trait is a candidate, none need a testable flag");
 {
-  const healer = mon("Troll", { symptoms: ["it-healed-between-rounds", "it-came-back-later"] });
+  const healer = mon("Troll", { traitNames: ["regeneration"] });
   const plain = mon("Ogre", {});
-  const out = D.suggest([res(healer, 0.7), res(plain, 0.7)], { ontology: ONTOLOGY });
+  const out = D.suggest([res(healer, 0.7), res(plain, 0.7)], { traits: TRAITS });
 
-  assert("a testable symptom is offered", out.some(t => t.kind === "symptom" && t.value === "it-healed-between-rounds"));
-  // You cannot check whether it rejuvenates in three days during a fight.
-  assert("an untestable one is not, however well it splits",
-    !out.some(t => t.kind === "symptom" && t.value === "it-came-back-later"));
-  const s = out.find(t => t.kind === "symptom");
-  assert("a first-person symptom is quoted rather than mangled into a clause",
-    /^Watch for: /.test(s.label));
+  assert("a trait that splits the pair is offered",
+    out.some(t => t.kind === "trait" && t.value === "regeneration"));
+  const t = out.find(x => x.kind === "trait");
+  assert("the label leads with the gloss, quoted, and names the trait after it",
+    /^Watch for: “closed its own wounds every round” \(Regeneration\)$/.test(t.label));
 }
 
 section("F13 — don't ask what the party already told you");
 {
-  const asked = { damage: { radiant: "vulnerable" }, symptoms: [], condImmune: [] };
-  const out = D.suggest(PAIR, { ontology: ONTOLOGY, observation: asked });
+  const asked = { damage: { radiant: "vulnerable" }, traits: [], condImmune: [] };
+  const out = D.suggest(PAIR, { traits: TRAITS, observation: asked });
   assert("a damage type already reported is not suggested again",
     !out.some(t => t.kind === "damage" && t.value === "radiant"));
 
-  const withSymptom = { symptoms: ["it-healed-between-rounds"], damage: {}, condImmune: [] };
-  const healer = mon("Troll", { symptoms: ["it-healed-between-rounds"] });
-  assert("nor is a symptom already reported",
-    !D.suggest([res(healer, 0.7), res(mon("Ogre"), 0.7)], { ontology: ONTOLOGY, observation: withSymptom })
-      .some(t => t.kind === "symptom" && t.value === "it-healed-between-rounds"));
+  const withTrait = { traits: ["regeneration"], damage: {}, condImmune: [] };
+  const healer = mon("Troll", { traitNames: ["regeneration"] });
+  assert("nor is a trait already reported",
+    !D.suggest([res(healer, 0.7), res(mon("Ogre"), 0.7)], { traits: TRAITS, observation: withTrait })
+      .some(t => t.kind === "trait" && t.value === "regeneration"));
 
-  const withCond = { condImmune: ["poisoned"], damage: {}, symptoms: [] };
+  const withCond = { condImmune: ["poisoned"], damage: {}, traits: [] };
   assert("nor a condition already reported",
-    !D.suggest(PAIR, { ontology: ONTOLOGY, observation: withCond })
+    !D.suggest(PAIR, { traits: TRAITS, observation: withCond })
       .some(t => t.kind === "condition" && t.value === "poisoned"));
 }
 
@@ -149,10 +144,10 @@ section("F13 — running the test and folding the answer back");
   assertEqual("...including 'nothing special happened'",
     D.answerFor({ kind: "damage", value: "fire" }, GHOUL), "normal");
   assertEqual("...for conditions", D.answerFor({ kind: "condition", value: "poisoned" }, WIGHT), "immune");
-  assertEqual("...and for symptoms",
-    D.answerFor({ kind: "symptom", value: "it-healed-between-rounds" }, mon("T", { symptoms: ["it-healed-between-rounds"] })), "yes");
+  assertEqual("...and for traits",
+    D.answerFor({ kind: "trait", value: "regeneration" }, mon("T", { traitNames: ["regeneration"] })), "yes");
 
-  const obs = { symptoms: [], condImmune: [], damage: {} };
+  const obs = { traits: [], condImmune: [], damage: {} };
   const after = D.applyAnswer(obs, { kind: "damage", value: "radiant" }, "vulnerable");
   assertEqual("a damage answer lands in the damage map", after.damage.radiant, "vulnerable");
   assertEqual("...without mutating what it was given", Object.keys(obs.damage).length, 0);
@@ -163,23 +158,23 @@ section("F13 — running the test and folding the answer back");
   assertEqual("...but 'it could be poisoned' is what most things do, and isn't evidence",
     notCond.condImmune, []);
 
-  const sym = D.applyAnswer(obs, { kind: "symptom", value: "it-healed-between-rounds" }, "yes");
-  assertEqual("a symptom seen is recorded", sym.symptoms, ["it-healed-between-rounds"]);
+  const trait = D.applyAnswer(obs, { kind: "trait", value: "regeneration" }, "yes");
+  assertEqual("a trait seen is recorded", trait.traits, ["regeneration"]);
   assertEqual("...and one that didn't happen is not asserted as absent",
-    D.applyAnswer(obs, { kind: "symptom", value: "it-healed-between-rounds" }, "no").symptoms, []);
+    D.applyAnswer(obs, { kind: "trait", value: "regeneration" }, "no").traits, []);
 }
 
 section("robustness");
 {
-  assertEqual("no candidates, no advice", D.suggest([], { ontology: ONTOLOGY }), []);
+  assertEqual("no candidates, no advice", D.suggest([], { traits: TRAITS }), []);
   assertEqual("one candidate needs no test to tell it from itself",
-    D.suggest([res(WIGHT, 0.9)], { ontology: ONTOLOGY }), []);
+    D.suggest([res(WIGHT, 0.9)], { traits: TRAITS }), []);
   assertEqual("results with no monster attached are skipped rather than crashing",
-    D.suggest([{ name: "X", score: 0.5 }, { name: "Y", score: 0.5 }], { ontology: ONTOLOGY }), []);
-  assert("a missing ontology only costs the symptom tests",
-    D.suggest(PAIR, {}).every(t => t.kind !== "symptom"));
+    D.suggest([{ name: "X", score: 0.5 }, { name: "Y", score: 0.5 }], { traits: TRAITS }), []);
+  assert("a missing trait list only costs the trait tests",
+    D.suggest(PAIR, {}).every(t => t.kind !== "trait"));
   assert("...and the damage tests still work", D.suggest(PAIR, {}).some(t => t.kind === "damage"));
-  assert("the limit is honoured", D.suggest(PAIR, { ontology: ONTOLOGY, limit: 2 }).length <= 2);
+  assert("the limit is honoured", D.suggest(PAIR, { traits: TRAITS, limit: 2 }).length <= 2);
 }
 
 report("discriminate");

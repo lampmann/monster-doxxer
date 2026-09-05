@@ -679,6 +679,46 @@ async function main() {
     }
 
     /* ---------------------------------------------------------- */
+    section("what to try next suggests a trait, and answering it becomes evidence");
+    {
+      const { ctx, page } = await fresh(browser);
+      await pickChip(page, "pick-type", "giant");
+      await page.waitForTimeout(900);
+
+      const hasModule = await page.evaluate(() =>
+        !document.getElementById("suggest-module").hidden);
+      assert("a broad type tie brings up What to try next", hasModule);
+
+      const suggLabel = () => page.evaluate(() => {
+        const hit = [...document.querySelectorAll(".sugg")]
+          .find(d => /^Watch for: /.test(d.querySelector(".sugg-label").textContent));
+        return hit ? hit.querySelector(".sugg-label").textContent : null;
+      });
+      const label = await suggLabel();
+      assert("one of the suggestions is a trait to watch for, not a symptom sentence",
+        !!label);
+      assert("the gloss comes quoted, the trait name after it in brackets",
+        label && /^Watch for: “[^”]+” \([^)]+\)/.test(label));
+
+      const clicked = await page.evaluate(() => {
+        const hit = [...document.querySelectorAll(".sugg")]
+          .find(d => /^Watch for: /.test(d.querySelector(".sugg-label").textContent));
+        const yes = hit && [...hit.querySelectorAll("[data-answer]")]
+          .find(b => b.dataset.outcome === "yes");
+        if (yes) { yes.click(); return true; }
+        return false;
+      });
+      assert("the suggestion has a yes/no answer to click", clicked);
+      await page.waitForTimeout(900);
+
+      const chip = await page.$eval("#sym-chosen", el => el.textContent.trim());
+      assert("answering yes records the trait as chosen evidence", chip.length > 0);
+
+      assertEqual("no JavaScript errors", page.__errors, []);
+      await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
     section("a set button keeps its colour under the cursor");
     {
       const { ctx, page } = await fresh(browser);

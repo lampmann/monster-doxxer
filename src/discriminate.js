@@ -28,8 +28,9 @@
 
      damage      hit it with a given type. Four outcomes, always available.
      condition   try to charm/frighten/poison it. Two outcomes.
-     symptom     watch for a specific observable, but only those the ontology
-                 marks `testable` — which is exactly why that flag exists.
+     trait       watch for a specific named trait from the catalogue in
+                 src/traits.js — every entry there is something a party can
+                 watch for, so none need a testable-style flag to filter them.
 
    ON THE PROBABILITIES. The scores are normalised evidence, not log-likelihoods,
    so turning them into a distribution is a judgement call. It is a small one: the
@@ -55,7 +56,7 @@
      gain. Anyone can swing a weapon; landing a specific condition needs the right spell
      and a failed save; watching for an observable costs nothing but may take a round to
      show. These are ordering nudges between near-equal tests, not scoring. */
-  const PRACTICALITY = { damage: 1.0, condition: 0.8, symptom: 0.85 };
+  const PRACTICALITY = { damage: 1.0, condition: 0.8, trait: 0.85 };
 
   const CONDITION_VERB = {
     charmed: "charm it", frightened: "frighten it", poisoned: "poison it",
@@ -93,12 +94,12 @@
   }
   const conditionOutcome = (m, cond) =>
     (m.conditionImmune || []).some(c => norm(c) === norm(cond)) ? "immune" : "affected";
-  const symptomOutcome = (m, id) => ((m.symptoms || []).includes(id) ? "yes" : "no");
+  const traitOutcome = (m, key) => ((m.traitNames || []).includes(key) ? "yes" : "no");
 
   function outcomeOf(test, m) {
     if (test.kind === "damage") return damageOutcome(m, test.value);
     if (test.kind === "condition") return conditionOutcome(m, test.value);
-    return symptomOutcome(m, test.value);
+    return traitOutcome(m, test.value);
   }
 
   /* ---------- phrasing ---------- */
@@ -112,16 +113,18 @@
     vulnerable: ["takes double", "take double"],
   };
   const CONDITION_PHRASE = { immune: ["can't be", "can't be"], affected: ["can be", "can be"] };
-  const SYMPTOM_PHRASE = { yes: ["would", "would"], no: ["wouldn't", "wouldn't"] };
+  const TRAIT_PHRASE = { yes: ["has it", "have it"], no: ["doesn't", "don't"] };
 
-  /* Symptoms are written in the player's voice and half of them are first person —
-     "I couldn't move or act at all". Bending those into "watch for whether i couldn't
-     move" produces garbage, so they are quoted verbatim instead of rewritten. */
-  function testLabel(test, ontology) {
+  /* The gloss, then the name — same order the trait catalogue itself uses, and for the
+     same reason: the gloss is the thing to actually watch for, the name is what to call
+     it once you've seen it. `traitIndex` is a key -> {name, desc} lookup; the caller
+     builds it once from src/traits.js's TRAIT_ALL rather than this file depending on
+     that module directly. */
+  function testLabel(test, traitIndex) {
     if (test.kind === "damage") return `Hit it with ${test.value} damage`;
     if (test.kind === "condition") return `Try to ${CONDITION_VERB[test.value] || "inflict " + test.value}`;
-    const s = ontology && ontology.byId && ontology.byId[test.value];
-    return s ? `Watch for: “${s.player}”` : `Watch for: ${test.value}`;
+    const t = traitIndex && traitIndex[test.value];
+    return t ? `Watch for: “${t.desc}” (${t.name})` : `Watch for: ${test.value}`;
   }
 
   /* The sentence the handoff asks for: name the test, then name the split it produces.
@@ -134,7 +137,7 @@
       return names.join(", ") + (rest > 0 ? ` and ${rest} other${rest === 1 ? "" : "s"}` : "");
     };
     const table = test.kind === "damage" ? DAMAGE_PHRASE
-      : test.kind === "condition" ? CONDITION_PHRASE : SYMPTOM_PHRASE;
+      : test.kind === "condition" ? CONDITION_PHRASE : TRAIT_PHRASE;
     const phrase = (o, n) => {
       const pair = table[o];
       return pair ? pair[n === 1 ? 0 : 1] : o;
@@ -148,18 +151,17 @@
 
   /* ---------- the search ---------- */
 
-  /* Every test worth considering, given who the candidates are. Damage types nobody
-     interacts with, and conditions nobody is immune to, are skipped before scoring:
-     they cannot split anything, and generating them only to discard them makes the
-     inner loop several times longer for no result. */
-  function candidateTests(monsters, ontology, opts) {
+  /* Every test worth considering in principle — damage types, conditions, and every
+     trait in the catalogue. Whether a given test can actually split the CURRENT
+     candidates (nobody interacts with this damage type, every candidate has this
+     trait, ...) is decided in suggest() below, once outcomes are computed; this
+     function doesn't know who the candidates are. */
+  function candidateTests(traits, opts) {
     const o = opts || {};
     const tests = [];
     DAMAGE_TYPES.forEach(v => tests.push({ kind: "damage", value: v }));
     CONDITIONS.forEach(v => tests.push({ kind: "condition", value: v }));
-    if (ontology && ontology.symptoms && o.includeSymptoms !== false) {
-      ontology.symptoms.forEach(s => { if (s.testable) tests.push({ kind: "symptom", value: s.id }); });
-    }
+    (traits || []).forEach(t => tests.push({ kind: "trait", value: t.key }));
     // Don't re-suggest something the party has already reported.
     const asked = o.asked || {};
     return tests.filter(t => !(asked[t.kind] && asked[t.kind][t.value]));
@@ -175,15 +177,19 @@
     const before = entropy(probs);
     if (before <= 0) return [];
 
-    const asked = { damage: {}, condition: {}, symptom: {} };
+    const asked = { damage: {}, condition: {}, trait: {} };
     if (o.observation) {
       Object.keys(o.observation.damage || {}).forEach(d => { asked.damage[norm(d)] = true; });
       (o.observation.condImmune || []).forEach(c => { asked.condition[norm(c)] = true; });
-      (o.observation.symptoms || []).forEach(s => { asked.symptom[s] = true; });
+      (o.observation.traits || []).forEach(t => { asked.trait[t] = true; });
     }
 
+    // key -> {name, desc}, for testLabel — built once per call rather than per test.
+    const traitIndex = Object.create(null);
+    (o.traits || []).forEach(t => { traitIndex[t.key] = t; });
+
     const out = [];
-    candidateTests(top.map(r => r.monster), o.ontology, { asked, includeSymptoms: o.includeSymptoms })
+    candidateTests(o.traits, { asked })
       .forEach(test => {
         const groups = Object.create(null);
         const mass = Object.create(null);
@@ -212,7 +218,7 @@
         out.push({
           kind: test.kind, value: test.value,
           gain, score: gain * practicality,
-          label: testLabel(test, o.ontology),
+          label: testLabel(test, traitIndex),
           split: describeSplit(test, groups),
           outcomes: outcomes.map(oc => ({ outcome: oc, count: groups[oc].length,
                                           names: groups[oc].map(r => r.name) })),
@@ -235,8 +241,8 @@
     } else if (test.kind === "condition") {
       // Only immunity is evidence; "it can be frightened" is what most things do.
       if (outcome === "immune") next.condImmune = (obs.condImmune || []).concat([test.value]);
-    } else if (outcome === "yes") {
-      next.symptoms = (obs.symptoms || []).concat([test.value]);
+    } else if (test.kind === "trait" && outcome === "yes") {
+      next.traits = (obs.traits || []).concat([test.value]);
     }
     return next;
   }
