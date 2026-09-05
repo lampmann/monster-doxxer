@@ -66,9 +66,9 @@
         known: !!meta,
       };
     });
-    // Commonest first inside each group: the Monster Manual should not be below an
-    // adventure that contributed two statblocks.
-    rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    // Alphabetical by title within each group — a filter of a hundred-odd sources is
+    // scanned by name, not by how many monsters happen to come from it.
+    rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
   }
 

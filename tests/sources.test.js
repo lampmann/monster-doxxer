@@ -40,8 +40,10 @@ section("F16 — one row per source actually present");
   const rows = SRC.sourceRows(CORPUS, CAT);
   assertEqual("only sources with monsters in them appear", rows.length, 5);
   assertEqual("...counted", rows.find(r => r.code === "MM").count, 3);
-  assertEqual("the commonest source comes first, so the Monster Manual outranks a one-monster adventure",
-    rows[0].code, "MM");
+  assertEqual("rows come out alphabetical by title, not by how many monsters each contributed",
+    rows.map(r => r.name), rows.map(r => r.name).slice().sort((a, b) => a.localeCompare(b)));
+  assertEqual("...so Curse of Strahd, alphabetically first, leads despite the Monster Manual's count",
+    rows[0].code, "CoS");
 
   const unknown = rows.find(r => r.code === "MYSTERY");
   assert("a source the catalogue doesn't know is still listed", !!unknown);

@@ -1173,11 +1173,8 @@
       const opts = g.rows.map(r => {
         const st = S.sources[r.code] || "ignore";
         const cls = st === "include" ? " inc" : st === "exclude" ? " exc" : "";
-        /* While searching, the code alone is useless — you searched by title, so the
-           title is what confirms the hit. */
-        const label = q && r.name !== r.code ? `${r.code} · ${r.name}` : r.code;
         return `<button class="fbtn${cls}" data-src="${esc(r.code)}" ` +
-               `title="${esc(r.name)} — ${r.count} monster${r.count === 1 ? "" : "s"}">${esc(label)}</button>`;
+               `title="${r.count} monster${r.count === 1 ? "" : "s"}">${esc(r.name)}</button>`;
       }).join("");
       return `<div class="fgroup"><div class="flabel">${esc(g.label)}</div>` +
              `<div class="fbody"><span class="fctrl">` +
