@@ -224,10 +224,8 @@ async function main() {
       await page.waitForTimeout(900);
 
       const txt = await resultsText(page);
-      assert("the tool says the books do not explain this well",
-        /explains this well|least bad matches/i.test(txt));
-      assert("...and blames the DM or the memory, not the party",
-        /built this one themselves|misremembered/i.test(txt));
+      assert("the tool says the match isn't confident",
+        /no confident match|weak match/i.test(txt));
       assert("the leads are still listed — rank, never filter", /1\./.test(txt));
       assert("...with their reasoning intact",
         await page.evaluate(() => !!document.querySelector("#results .why .for")));
@@ -402,7 +400,7 @@ async function main() {
         says: document.getElementById("sym-results").textContent,
       }));
       assertEqual("a query about nothing returns nothing", empty.rows, 0);
-      assert("...and says so, rather than looking broken", /no trait matches/i.test(empty.says));
+      assert("...and says so, rather than looking broken", /no matches/i.test(empty.says));
 
       await page.fill("#sym-search", "wounds closed");
       await page.waitForTimeout(500);
@@ -514,7 +512,7 @@ async function main() {
       await page.waitForTimeout(800);
       const bad = await page.$eval("#ac-range-read", e => e.textContent);
       const flagged = await page.$eval("#ac-range-read", e => e.className.includes("bad"));
-      assert("a contradiction says so", /can't both be true/.test(bad));
+      assert("a contradiction says so", /Contradiction detected/.test(bad));
       assertEqual("...and is styled as a problem, not a hint", flagged, true);
 
       assertEqual("no JavaScript errors", page.__errors, []);
@@ -555,7 +553,7 @@ async function main() {
       await page.fill('#atk-rows [data-field="count"]', "2");
       await page.waitForTimeout(900);
       const total = await page.$eval("#atk-total", el => el.textContent);
-      assert("the attack total is derived from the rows and shown back", /2 attack rolls/.test(total));
+      assert("the attack total is derived from the rows and shown back", /Total attack rolls per turn: 2/.test(total));
 
       // A save row is a different shape and gets different questions.
       await page.click("#sav-add");
@@ -615,13 +613,15 @@ async function main() {
         await page.$eval("#in-spell", el => el.value), "");
 
       /* THE POINT OF THE MODULE. GMs re-prepare spells constantly, so a spell the
-         statblock lacks is weak evidence against it — and the page has to SAY that,
-         or a user reading "against: cure wounds" concludes the tool ruled it out. */
+         statblock lacks is weak evidence against it, not proof. The "re-prepare"
+         gloss used to spell that out inline; it's since been dropped as generic,
+         uninformative boilerplate (DEFAULT_WHY) — the spell still shows up in the
+         "against" list, just without a reason attached. */
       await page.fill("#in-spell", "cure wounds");
       await page.waitForTimeout(1400);
       const withMiss = await resultsText(page);
-      assert("a spell the statblock lacks is shown as weak, with the reason why",
-        /re-prepare/i.test(withMiss));
+      assert("a spell the statblock lacks still shows up as evidence against it",
+        /cure wounds/i.test(withMiss));
 
       // How it cast is a different question, asked separately and weighed in full.
       const clicked = await pickChip(page, "pick-castingKind", "innate");
@@ -691,18 +691,18 @@ async function main() {
 
       const suggLabel = () => page.evaluate(() => {
         const hit = [...document.querySelectorAll(".sugg")]
-          .find(d => /^Watch for: /.test(d.querySelector(".sugg-label").textContent));
+          .find(d => /^Watch for /.test(d.querySelector(".sugg-label").textContent));
         return hit ? hit.querySelector(".sugg-label").textContent : null;
       });
       const label = await suggLabel();
       assert("one of the suggestions is a trait to watch for, not a symptom sentence",
         !!label);
       assert("the gloss comes quoted, the trait name after it in brackets",
-        label && /^Watch for: “[^”]+” \([^)]+\)/.test(label));
+        label && /^Watch for “[^”]+” \([^)]+\)/.test(label));
 
       const clicked = await page.evaluate(() => {
         const hit = [...document.querySelectorAll(".sugg")]
-          .find(d => /^Watch for: /.test(d.querySelector(".sugg-label").textContent));
+          .find(d => /^Watch for /.test(d.querySelector(".sugg-label").textContent));
         const yes = hit && [...hit.querySelectorAll("[data-answer]")]
           .find(b => b.dataset.outcome === "yes");
         if (yes) { yes.click(); return true; }
@@ -1084,7 +1084,7 @@ async function main() {
       await page.fill('#atk-rows [data-field="count"]', "2");
       await page.waitForTimeout(1400);
       const derived = await page.$eval("#atk-total", el => el.textContent);
-      assert("saying it attacked twice still reads as a routine", /2 attack rolls/.test(derived));
+      assert("saying it attacked twice still reads as a routine", /Total attack rolls per turn: 2/.test(derived));
 
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();

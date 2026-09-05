@@ -59,10 +59,10 @@
   const PRACTICALITY = { damage: 1.0, condition: 0.8, trait: 0.85 };
 
   const CONDITION_VERB = {
-    charmed: "charm it", frightened: "frighten it", poisoned: "poison it",
-    paralyzed: "paralyse it", petrified: "petrify it", stunned: "stun it",
-    grappled: "grapple it", restrained: "restrain it", prone: "knock it prone",
-    exhaustion: "exhaust it", blinded: "blind it", deafened: "deafen it",
+    charmed: "Charmed", frightened: "Frightened", poisoned: "Poisoned",
+    paralyzed: "Paralyzed", petrified: "Petrified", stunned: "Stunned",
+    grappled: "Grappled", restrained: "Restrained", prone: "Prone",
+    exhaustion: "Exhaustion", blinded: "Blinded", deafened: "Deafened",
   };
 
   /* ---------- the candidate set ---------- */
@@ -107,10 +107,10 @@
   /* Singular and plural, because "Baalzebul take half" is the kind of wrongness that
      makes a reader distrust the number next to it. */
   const DAMAGE_PHRASE = {
-    immune: ["shrugs it off entirely", "shrug it off entirely"],
-    resistant: ["takes half", "take half"],
+    immune: ["is immune", "are immune"],
+    resistant: ["is resistant", "are resistant"],
     normal: ["takes it normally", "take it normally"],
-    vulnerable: ["takes double", "take double"],
+    vulnerable: ["is vulnerable", "are vulnerable"],
   };
   const CONDITION_PHRASE = { immune: ["can't be", "can't be"], affected: ["can be", "can be"] };
   const TRAIT_PHRASE = { yes: ["has it", "have it"], no: ["doesn't", "don't"] };
@@ -121,10 +121,10 @@
      builds it once from src/traits.js's TRAIT_ALL rather than this file depending on
      that module directly. */
   function testLabel(test, traitIndex) {
-    if (test.kind === "damage") return `Hit it with ${test.value} damage`;
-    if (test.kind === "condition") return `Try to ${CONDITION_VERB[test.value] || "inflict " + test.value}`;
+    if (test.kind === "damage") return `Use ${test.value} damage`;
+    if (test.kind === "condition") return `Try to apply ${CONDITION_VERB[test.value] || test.value}`;
     const t = traitIndex && traitIndex[test.value];
-    return t ? `Watch for: “${t.desc}” (${t.name})` : `Watch for: ${test.value}`;
+    return t ? `Watch for “${t.desc}” (${t.name})` : `Watch for ${test.value}`;
   }
 
   /* The sentence the handoff asks for: name the test, then name the split it produces.

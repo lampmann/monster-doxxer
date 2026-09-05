@@ -71,7 +71,7 @@ section("F13 — a test that splits the field is suggested");
   assertClose("...and a clean two-way split of two tied candidates is worth a whole bit",
     radiant.gain, 1, 1e-9);
   assert("the suggestion names the split, not just the test", /Ghoul|Wight/.test(radiant.split));
-  assert("...and reads as an instruction", /^Hit it with radiant damage/.test(radiant.label));
+  assert("...and reads as an instruction", /^Use radiant damage/.test(radiant.label));
 
   assert("suggestions are ordered by what they are worth",
     out.every((t, i, a) => i === 0 || a[i - 1].score >= t.score));
@@ -114,7 +114,7 @@ section("F13 — every catalogued trait is a candidate, none need a testable fla
     out.some(t => t.kind === "trait" && t.value === "regeneration"));
   const t = out.find(x => x.kind === "trait");
   assert("the label leads with the gloss, quoted, and names the trait after it",
-    /^Watch for: “closed its own wounds every round” \(Regeneration\)$/.test(t.label));
+    /^Watch for “closed its own wounds every round” \(Regeneration\)$/.test(t.label));
 }
 
 section("F13 — don't ask what the party already told you");

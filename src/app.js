@@ -934,7 +934,7 @@
         `title="remove this ${verb}">&times;</button></div>`).join("");
     };
     draw("attacks", ATTACK_FIELDS, "attack");
-    draw("saves", SAVE_FIELDS, "save");
+    draw("saves", SAVE_FIELDS, "saving throw");
     renderAttackTotal();
   }
 
@@ -954,10 +954,10 @@
     if (filled.length && counts.length === filled.length) {
       const total = counts.reduce((a, b) => a + b, 0);
       el.textContent = total > 10
-        ? `That is ${total} attack rolls a turn — more than any statblock claims, so it is not being used.`
-        : `That is ${total} attack roll${total === 1 ? "" : "s"} a turn.`;
+        ? `Total attack rolls per turn: ${total}, ignored, as that is more attack rolls than any stat block.`
+        : `Total attack rolls per turn: ${total}.`;
     } else if (filled.length) {
-      el.textContent = "Say how many of each it made and the total becomes evidence too.";
+      el.textContent = "";
     } else {
       el.textContent = "";
     }
@@ -1102,9 +1102,7 @@
     const hits = window.searchTraits(q, 14);
     box.innerHTML = hits.length
       ? hits.map(traitRow).join("")
-      : `<span class="hint">No trait matches that. The box reads the descriptions too, so ` +
-        `try what you saw &mdash; &ldquo;wounds closed&rdquo;, &ldquo;it grabbed me&rdquo; &mdash; ` +
-        `or clear it to browse all ${window.TRAIT_ALL.length}.</span>`;
+      : `<span class="hint">No matches.</span>`;
   }
 
   function renderSymptoms() {
@@ -1148,7 +1146,7 @@
     const named = S.monsters.reduce((n, m) => n + (m.isNamed ? 1 : 0), 0);
     const el = $("named-count");
     if (el) el.textContent = named
-      ? ` \u2014 ${named} unique adventure NPCs, e.g. Acererak. Off by default: one of them really might be what you fought.`
+      ? ` (${named} unique adventure NPCs)`
       : "";
     /* NARROW THE LIST, NEVER THE FILTER. 107 sources is more than anyone scans, and
        "which button is Curse of Strahd" is a real question — but a search box over a
@@ -1302,7 +1300,7 @@
       ? S.numerics.inferCr({ ac, hp })
       : null;
     el.textContent = implied
-      ? `Those rolls fight like a CR ${implied.cr < 1 ? implied.cr.toFixed(2) : implied.cr.toFixed(1)} creature.`
+      ? `Rolls suggest a CR ${implied.cr < 1 ? implied.cr.toFixed(2) : implied.cr.toFixed(1)} creature.`
       : "";
   }
 
@@ -1316,9 +1314,13 @@
     }).join(", ") + "</div>";
   }
 
-  /* The reason that is merely the definition of "against". Anything else is worth the
-     room it takes. */
-  const DEFAULT_WHY = /^the statblock doesn't have this$/i;
+  /* The generic "why", for when there is nothing more specific to say — every flavour
+     of "this candidate just doesn't have it", whether or not that miss is discounted
+     for being a spell or a volatile trait underneath. Anything else score.js attaches
+     is worth the room it takes; these three are not, and are dropped at display time
+     rather than at the source, since score.js's own tests still check the reasoning
+     behind the discount even though nobody reads it on screen. */
+  const DEFAULT_WHY = /^(?:the statblock doesn't have this(?:, but DMs add it freely)?|not on its list, though DMs re-prepare spells constantly)$/i;
 
   /* Feature keys read like "symptom:it-healed-between-rounds" to the scorer. Nobody
      should have to read that, so F14's explanation is translated back into the same
@@ -1445,14 +1447,11 @@
        came closest. What changes is whether the tool presents it as an answer. */
     const conf = window.confidence(shown);
     if (conf === "none") {
-      notes.push("Nothing in your books explains this. These are the least bad matches, not answers.");
+      notes.push("No confident match.");
     } else if (conf === "low") {
-      notes.push("No monster in your books explains this well — the best match here is weaker " +
-        "than a real answer usually is. Your DM may have built this one themselves, or a " +
-        "detail may be misremembered. Treat the list as leads, not an identification.");
+      notes.push("Weak match.");
     } else if (explains.length <= 3 && ranked.length > explains.length) {
-      notes.push(`Only ${explains.length} monster${explains.length === 1 ? "" : "s"} explain${
-        explains.length === 1 ? "s" : ""} any of this; the rest are not shown.`);
+      notes.push(`Only ${explains.length} monster${explains.length === 1 ? "" : "s"} fit the observations.`);
     }
 
     const top = shown[0].score;
@@ -1460,8 +1459,7 @@
     if (tied > 1) {
       // Counted over the wider window, so "12" never means "12, and we stopped looking".
       const n = tied >= WINDOW ? `${WINDOW}+` : String(tied);
-      notes.push(`The top ${n} explain your observations equally well — the order between ` +
-        `them is a guess. One more observation would separate them.`);
+      notes.push(`The top ${n} explain your observations equally well.`);
     }
     const noteHtml = notes.length ? `<div class="hint block">${notes.map(esc).join(" ")}</div>` : "";
 
@@ -1609,9 +1607,7 @@
   function infoHtml(m) {
     const f = S.fluff && S.fluff[String(m.name).toLowerCase() + "|" + String(m.source || "").toLowerCase()];
     if (!f || !f.entries) {
-      return `<span class="hint">No description text for this one. About half the corpus has ` +
-             `none &mdash; it is the part of the books that is prose rather than rules, and ` +
-             `plenty of statblocks never got any.</span>`;
+      return `<span class="hint">No description.</span>`;
     }
     const tx = t => esc(window.stripTags ? window.stripTags(String(t)) : String(t));
 
@@ -1679,7 +1675,7 @@
       }
     };
     walk(f.entries);
-    return out.join("") || `<span class="hint">No description text for this one.</span>`;
+    return out.join("") || `<span class="hint">No description.</span>`;
   }
 
   function renderDetail() {
@@ -1901,8 +1897,7 @@
     const t = S.tabs.find(x => x.id === S.activeId);
     const n = fightCount((t && t.fight) || "f1");
     const b = window.band(S.party.level, S.party.size, n);
-    el.textContent = `${n} creature${n === 1 ? "" : "s"} in this fight — a DM building it would ` +
-      `be working around ${window.describeBand(b)}. Used only to order monsters the evidence ties.`;
+    el.textContent = `${n} creature${n === 1 ? "" : "s"} in this fight, which suggests ${window.describeBand(b)}.`;
   }
 
   document.addEventListener("change", e => {
@@ -1956,9 +1951,9 @@
     if (!S.obs.size || S.obs.size === S.sizeFromProse) {
       S.obs.size = read.size;
       S.sizeFromProse = read.size;
-      el.textContent = `Read as ${read.size} — from ${read.via}. Click a size to override.`;
+      el.textContent = `Size interpreted as ${read.size}, from ${read.via}. Choose a size from Creature to override.`;
     } else {
-      el.textContent = `That sounds ${read.size} (${read.via}), but you chose ${S.obs.size}.`;
+      el.textContent = "";
     }
   }
 
@@ -1989,12 +1984,12 @@
     if (!q || !S.nameIndex) { el.textContent = ""; return; }
     const hit = window.looksLikeName(q, S.nameIndex, 0.5);
     if (!hit) {
-      el.textContent = "No creature in your books goes by that. Left as a hint rather than an answer.";
+      el.textContent = "No matches.";
       return;
     }
     const read = hit.exact
-      ? `Matched \u201c${hit.name}\u201d exactly.`
-      : `Closest name is \u201c${hit.name}\u201d. Ranked accordingly, not filtered to it.`;
+      ? `Matches \u201c${hit.name}\u201d exactly.`
+      : `Closest match is \u201c${hit.name}\u201d.`;
 
     /* THE FAMILY, OFFERED RATHER THAN SCORED.
 
@@ -2017,7 +2012,7 @@
     const names = [...kin.keys()].map(k => (byKey.get(k) || {}).name).filter(Boolean);
 
     el.innerHTML = esc(read) + (names.length
-      ? `<div class="kin">Reads the same way: ` + names.map(n =>
+      ? `<div class="kin">Similar names: ` + names.map(n =>
           `<button class="kin-btn" data-kin="${esc(n)}">${esc(n)}</button>`).join("") + `</div>`
       : "");
   }

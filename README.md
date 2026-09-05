@@ -223,8 +223,8 @@ Everything works without the index; you just keep the lexical half only.
 Three or four observations usually leave a dozen monsters that explain them equally well. When that
 happens the tool says so, and then tells you the cheapest question that would tell them apart:
 
-> **Hit it with poison damage** — Wraith, Wight and 4 others shrug it off entirely; Vampire,
-> Vampire Spawn and 4 others take it normally.
+> **Use poison damage** — Wraith, Wight and 4 others are immune; Vampire, Vampire Spawn and
+> 4 others take it normally.
 
 Tap what happened and the list updates. It only ever suggests things you can actually do in a round
 — hit it with something, try to frighten it, watch for a specific tell. Measured against a control

@@ -936,7 +936,7 @@
       if (!entries.length) {
         out.misses.push({ facet: isSave ? "save" : "attack", value: rowLabel(row, isSave),
                           weight: -(+(probe.total * TUNING.missFactor).toFixed(3)),
-                          why: "this statblock has no actions to compare" });
+                          why: "no comparable actions" });
         out.credit -= probe.total * TUNING.missFactor;
         return;
       }
@@ -974,8 +974,8 @@
       } else {
         out.misses.push({ facet, value: label, weight: +net.toFixed(3),
                           why: action
-                            ? `the closest is ${action}, but ${best.missed.join(", ")} doesn't fit`
-                            : "nothing on this statblock does that" });
+                            ? `the closest is ${action}, but ${best.missed.join(", ")} doesn't match`
+                            : "no match" });
       }
     });
     return out;
@@ -1129,7 +1129,7 @@
           const penalty = w * cost * TUNING.damageCostFactor;
           raw -= penalty;
           against.push({ facet: "damage", value: `${t}: ${r}`, weight: -(+penalty.toFixed(3)),
-                         why: `the statblock says ${actual}` });
+                         why: `is ${actual}` });
         }
       });
     }

@@ -115,8 +115,7 @@
         return `Those can't all be one attack — ${range.spread} apart is more than a ` +
                `d20 can swing. Two different attacks, or a typo?`;
       }
-      return `Those can't both be true — something at ${range.lo} failed but ` +
-             `something at ${range.hi} succeeded. Different attackers, cover, or a typo?`;
+      return `Contradiction detected: ${range.lo} failed but ${range.hi} succeeded.`;
     }
     if (range.lo != null && range.hi != null) {
       const w = range.hi - range.lo;

@@ -622,9 +622,14 @@ them by what each possible test would reveal, and ranks tests by expected inform
 **Only tests a party can actually perform.** This constraint does real work. "Does it have a
 burrow speed" splits the field beautifully and is useless advice, because you cannot make a
 monster burrow. You *can* hit it with radiant damage, try to frighten it, or watch to see
-whether it heals — so the menu is damage types, condition immunities, and the symptoms the
-ontology marks `testable`. That flag was added speculatively when the ontology was written;
-this is what it was for.
+whether it has a given trait — so the menu is damage types, condition immunities, and every
+trait in `src/traits.js`'s catalogue. That third bucket used to be the symptom ontology's
+`testable` sentences; replaced with traits at the owner's direction once the trait catalogue
+existed, since a named trait is a stronger, more specific thing to watch for than the vaguer
+sentence it used to route through, and — unlike some symptoms — every catalogued trait really
+is something you can watch for mid-fight, so nothing needs a flag to filter it. Scoring is
+untouched: the ontology still tags every monster and the `symptom`/`mechanic` facets still
+count in the rarity table, this is only about what the suggestion engine proposes.
 
 The UI closes the loop in one tap: each suggestion carries its possible answers as buttons,
 so the party hits the thing, taps "no effect", and the ranking updates.
@@ -1140,10 +1145,11 @@ measure, and the one the CLIP experiment failed to close.
 
 ## Tabs, actually draggable
 
-A round of playtest fixes made the fight grouping *visible* — boxed, labelled "Fight N" —
-without giving it pmcrwf's actual mechanism for *setting* it. "pmcrwf-style tab-grouping
-doesn't seem to work" was a fair description of what shipped: the only way to move a tab
-between fights was still a dropdown several screens below the strip it affects.
+A round of playtest fixes made the fight grouping *visible* — boxed, labelled "Encounter N"
+(originally "Fight N," renamed later) — without giving it pmcrwf's actual mechanism for
+*setting* it. "pmcrwf-style tab-grouping doesn't seem to work" was a fair description of
+what shipped: the only way to move a tab between fights was still a dropdown several
+screens below the strip it affects.
 
 Ported directly from pmcrwf's character tabs (`/workspace/pmcrwf/src/characters.js`, read
 rather than reimplemented from memory):
