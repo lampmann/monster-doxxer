@@ -639,11 +639,15 @@ take the top suggestion, answer it from the true statblock, re-rank.
 
 ```
                           top-1    top-5   mean rank   tied at top
-no extra test             39.3%    65.6%        9.7          3.0
-+ arbitrary damage type   40.5%    66.0%        9.2          3.0
-+ any useful test         40.1%    66.8%        9.5          2.9
-+ F13's suggestion        42.1%    69.6%        9.0          2.7
+no extra test             42.8%    66.2%        9.2          2.8
++ arbitrary damage type   43.8%    66.8%        8.8          2.9
++ any useful test         44.6%    67.8%        8.8          2.8
++ F13's suggestion        46.1%    68.5%        8.5          2.7
 ```
+
+(Re-measured after the third test kind moved from the symptom ontology's testable
+sentences to the trait catalogue — see above. Mean information gain of the top
+suggestion: 1.08 bits.)
 
 Two things about that table are worth stating plainly. First, the control is not "nothing" —
 any extra evidence helps, and proving that would prove nothing about F13. The comparison that
