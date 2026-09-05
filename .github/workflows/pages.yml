@@ -1,0 +1,35 @@
+name: Deploy to GitHub Pages
+
+# Publishes the empty shell only. `data/` is gitignored (see DESIGN.md, "What may
+# be committed") and never exists in this checkout, so nothing from the sourcebooks
+# is ever part of this deploy — visitors provide their own copy of 5e.tools' data
+# in the browser, via the folder picker src/localdata.js adds when there's nothing
+# to fetch. See README.md, "Hosting a public copy".
+on:
+  push:
+    branches: [claude/monster-doxxer-dev-5psf8z]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -32,6 +32,7 @@
 const { spawn, execFileSync } = require("child_process");
 const fs = require("fs");
 const http = require("http");
+const os = require("os");
 const path = require("path");
 const { assert, assertEqual, section, report } = require("./harness.js");
 
@@ -95,6 +96,24 @@ function serve() {
     });
   });
   return new Promise(resolve => server.listen(PORT, "127.0.0.1", () => resolve(server)));
+}
+
+/* Same server, rooted somewhere else and on its own port — used once, below, to prove
+   the folder-picker path works when there is NO data/ for the server to serve at all
+   (the GitHub-Pages-with-no-bundled-data case). The main server above always has this
+   repo's real data/, so it can never exercise that path. */
+function serveAt(root, port) {
+  const server = http.createServer((req, res) => {
+    const rel = decodeURIComponent(req.url.split("?")[0]).replace(/^\/+/, "") || "index.html";
+    const full = path.join(root, rel);
+    if (!full.startsWith(root)) { res.writeHead(403).end(); return; }
+    fs.readFile(full, (err, buf) => {
+      if (err) { res.writeHead(404).end("not found"); return; }
+      res.writeHead(200, { "content-type": MIME[path.extname(full)] || "application/octet-stream" });
+      res.end(buf);
+    });
+  });
+  return new Promise(resolve => server.listen(port, "127.0.0.1", () => resolve(server)));
 }
 
 /* ---------- page helpers ---------- */
@@ -1197,6 +1216,67 @@ async function main() {
         /no observations yet/i.test(await resultsText(page)));
       assertEqual("no JavaScript errors", page.__errors, []);
       await ctx.close();
+    }
+
+    /* ---------------------------------------------------------- */
+    section("no data/ on the server: the folder picker loads a dropped copy instead");
+    {
+      /* A from-scratch copy of just the app's own files — no data/ — so the initial
+         fetch("data/bestiary/index.json") genuinely fails here, the way it would on a
+         public deploy that ships no sourcebook content. */
+      const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), "doxx-noapp-"));
+      fs.cpSync(path.join(ROOT, "index.html"), path.join(appRoot, "index.html"));
+      ["css", "src", "ontology"].forEach(rel =>
+        fs.cpSync(path.join(ROOT, rel), path.join(appRoot, rel), { recursive: true }));
+
+      /* A fabricated 5e.tools-shaped data folder, entirely separate from the real one —
+         this is what gets handed to the <input webkitdirectory>, standing in for a folder
+         the user actually dragged in. */
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "doxx-data-"));
+      fs.mkdirSync(path.join(dataDir, "bestiary"), { recursive: true });
+      fs.writeFileSync(path.join(dataDir, "bestiary", "index.json"),
+        JSON.stringify({ tm: "bestiary-tm.json" }));
+      fs.writeFileSync(path.join(dataDir, "bestiary", "bestiary-tm.json"), JSON.stringify({
+        monster: [{ name: "Test Manticore", source: "TM", type: "monstrosity",
+                    size: ["Large"], speeds: { walk: 30 } }],
+      }));
+
+      const port2 = PORT + 1;
+      const server2 = await serveAt(appRoot, port2);
+      const ctx = await browser.newContext({ viewport: { width: 1100, height: 950 } });
+      const page = await ctx.newPage();
+      page.__errors = [];
+      page.on("pageerror", e => page.__errors.push(String(e)));
+      page.on("console", m => {
+        const t = m.text();
+        if (m.type() === "error" && !/Failed to load resource/.test(t)) page.__errors.push(t);
+      });
+
+      try {
+        await page.goto(`http://127.0.0.1:${port2}/index.html`);
+        await page.waitForSelector("#data-drop", { timeout: 15000 });
+        assert("no data/ on the server shows the folder picker rather than a dead end",
+          await page.evaluate(() => !document.getElementById("fatal").hidden));
+
+        await page.setInputFiles("#data-picker", dataDir);
+        await page.waitForFunction(() => /\d+ monster/.test(
+          (document.getElementById("corpus-status") || {}).textContent || ""), null, { timeout: 15000 });
+
+        assert("the dropped folder's monster is picked up",
+          /1 monster/.test(await page.$eval("#corpus-status", el => el.textContent)));
+        assert("...and the picker is gone once it worked",
+          await page.evaluate(() => document.getElementById("fatal").hidden));
+
+        await page.fill("#in-name", "Test Manticore");
+        await page.waitForTimeout(900);
+        assert("it ranks like any other monster once loaded this way",
+          /test manticore/i.test(await resultsText(page)));
+
+        assertEqual("no JavaScript errors", page.__errors, []);
+      } finally {
+        await ctx.close();
+        server2.close();
+      }
     }
   } finally {
     await browser.close();

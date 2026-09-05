@@ -349,6 +349,13 @@ th, td { text-align: left; padding: 1px 4px; }
 .loading { font-size: .85rem; color: var(--muted-fg); }
 .error { border: 1px solid var(--danger-border); color: var(--danger); padding: .4rem .6rem; margin-bottom: .75rem; }
 
+/* ----- the data-folder picker (src/localdata.js), shown when there's no data/ to fetch ----- */
+.dropzone { border: 2px dashed var(--btn-border); border-radius: var(--radius); padding: .8rem;
+            text-align: center; cursor: pointer; }
+.dropzone.over { border-color: var(--link); background: var(--btn-bg); }
+.dropzone #data-pick { margin-left: .3rem; }
+#data-drop-err:not(:empty) { color: var(--danger); margin-top: .4rem; }
+
 /* ----- bounds from the dice (src/ranges.js) ----- */
 /* No border-top: with the remembered AC and HP fields gone this block is the first thing
    in the module, so its rule landed immediately under the heading's own and drew two

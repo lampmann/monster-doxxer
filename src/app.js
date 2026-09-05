@@ -107,6 +107,7 @@
        named NPC really can be what you fought. */
     hideNamed: false,
     ranked: [], selected: null,
+    dataFiles: null,          // Map<path, File> once a folder is dropped/picked; see loadFromFiles()
   };
 
   /* The picker vocabularies. Fixed lists rather than whatever the corpus happens to
@@ -178,13 +179,70 @@
     el.innerHTML = msg;
   }
 
+  /* Everything under "data/" is WotC's content and is never fetched from a path this
+     app controls when a folder has been dropped/picked instead — see localdata.js's
+     header for why that split exists. "ontology/..." and anything else outside "data/"
+     is this project's own and always comes from the server, folder or not. */
   async function getJson(path) {
+    if (S.dataFiles && path.indexOf("data/") === 0) {
+      const file = S.dataFiles.get(path.slice("data/".length));
+      if (!file) throw new Error(path + " -> not in the folder you provided");
+      return window.readJsonFile(file);
+    }
     const res = await fetch(path, { cache: "no-cache" });
     if (!res.ok) throw new Error(path + " -> HTTP " + res.status);
     return res.json();
   }
   // Optional files degrade to null rather than taking the app down with them.
   const getJsonOptional = path => getJson(path).catch(() => null);
+
+  /* THE PICKER/DROPZONE, shown only when there is no data/ to fetch — the hosted-with-
+     no-bundled-data case this app is built to support. Nothing dropped here is ever sent
+     anywhere: it is read with FileReader in this tab and never leaves the browser, which
+     is what makes hosting the empty shell publicly safe in the first place (see
+     DESIGN.md, "What may be committed"). */
+  function showDataPicker() {
+    const el = $("fatal");
+    el.hidden = false;
+    el.innerHTML =
+      `<p>No bestiary found. Put 5e.tools' data in <code>data/</code> and reload &mdash; see ` +
+      `<code>data/README.md</code> &mdash; or give it to the tool directly, right here. ` +
+      `(Nothing from the books is bundled with this tool, on purpose.)</p>` +
+      `<div id="data-drop" class="dropzone" tabindex="0">` +
+      `Drop the folder here, or <button type="button" id="data-pick">choose a folder</button>` +
+      `<input type="file" id="data-picker" webkitdirectory multiple hidden>` +
+      `<div class="hint">Stays in this browser tab. Nothing is uploaded.</div>` +
+      `</div>` +
+      `<div class="hint" id="data-drop-err"></div>`;
+
+    const zone = $("data-drop"), picker = $("data-picker"), err = $("data-drop-err");
+    const accept = async pairs => {
+      const files = window.buildFileIndex(pairs);
+      if (!files.get("bestiary/index.json")) {
+        err.textContent = "That doesn't look like 5e.tools' data folder " +
+          "— expected to find bestiary/index.json somewhere inside it.";
+        return;
+      }
+      S.dataFiles = files;
+      await load();
+    };
+
+    zone.addEventListener("click", () => picker.click());
+    zone.addEventListener("keydown", e => {
+      // Only for the zone itself — the button inside it already activates on Enter/Space
+      // natively, and that click bubbles up to the listener above.
+      if (e.target === zone && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); picker.click(); }
+    });
+    picker.addEventListener("change", () => accept(window.pairsFromFileList(picker.files)));
+    ["dragenter", "dragover"].forEach(t => zone.addEventListener(t, e => {
+      e.preventDefault(); zone.classList.add("over");
+    }));
+    ["dragleave", "drop"].forEach(t => zone.addEventListener(t, () => zone.classList.remove("over")));
+    zone.addEventListener("drop", async e => {
+      e.preventDefault();
+      accept(await window.pairsFromDataTransfer(e.dataTransfer));
+    });
+  }
 
   async function load() {
     const status = $("corpus-status");
@@ -193,10 +251,10 @@
       index = await getJson("data/bestiary/index.json");
     } catch (e) {
       status.textContent = "";
-      fatal('No bestiary found. Put 5e.tools\' data in <code>data/</code> — see ' +
-            '<code>data/README.md</code>. (Nothing from the books is bundled with this tool, on purpose.)');
+      showDataPicker();
       return;
     }
+    $("fatal").hidden = true;
 
     const files = Object.values(index);
     const lists = [];
