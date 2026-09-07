@@ -201,14 +201,20 @@
      anywhere: it is read with FileReader in this tab and never leaves the browser, which
      is what makes hosting the empty shell publicly safe in the first place (see
      DESIGN.md, "What may be committed"). */
-  function showDataPicker() {
+  function showDataPicker(remembered) {
     const el = $("fatal");
+    const fs = window.supportsFsAccess();
     el.hidden = false;
     el.innerHTML =
       `<p>No bestiary found. Please upload the 5etools folder.</p>` +
+      (remembered
+        ? `<p><button type="button" id="data-again" class="fctrl-btn">Reload &ldquo;${esc(remembered.name)}&rdquo;</button> ` +
+          `<span class="hint">the folder you used last time</span></p>`
+        : "") +
       `<div id="data-drop" class="dropzone" tabindex="0">` +
       `Drop the folder here, or <button type="button" id="data-pick">choose a folder</button>` +
       `<input type="file" id="data-picker" webkitdirectory multiple hidden>` +
+      (fs ? `<div class="hint">Chose it this way? It'll be remembered for next time.</div>` : "") +
       `</div>` +
       `<div class="hint" id="data-drop-err"></div>`;
 
@@ -218,17 +224,45 @@
       if (!files.get("bestiary/index.json")) {
         err.textContent = "That doesn't look like 5e.tools' data folder " +
           "— expected to find bestiary/index.json somewhere inside it.";
-        return;
+        return false;
       }
       S.dataFiles = files;
       await load();
+      return true;
     };
 
-    zone.addEventListener("click", () => picker.click());
+    /* The remembered folder, one click. Its permission has already been checked and come
+       back "prompt" for us to be here at all — see loadRemembered — so this asks for real,
+       which browsers only allow from inside a gesture like this click. */
+    if (remembered) {
+      $("data-again").addEventListener("click", async () => {
+        err.textContent = "";
+        if (await window.handlePermission(remembered, true) !== "granted") {
+          err.textContent = "That folder is no longer readable. Choose it again below.";
+          return;
+        }
+        if (!await accept(await window.pairsFromDirectoryHandle(remembered))) {
+          // Its contents changed out from under the handle; stop offering it.
+          await window.forgetHandle();
+        }
+      });
+    }
+
+    /* Prefer the File System Access picker where it exists, since only that one yields a
+       handle worth remembering. Everywhere else this is the plain directory input, which
+       reads the files once and forgets them. */
+    zone.addEventListener("click", async () => {
+      if (!fs) { picker.click(); return; }
+      let handle;
+      try { handle = await window.pickDirectory(); }
+      catch (abort) { return; }               // the user closed the dialog; not an error
+      if (!await accept(await window.pairsFromDirectoryHandle(handle))) return;
+      await window.storeHandle(handle);
+    });
     zone.addEventListener("keydown", e => {
       // Only for the zone itself — the button inside it already activates on Enter/Space
       // natively, and that click bubbles up to the listener above.
-      if (e.target === zone && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); picker.click(); }
+      if (e.target === zone && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); zone.click(); }
     });
     picker.addEventListener("change", () => accept(window.pairsFromFileList(picker.files)));
     ["dragenter", "dragover"].forEach(t => zone.addEventListener(t, e => {
@@ -241,15 +275,48 @@
     });
   }
 
+  /* The folder from last time, if there is one and it is still readable without asking.
+     Returns the handle when it could NOT be used silently, so showDataPicker can offer it
+     as a one-click reload; null when there is nothing to offer or it already loaded. */
+  async function loadRemembered() {
+    if (!window.supportsFsAccess()) return null;
+    const handle = await window.loadHandle();
+    if (!handle) return null;
+    if (await window.handlePermission(handle, false) !== "granted") return handle;
+    try {
+      const files = window.buildFileIndex(await window.pairsFromDirectoryHandle(handle));
+      if (!files.get("bestiary/index.json")) { await window.forgetHandle(); return null; }
+      S.dataFiles = files;
+      return null;
+    } catch (e) {
+      return handle;      // moved, renamed, unplugged — offer it, don't assert it works
+    }
+  }
+
   async function load() {
     const status = $("corpus-status");
     let index;
     try {
       index = await getJson("data/bestiary/index.json");
     } catch (e) {
-      status.textContent = "";
-      showDataPicker();
-      return;
+      /* Nothing to fetch. Before asking, see whether this browser already has the
+         folder from last time and can still read it without prompting. Retried once,
+         explicitly rather than by calling load() again, so a remembered folder that
+         somehow can't answer for its own index falls through to the picker instead of
+         recursing forever. */
+      let offer = null;
+      if (!S.dataFiles) {
+        status.textContent = "checking for a remembered folder…";
+        offer = await loadRemembered();
+      }
+      try {
+        if (!S.dataFiles) throw e;
+        index = await getJson("data/bestiary/index.json");
+      } catch (retryFailed) {
+        status.textContent = "";
+        showDataPicker(offer);
+        return;
+      }
     }
     $("fatal").hidden = true;
 

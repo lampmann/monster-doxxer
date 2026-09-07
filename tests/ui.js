@@ -1277,6 +1277,86 @@ async function main() {
         await ctx.close();
         server2.close();
       }
+
+      /* ---------------------------------------------------------- */
+      section("...and prefers the File System Access picker where the browser has one");
+      {
+        /* WHAT THIS CAN AND CANNOT PROVE. showDirectoryPicker() opens a native dialog no
+           automation can drive, so the API is stubbed with a directory handle backed by
+           the same fabricated files. That covers the route being taken at all and the
+           whole walk-and-load path behind it.
+
+           It cannot cover the remembering. A real FileSystemDirectoryHandle is
+           structured-cloneable and so survives in IndexedDB; a stub with methods on it is
+           not, and put() refuses it. So the reload half of this feature is verified by
+           hand in a real browser, not here — and what this test pins instead is that the
+           app still loads perfectly well when the handle CANNOT be stored, which is a
+           real case too (private windows, quota). */
+        const stub = ({ tree }) => {
+          const mkFile = (name, text) => ({
+            kind: "file", name,
+            getFile: async () => new File([text], name),
+          });
+          const mkDir = (name, children) => ({
+            kind: "directory", name,
+            queryPermission: async () => "granted",
+            requestPermission: async () => "granted",
+            async *entries() { for (const k of Object.keys(children)) yield [k, children[k]]; },
+          });
+          const build = (name, node) => typeof node === "string"
+            ? mkFile(name, node)
+            : mkDir(name, Object.fromEntries(Object.entries(node).map(([k, v]) => [k, build(k, v)])));
+          window.__pickCount = 0;
+          const handle = build("data", tree);
+          window.showDirectoryPicker = async () => { window.__pickCount++; return handle; };
+        };
+
+        const tree = {
+          bestiary: {
+            "index.json": JSON.stringify({ tm: "bestiary-tm.json" }),
+            "bestiary-tm.json": JSON.stringify({
+              monster: [{ name: "Test Manticore", source: "TM", type: "monstrosity",
+                          size: ["Large"], speeds: { walk: 30 } }],
+            }),
+          },
+        };
+
+        const server3 = await serveAt(appRoot, port2 + 1);
+        // One context for both visits, so IndexedDB carries over the way it would for a user.
+        const ctx2 = await browser.newContext({ viewport: { width: 1100, height: 950 } });
+        await ctx2.addInitScript(stub, { tree });
+        const page2 = await ctx2.newPage();
+        page2.__errors = [];
+        page2.on("pageerror", e => page2.__errors.push(String(e)));
+
+        try {
+          await page2.goto(`http://127.0.0.1:${port2 + 1}/index.html`);
+          await page2.waitForSelector("#data-drop", { timeout: 15000 });
+
+          // Clicking the zone goes through showDirectoryPicker where it exists.
+          await page2.click("#data-drop");
+          await page2.waitForFunction(() => /\d+ monster/.test(
+            (document.getElementById("corpus-status") || {}).textContent || ""), null, { timeout: 15000 });
+          assert("picking a folder through the File System Access API loads it",
+            /1 monster/.test(await page2.$eval("#corpus-status", el => el.textContent)));
+          assertEqual("...having opened the picker exactly once, not once per file",
+            await page2.evaluate(() => window.__pickCount), 1);
+          assert("...and the picker is gone once it worked",
+            await page2.evaluate(() => document.getElementById("fatal").hidden));
+
+          await page2.fill("#in-name", "Test Manticore");
+          await page2.waitForTimeout(900);
+          assert("what it loaded ranks like anything else",
+            /test manticore/i.test(await resultsText(page2)));
+
+          /* A handle that cannot be stored must not take the load down with it — the
+             same path a private window or a full quota takes. */
+          assertEqual("a handle IndexedDB refuses is survivable, not fatal", page2.__errors, []);
+        } finally {
+          await ctx2.close();
+          server3.close();
+        }
+      }
     }
   } finally {
     await browser.close();

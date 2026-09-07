@@ -98,5 +98,118 @@
     return lists.flat();
   }
 
-  return { normalizeRelPath, buildFileIndex, readJsonFile, pairsFromFileList, pairsFromDataTransfer };
+  /* ============================================================
+     POINTING AT THE FOLDER ONCE, via the File System Access API.
+
+     Everything above reads a one-off copy of the files: close the tab and the
+     next visit starts from nothing. A FileSystemDirectoryHandle is different —
+     it is structured-cloneable, so it can be kept in IndexedDB and the same
+     folder re-read on a later visit without the user navigating to it again.
+
+     TWO LIMITS, both of which is why this is an upgrade layered on top of the
+     drop zone rather than a replacement for it:
+
+       - showDirectoryPicker() is Chromium-only. Firefox and Safari have no
+         equivalent, so those browsers keep the drop zone and lose nothing they
+         had before. `supportsFsAccess()` is the one check the UI needs.
+       - The handle survives, but the PERMISSION usually does not: Chrome
+         re-prompts on a new browser session, and requestPermission() has to be
+         called from a user gesture. So a return visit is one click, not zero —
+         unless the user picked "allow on every visit", in which case
+         queryPermission() already says "granted" and it really is zero.
+     ============================================================ */
+
+  const supportsFsAccess = () => typeof globalThis.showDirectoryPicker === "function";
+
+  const pickDirectory = () => globalThis.showDirectoryPicker({ id: "doxx-data", mode: "read" });
+
+  /* The same {path, file} pairs the other two sources produce, walked out of a
+     directory handle. Sequential rather than parallel on purpose: a bestiary folder
+     is ~100 files, and firing a hundred concurrent getFile() calls at the picker's
+     permission layer is slower in practice than just reading them in order. */
+  async function pairsFromDirectoryHandle(handle, base) {
+    const prefix = base == null ? handle.name + "/" : base;
+    const out = [];
+    for await (const [name, entry] of handle.entries()) {
+      if (entry.kind === "file") out.push({ path: prefix + name, file: await entry.getFile() });
+      else if (entry.kind === "directory") {
+        out.push(...await pairsFromDirectoryHandle(entry, prefix + name + "/"));
+      }
+    }
+    return out;
+  }
+
+  /* 'granted' | 'prompt' | 'denied'. `request` asks for real, which browsers only
+     honour inside a user gesture — so the UI calls this with request:true from a
+     click handler and with request:false on load. */
+  async function handlePermission(handle, request) {
+    if (!handle || !handle.queryPermission) return "denied";
+    const opts = { mode: "read" };
+    const have = await handle.queryPermission(opts);
+    if (have === "granted" || !request) return have;
+    return handle.requestPermission(opts);
+  }
+
+  /* A one-key IndexedDB store, because localStorage cannot hold a handle — only
+     structured-cloneable values survive, and a handle is exactly that and nothing
+     a string can represent. Every call resolves rather than rejects: a browser with
+     IndexedDB disabled or in a private window should quietly fall back to the drop
+     zone, not throw on load. */
+  const DB_NAME = "doxx", STORE = "handles", KEY = "dataDir";
+
+  function idb() {
+    return new Promise(resolve => {
+      if (!globalThis.indexedDB) { resolve(null); return; }
+      let req;
+      try { req = indexedDB.open(DB_NAME, 1); } catch (e) { resolve(null); return; }
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  /* put() throws synchronously on anything the structured clone algorithm can't take,
+     and asynchronously on quota. Neither is worth failing a load over: not remembering
+     the folder is a smaller loss than not opening it, so this reports false and the app
+     carries on exactly as it did before handles existed. */
+  async function storeHandle(handle) {
+    const db = await idb();
+    if (!db) return false;
+    return new Promise(resolve => {
+      try {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).put(handle, KEY);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) { resolve(false); }
+    });
+  }
+
+  async function loadHandle() {
+    const db = await idb();
+    if (!db) return null;
+    return new Promise(resolve => {
+      try {
+        const req = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      } catch (e) { resolve(null); }
+    });
+  }
+
+  async function forgetHandle() {
+    const db = await idb();
+    if (!db) return;
+    await new Promise(resolve => {
+      try {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).delete(KEY);
+        tx.oncomplete = tx.onerror = () => resolve();
+      } catch (e) { resolve(); }
+    });
+  }
+
+  return { normalizeRelPath, buildFileIndex, readJsonFile, pairsFromFileList, pairsFromDataTransfer,
+           supportsFsAccess, pickDirectory, pairsFromDirectoryHandle, handlePermission,
+           storeHandle, loadHandle, forgetHandle };
 });

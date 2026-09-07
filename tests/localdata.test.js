@@ -59,13 +59,65 @@ section("pairsFromFileList — an <input webkitdirectory>'s FileList");
   assertEqual("a missing FileList is empty rather than an error", L.pairsFromFileList(undefined).length, 0);
 }
 
-/* readJsonFile is the one function here that's genuinely async (a real File's .text()
-   always is), so it's the one section that has to wait rather than assert inline. */
+/* A stand-in for a FileSystemDirectoryHandle: the async-iterable entries() and the
+   kind/getFile shape are the whole contract pairsFromDirectoryHandle relies on. */
+function dirHandle(name, children) {
+  return {
+    name, kind: "directory",
+    async *entries() { for (const [n, c] of Object.entries(children)) yield [n, c]; },
+  };
+}
+const fileHandle = text => ({ kind: "file", getFile: async () => file(text) });
+
+/* readJsonFile and the directory walk are the genuinely async parts (a real File's
+   .text() always is), so they wait rather than asserting inline. */
 async function main() {
   section("readJsonFile — the one thing a real File and this file's mocks both support");
   {
     const j = await L.readJsonFile(file('{"monster":[{"name":"Owlbear"}]}'));
     assertEqual("parses what .text() returns", j.monster[0].name, "Owlbear");
+  }
+
+  section("pairsFromDirectoryHandle — the same pairs, walked out of a remembered folder");
+  {
+    const tree = dirHandle("data", {
+      "books.json": fileHandle("[]"),
+      bestiary: dirHandle("bestiary", {
+        "index.json": fileHandle('{"mm":"bestiary-mm.json"}'),
+        "bestiary-mm.json": fileHandle('{"monster":[]}'),
+      }),
+    });
+
+    const pairs = await L.pairsFromDirectoryHandle(tree);
+    const idx = L.buildFileIndex(pairs);
+    assertEqual("every file in the tree is found, at any depth", idx.size, 3);
+    assert("...including the nested bestiary index", idx.has("bestiary/index.json"));
+    assert("...and a file at the top level", idx.has("books.json"));
+
+    /* The handle's own name leads the path, exactly as a dropped folder's does, so
+       normalizeRelPath strips it the same way and the loader can't tell them apart. */
+    assert("paths are keyed the same as the drag-and-drop and picker routes",
+      idx.has("bestiary/bestiary-mm.json"));
+
+    const empty = await L.pairsFromDirectoryHandle(dirHandle("data", {}));
+    assertEqual("an empty folder walks to nothing rather than throwing", empty.length, 0);
+  }
+
+  section("handlePermission — asks only when told to");
+  {
+    const granted = { queryPermission: async () => "granted", requestPermission: async () => "denied" };
+    assertEqual("an already-granted handle never reaches requestPermission",
+      await L.handlePermission(granted, true), "granted");
+
+    const asks = { queryPermission: async () => "prompt", requestPermission: async () => "granted" };
+    assertEqual("a handle needing permission reports 'prompt' when not asking",
+      await L.handlePermission(asks, false), "prompt");
+    assertEqual("...and asks for real when told to", await L.handlePermission(asks, true), "granted");
+
+    assertEqual("nothing to ask about is 'denied', not a crash",
+      await L.handlePermission(null, true), "denied");
+    assertEqual("...as is something that isn't a handle at all",
+      await L.handlePermission({}, true), "denied");
   }
 
   report("localdata");
