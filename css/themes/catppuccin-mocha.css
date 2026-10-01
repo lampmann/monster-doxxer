@@ -1,0 +1,34 @@
+/* Catppuccin Mocha
+   Palette: https://catppuccin.com/palette */
+:root {
+  --color-scheme: dark;
+  --bg: #1e1e2e;
+  --fg: #cdd6f4;
+  --muted-fg: #a6adc8;
+  --border: #585b70;
+  --border-soft: #45475a;
+  --border-hair: #313244;
+  --code-bg: #313244;
+  --link: #cba6f7;
+  --accent: var(--link);
+  --link-border: #cba6f7;
+  --danger: #f38ba8;
+  --danger-border: #f38ba8;
+  --btn-bg: #313244;
+  --btn-fg: #cdd6f4;
+  --btn-border: #45475a;
+  --tooltip-bg: #cdd6f4;
+  --tooltip-fg: #1e1e2e;
+  --menu-bg: #313244;
+  --menu-hover-bg: #45475a;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #292a3c;
+  --active-bg: #45475a;
+  --focus-ring: #cba6f7;
+  --select: #89b4fa;
+  --select-fg: #1e1e2e;
+  --exclude: #f38ba8;
+  --exclude-fg: #1e1e2e;
+  --ok: #a6e3a1;
+}

@@ -1,0 +1,34 @@
+/* Dracula Dark
+   Palette: https://draculatheme.com/spec */
+:root {
+  --color-scheme: dark;
+  --bg: #282a36;
+  --fg: #f8f8f2;
+  --muted-fg: #bd93f9;
+  --border: #6272a4;
+  --border-soft: #6272a4;
+  --border-hair: #343746;
+  --code-bg: #343746;
+  --link: #bd93f9;
+  --accent: var(--link);
+  --link-border: #bd93f9;
+  --danger: #ff5555;
+  --danger-border: #ff5555;
+  --btn-bg: #343746;
+  --btn-fg: #f8f8f2;
+  --btn-border: #6272a4;
+  --tooltip-bg: #f8f8f2;
+  --tooltip-fg: #282a36;
+  --menu-bg: #343746;
+  --menu-hover-bg: #282a36;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #282a36;
+  --active-bg: #343746;
+  --focus-ring: #bd93f9;
+  --select: #6ea8fe;
+  --select-fg: #1b1d26;
+  --exclude: #ff5555;
+  --exclude-fg: #1b1d26;
+  --ok: #50fa7b;
+}

@@ -1,0 +1,34 @@
+/* Kanagawa Wave
+   Palette: https://github.com/rebelot/kanagawa.nvim */
+:root {
+  --color-scheme: dark;
+  --bg: #1f1f28;
+  --fg: #dcd7ba;
+  --muted-fg: #c8c093;
+  --border: #54546d;
+  --border-soft: #363646;
+  --border-hair: #2a2a37;
+  --code-bg: #2a2a37;
+  --link: #957fb8;
+  --accent: var(--link);
+  --link-border: #957fb8;
+  --danger: #e46876;
+  --danger-border: #e46876;
+  --btn-bg: #2a2a37;
+  --btn-fg: #dcd7ba;
+  --btn-border: #363646;
+  --tooltip-bg: #dcd7ba;
+  --tooltip-fg: #1f1f28;
+  --menu-bg: #2a2a37;
+  --menu-hover-bg: #363646;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #262631;
+  --active-bg: #363646;
+  --focus-ring: #957fb8;
+  --select: #7e9cd8;
+  --select-fg: #1f1f28;
+  --exclude: #e46876;
+  --exclude-fg: #1f1f28;
+  --ok: #98bb6c;
+}

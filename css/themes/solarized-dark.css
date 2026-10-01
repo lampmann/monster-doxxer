@@ -1,0 +1,34 @@
+/* Solarized Dark
+   Palette: https://ethanschoonover.com/solarized/ */
+:root {
+  --color-scheme: dark;
+  --bg: #002b36;
+  --fg: #839496;
+  --muted-fg: #93a1a1;
+  --border: #586e75;
+  --border-soft: #586e75;
+  --border-hair: #073642;
+  --code-bg: #073642;
+  --link: #2aa198;
+  --accent: var(--link);
+  --link-border: #2aa198;
+  --danger: #dc322f;
+  --danger-border: #dc322f;
+  --btn-bg: #073642;
+  --btn-fg: #839496;
+  --btn-border: #586e75;
+  --tooltip-bg: #eee8d5;
+  --tooltip-fg: #002b36;
+  --menu-bg: #073642;
+  --menu-hover-bg: #002b36;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #002b36;
+  --active-bg: #073642;
+  --focus-ring: #2aa198;
+  --select: #268bd2;
+  --select-fg: #fdf6e3;
+  --exclude: #dc322f;
+  --exclude-fg: #fdf6e3;
+  --ok: #859900;
+}

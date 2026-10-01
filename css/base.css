@@ -13,6 +13,15 @@
 :root {
   --font-body: "Times New Roman", Times, serif;
   --font-mono: monospace;
+  --color-scheme: light;
+  --panel-bg: var(--bg);
+  --select: var(--link);
+  --select-fg: #fff;
+  --exclude: var(--danger);
+  --exclude-fg: #fff;
+  --ok: #1a7f37;
+  --placeholder: var(--muted-fg);
+  --visited-link: var(--link);
   --bg: #fff;
   --fg: #000;
   --muted-fg: #444;
@@ -27,12 +36,17 @@
   --btn-bg: #fff;
   --btn-fg: #000;
   --btn-border: #999;
-  --good: #1a7f37;
+  --good: var(--ok);
   --radius: 0px;
   --hover-bg: #ececec;
   --active-bg: #d6d6d6;
   --focus-ring: #1a56c4;
 }
+
+:root { color-scheme: var(--color-scheme); }
+a:visited { color: var(--visited-link); }
+input::placeholder { color: var(--placeholder); }
+.theme-picker { margin-left: .75rem; }
 
 * { box-sizing: border-box; }
 body { font-family: var(--font-body); margin: 1rem; line-height: 1.35; background: var(--bg); color: var(--fg); }
@@ -76,7 +90,7 @@ code { background: var(--code-bg); color: inherit; padding: 0 2px; font-family: 
   }
 }
 
-.module { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .75rem; margin-bottom: .75rem; background: var(--bg); }
+.module { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .75rem; margin-bottom: .75rem; background: var(--panel-bg); }
 .module > h2 { border-bottom: 1px solid var(--border-hair); padding-bottom: .2rem; }
 
 button { font: inherit; background: var(--btn-bg); color: var(--btn-fg); border: 1px solid var(--btn-border); border-radius: var(--radius); }
@@ -180,7 +194,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 /* ----- chips: the general on/off control ----- */
 .chip { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);
         padding: 0 5px; margin: 1px; font: inherit; font-size: .8rem; border-radius: var(--radius); }
-.chip.on { background: var(--link); color: #fff; border-color: var(--link-border); }
+.chip.on { background: var(--select); color: var(--select-fg); border-color: var(--link-border); }
 .chiprow { margin: .15rem 0; }
 
 /* The name's family: offered, never scored. Small, because it is a prompt rather than
@@ -200,7 +214,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 #sym-results .sym-hit:hover:not(.on):not(.part) { background: var(--hover-bg); }
 /* Selected, and half-selected. The dashed underline is the whole point of the middle
    state: it says the sentence is claimed but narrowed, which a plain highlight cannot. */
-#sym-results .sym-hit.on { background: var(--link); color: #fff; border-radius: var(--radius); }
+#sym-results .sym-hit.on { background: var(--select); color: var(--select-fg); border-radius: var(--radius); }
 #sym-results .sym-hit.part { background: var(--hover-bg); border-radius: var(--radius);
                              text-decoration: underline dashed var(--link); text-underline-offset: 2px; }
 /* The mechanics under a sentence, indented under it so the hierarchy reads without a
@@ -211,7 +225,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
            border: 1px solid var(--border-soft); border-radius: var(--radius);
            background: none; color: var(--muted-fg); }
 .sym-sub:hover { color: var(--btn-fg); border-color: var(--btn-border); }
-.sym-sub.on { background: var(--link); color: #fff; border-color: var(--link-border); }
+.sym-sub.on { background: var(--select); color: var(--select-fg); border-color: var(--link-border); }
 .chip-narrow { opacity: .8; font-size: .72rem; }
 .chip.part { background: var(--link); }
 /* Browsing all 111 needs more room than a search's dozen hits, and a heading per
@@ -227,7 +241,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
 .sym-chosen { margin-bottom: .3rem; }
 .sym-chosen .chip { display: inline-block; }
 .sym-chosen .chip::after { content: " \00d7"; color: var(--muted-fg); }
-.sym-chosen .chip.on::after { color: #fff; }
+.sym-chosen .chip.on::after { color: var(--select-fg); }
 
 /* ----- combat rows: one observed action per row -----
    Wraps rather than scrolls, because on a narrow window a row that scrolls sideways
@@ -259,8 +273,8 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--focus-ring)
              padding: 0 3px; margin-right: 2px; font-size: .72rem; border-radius: var(--radius); }
 .fbtn { border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg);
         padding: 0 5px; margin: 1px; font: inherit; font-size: .78rem; border-radius: var(--radius); }
-.fbtn.inc { background: var(--link); color: #fff; border-color: var(--link-border); }
-.fbtn.exc { background: var(--danger); color: #fff; border-color: var(--danger-border); }
+.fbtn.inc { background: var(--select); color: var(--select-fg); border-color: var(--link-border); }
+.fbtn.exc { background: var(--exclude); color: var(--exclude-fg); border-color: var(--danger-border); }
 
 /* ----- damage grid ----- */
 table { border-collapse: collapse; width: 100%; font-size: .9rem; }

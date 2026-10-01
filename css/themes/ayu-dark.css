@@ -1,0 +1,34 @@
+/* Ayu Dark
+   Palette: https://github.com/ayu-theme/ayu-colors */
+:root {
+  --color-scheme: dark;
+  --bg: #0d1017;
+  --fg: #bfbdb6;
+  --muted-fg: #8a9199;
+  --border: #3d424d;
+  --border-soft: #242936;
+  --border-hair: #131721;
+  --code-bg: #131721;
+  --link: #e6b450;
+  --accent: var(--link);
+  --link-border: #e6b450;
+  --danger: #f07178;
+  --danger-border: #f07178;
+  --btn-bg: #131721;
+  --btn-fg: #bfbdb6;
+  --btn-border: #242936;
+  --tooltip-bg: #bfbdb6;
+  --tooltip-fg: #0d1017;
+  --menu-bg: #131721;
+  --menu-hover-bg: #1c212b;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #11151c;
+  --active-bg: #1c212b;
+  --focus-ring: #e6b450;
+  --select: #59c2ff;
+  --select-fg: #0d1017;
+  --exclude: #f07178;
+  --exclude-fg: #0d1017;
+  --ok: #aad94c;
+}

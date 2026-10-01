@@ -1,0 +1,34 @@
+/* Nord
+   Palette: https://www.nordtheme.com/docs/colors-and-palettes */
+:root {
+  --color-scheme: dark;
+  --bg: #2e3440;
+  --fg: #eceff4;
+  --muted-fg: #81a1c1;
+  --border: #4c566a;
+  --border-soft: #434c5e;
+  --border-hair: #3b4252;
+  --code-bg: #3b4252;
+  --link: #88c0d0;
+  --accent: var(--link);
+  --link-border: #88c0d0;
+  --danger: #bf616a;
+  --danger-border: #bf616a;
+  --btn-bg: #3b4252;
+  --btn-fg: #eceff4;
+  --btn-border: #434c5e;
+  --tooltip-bg: #eceff4;
+  --tooltip-fg: #2e3440;
+  --menu-bg: #3b4252;
+  --menu-hover-bg: #434c5e;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #353c4a;
+  --active-bg: #434c5e;
+  --focus-ring: #88c0d0;
+  --select: #5e81ac;
+  --select-fg: #eceff4;
+  --exclude: #bf616a;
+  --exclude-fg: #eceff4;
+  --ok: #a3be8c;
+}

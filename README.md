@@ -3,8 +3,10 @@
 You fought something. You don't know what it was. You know roughly how hard it was to hit, what
 bounced off it, how it moved, and that it did *something* the DM described but wouldn't name.
 
-Monster Doxxer takes those observations and ranks the D&D 5e (2014) bestiary by how well each
+Monster Doxxer takes those observations and ranks the D&D 5e bestiary by how well each
 monster explains them.
+
+The **2024 content** checkbox in Sources includes the revised core books and later content. It is off by default; your choice is saved across reloads. Source exclusions still apply. The **Theme** picker includes all 31 pmcrwf theme choices and remembers your selection.
 
 **Status: early, but usable, and the numbers are measured.** The normalisation pipeline, the
 evidence scorer, the symptom ontology and the browser UI all exist and are tested, and an

@@ -190,7 +190,7 @@
 
      Only inherited values are dropped: a copy that declares its own srd or page keeps it. */
   const PUBLICATION_FIELDS = ["srd", "srd52", "basicRules", "basicRules2024",
-    "page", "otherSources", "additionalSources", "reprintedAs"];
+    "page", "otherSources", "additionalSources", "reprintedAs", "edition"];
 
   function resolveCopy(raw, index, depth) {
     if (!raw._copy) return raw;
@@ -440,6 +440,7 @@
     const everyEntry = [].concat(traits, actions, bonusActions, reactions, legendary);
     return {
       name: raw.name, source: raw.source || "", page: raw.page || null,
+      edition: raw.edition || "",
       key: raw.name + "|" + (raw.source || ""),
       size: asArray(raw.size).map(c => SIZES[c] || c),
       type: ty.type, typeAlt: ty.alt, typeTags: ty.tags,

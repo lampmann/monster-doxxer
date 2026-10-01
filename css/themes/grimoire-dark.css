@@ -1,0 +1,42 @@
+/* Grimoire Dark - an original pmcrwf theme.
+   The same spellbook read by candlelight: umber pages on a near-black desk, parchment-coloured ink,
+   lamplight amber for links and focus. Selected / excluded / valid keep their blue / red / green,
+   brightened to read on umber. */
+:root {
+  --color-scheme: dark;
+  --font-body: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --radius: 3px;
+  --bg: #211b15;
+  --fg: #efe4cf;
+  --muted-fg: #b8a58a;
+  --border: #5a4a37;
+  --border-soft: #4d3f30;
+  --border-hair: #2e261d;
+  --code-bg: #2c241c;
+  --link: #e0a458;
+  --accent: var(--link);
+  --link-border: #e0a458;
+  --danger: #e0674f;
+  --danger-border: #e0674f;
+  --btn-bg: #2c241c;
+  --btn-fg: #efe4cf;
+  --btn-border: #5a4a37;
+  --tooltip-bg: #efe4cf;
+  --tooltip-fg: #211b15;
+  --menu-bg: #2a221a;
+  --menu-hover-bg: #352b21;
+  --menu-shadow: rgba(0, 0, 0, .55);
+  --module-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .45);
+  --hover-bg: #2e261d;
+  --active-bg: #3a3025;
+  --focus-ring: #e0a458;
+  --select: #6f9fd8;
+  --select-fg: #16120e;
+  --exclude: #e0674f;
+  --exclude-fg: #16120e;
+  --ok: #8fbf5a;
+}
+body { background: #16120e; }
+.module { background: var(--bg); box-shadow: var(--module-shadow), inset 0 0 0 3px var(--bg), inset 0 0 0 4px var(--border-hair); }
+h2, legend, .modal-title { font-variant: small-caps; letter-spacing: .04em; }
+.toolbar strong { font-variant: small-caps; letter-spacing: .08em; font-size: 1.1rem; color: var(--link); }

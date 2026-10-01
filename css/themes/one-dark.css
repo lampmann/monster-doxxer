@@ -1,0 +1,34 @@
+/* One Dark
+   Palette: https://github.com/atom/atom/tree/master/packages/one-dark-syntax */
+:root {
+  --color-scheme: dark;
+  --bg: #282c34;
+  --fg: #abb2bf;
+  --muted-fg: #7f848e;
+  --border: #4b5263;
+  --border-soft: #3e4451;
+  --border-hair: #2c313a;
+  --code-bg: #2c313a;
+  --link: #c678dd;
+  --accent: var(--link);
+  --link-border: #c678dd;
+  --danger: #e06c75;
+  --danger-border: #e06c75;
+  --btn-bg: #2c313a;
+  --btn-fg: #abb2bf;
+  --btn-border: #3e4451;
+  --tooltip-bg: #abb2bf;
+  --tooltip-fg: #282c34;
+  --menu-bg: #2c313a;
+  --menu-hover-bg: #3e4451;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #2c313c;
+  --active-bg: #3e4451;
+  --focus-ring: #c678dd;
+  --select: #61afef;
+  --select-fg: #282c34;
+  --exclude: #e06c75;
+  --exclude-fg: #282c34;
+  --ok: #98c379;
+}

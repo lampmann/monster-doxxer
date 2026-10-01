@@ -1,0 +1,34 @@
+/* Everforest Dark
+   Palette: https://github.com/sainnhe/everforest */
+:root {
+  --color-scheme: dark;
+  --bg: #2d353b;
+  --fg: #d3c6aa;
+  --muted-fg: #9da9a0;
+  --border: #56635f;
+  --border-soft: #475258;
+  --border-hair: #343f44;
+  --code-bg: #343f44;
+  --link: #a7c080;
+  --accent: var(--link);
+  --link-border: #a7c080;
+  --danger: #e67e80;
+  --danger-border: #e67e80;
+  --btn-bg: #343f44;
+  --btn-fg: #d3c6aa;
+  --btn-border: #475258;
+  --tooltip-bg: #d3c6aa;
+  --tooltip-fg: #2d353b;
+  --menu-bg: #343f44;
+  --menu-hover-bg: #475258;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #3d484d;
+  --active-bg: #475258;
+  --focus-ring: #a7c080;
+  --select: #7fbbb3;
+  --select-fg: #2d353b;
+  --exclude: #e67e80;
+  --exclude-fg: #2d353b;
+  --ok: #a7c080;
+}

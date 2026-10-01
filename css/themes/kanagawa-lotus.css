@@ -1,0 +1,34 @@
+/* Kanagawa Lotus
+   Palette: https://github.com/rebelot/kanagawa.nvim */
+:root {
+  --color-scheme: light;
+  --bg: #f2ecbc;
+  --fg: #545464;
+  --muted-fg: #716e61;
+  --border: #8a8980;
+  --border-soft: #dcd5ac;
+  --border-hair: #e5ddb0;
+  --code-bg: #e5ddb0;
+  --link: #624c83;
+  --accent: var(--link);
+  --link-border: #624c83;
+  --danger: #c84053;
+  --danger-border: #c84053;
+  --btn-bg: #e5ddb0;
+  --btn-fg: #545464;
+  --btn-border: #8a8980;
+  --tooltip-bg: #545464;
+  --tooltip-fg: #f2ecbc;
+  --menu-bg: #e5ddb0;
+  --menu-hover-bg: #e4d794;
+  --menu-shadow: rgba(0,0,0,.2);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.12);
+  --hover-bg: #e7dba0;
+  --active-bg: #e4d794;
+  --focus-ring: #624c83;
+  --select: #4d699b;
+  --select-fg: #f2ecbc;
+  --exclude: #c84053;
+  --exclude-fg: #f2ecbc;
+  --ok: #6f894e;
+}
