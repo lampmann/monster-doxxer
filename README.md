@@ -4,7 +4,7 @@ Have you ever had a Redditor GM who despises metagaming, and actively obfuscates
 
 **PLEASE DM YOUR FEEDBACK AND FEATURE IDEAS TO @lampmann ON DISCORD!!!**
 
-The **2024 content** checkbox in Sources includes the revised core books and later content. It is off by default; your choice is saved across reloads. Source exclusions still apply. The **Theme** picker includes all 31 pmcrwf theme choices and remembers your selection.
+The **2024 content** checkbox in the top toolbar includes the revised core books and later content. It is off by default; your choice is saved across reloads. Source exclusions still apply. The **Theme** picker includes all 31 pmcrwf theme choices and remembers your selection.
 
 ## How to use
 
@@ -51,3 +51,5 @@ If none of the launcher's auto-detected servers are available, any static file s
 **monster-doxxer:** just `git pull` lul
 
 **5e.tools data:** re-copy the new `bestiary/` folder over your existing `data/bestiary/`.
+
+Your chosen or dropped data folder is saved locally in this browser and restored next session. **Choose data folder** refreshes or replaces that copy; **Forget data folder** removes it. In Chromium, a connected folder can also be reread directly when permission is available. Clearing browser site data removes the saved copy.

@@ -108,6 +108,7 @@
     hideNamed: false,
     include2024: false, sourceDates: {},
     ranked: [], selected: null,
+    dataSaved: false, dataSavedAt: null,
     dataFiles: null,          // Map<path, File> once a folder is dropped/picked; see loadFromFiles()
   };
 
@@ -215,18 +216,23 @@
       `<div id="data-drop" class="dropzone" tabindex="0">` +
       `Drop the folder here, or <button type="button" id="data-pick">choose a folder</button>` +
       `<input type="file" id="data-picker" webkitdirectory multiple hidden>` +
-      (fs ? `<div class="hint">Chose it this way? It'll be remembered for next time.</div>` : "") +
+      `<div class="hint">Saved in this browser for next time. Nothing is uploaded.</div>` +
       `</div>` +
       `<div class="hint" id="data-drop-err"></div>`;
 
     const zone = $("data-drop"), picker = $("data-picker"), err = $("data-drop-err");
-    const accept = async pairs => {
+    const accept = async (pairs, handle = null) => {
       const files = window.buildFileIndex(pairs);
       if (!files.get("bestiary/index.json")) {
         err.textContent = "That doesn't look like 5e.tools' data folder " +
           "— expected to find bestiary/index.json somewhere inside it.";
         return false;
       }
+      err.textContent = "Saving data folder…";
+      S.dataSaved = await window.storeFileIndex(files);
+      S.dataSavedAt = S.dataSaved ? Date.now() : null;
+      if (handle) await window.storeHandle(handle);
+      else await window.forgetHandle();
       S.dataFiles = files;
       await load();
       return true;
@@ -242,7 +248,7 @@
           err.textContent = "That folder is no longer readable. Choose it again below.";
           return;
         }
-        if (!await accept(await window.pairsFromDirectoryHandle(remembered))) {
+        if (!await accept(await window.pairsFromDirectoryHandle(remembered), remembered)) {
           // Its contents changed out from under the handle; stop offering it.
           await window.forgetHandle();
         }
@@ -251,14 +257,13 @@
 
     /* Prefer the File System Access picker where it exists, since only that one yields a
        handle worth remembering. Everywhere else this is the plain directory input, which
-       reads the files once and forgets them. */
+       reads the files once and saves a browser-local copy. */
     zone.addEventListener("click", async () => {
       if (!fs) { picker.click(); return; }
       let handle;
       try { handle = await window.pickDirectory(); }
       catch (abort) { return; }               // the user closed the dialog; not an error
-      if (!await accept(await window.pairsFromDirectoryHandle(handle))) return;
-      await window.storeHandle(handle);
+      await accept(await window.pairsFromDirectoryHandle(handle), handle);
     });
     zone.addEventListener("keydown", e => {
       // Only for the zone itself — the button inside it already activates on Enter/Space
@@ -280,18 +285,33 @@
      Returns the handle when it could NOT be used silently, so showDataPicker can offer it
      as a one-click reload; null when there is nothing to offer or it already loaded. */
   async function loadRemembered() {
+    const snapshot = await window.loadFileIndex();
+    if (snapshot) {
+      S.dataFiles = snapshot.files;
+      S.dataSaved = true; S.dataSavedAt = snapshot.savedAt;
+    }
     if (!window.supportsFsAccess()) return null;
     const handle = await window.loadHandle();
     if (!handle) return null;
-    if (await window.handlePermission(handle, false) !== "granted") return handle;
     try {
+      if (await window.handlePermission(handle, false) !== "granted") return snapshot ? null : handle;
       const files = window.buildFileIndex(await window.pairsFromDirectoryHandle(handle));
       if (!files.get("bestiary/index.json")) { await window.forgetHandle(); return null; }
       S.dataFiles = files;
+      S.dataSaved = await window.storeFileIndex(files);
+      S.dataSavedAt = S.dataSaved ? Date.now() : null;
       return null;
-    } catch (e) {
-      return handle;      // moved, renamed, unplugged — offer it, don't assert it works
-    }
+    } catch (e) { return snapshot ? null : handle; }
+  }
+
+  function renderDataStatus() {
+    const el = $("data-status");
+    if (!el) return;
+    el.textContent = S.dataFiles
+      ? S.dataSaved ? "Data saved in this browser" : "Data loaded for this session only; browser storage unavailable"
+      : "";
+    el.title = S.dataSavedAt ? "Saved " + new Date(S.dataSavedAt).toLocaleString() + ". Choose the folder again to update the copy." : "";
+    $("data-forget").hidden = !S.dataFiles;
   }
 
   async function load() {
@@ -320,6 +340,7 @@
       }
     }
     $("fatal").hidden = true;
+    renderDataStatus();
 
     const files = Object.values(index);
     const lists = [];
@@ -2256,6 +2277,12 @@
      own listener the only thing that can ever act on a drop, wherever it lands. */
   document.addEventListener("dragover", e => e.preventDefault());
   document.addEventListener("drop", e => e.preventDefault());
+
+  $("data-change").addEventListener("click", () => showDataPicker(null));
+  $("data-forget").addEventListener("click", async () => {
+    await window.forgetHandle(); await window.forgetFileIndex();
+    location.reload();
+  });
 
   load().catch(err => fatal("Failed to load: " + esc(err.message)));
 })();

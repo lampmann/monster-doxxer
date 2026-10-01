@@ -101,8 +101,8 @@
   /* ============================================================
      POINTING AT THE FOLDER ONCE, via the File System Access API.
 
-     Everything above reads a one-off copy of the files: close the tab and the
-     next visit starts from nothing. A FileSystemDirectoryHandle is different —
+     The drop and ordinary picker read a copy of the files, saved below for later
+     sessions. A FileSystemDirectoryHandle is different —
      it is structured-cloneable, so it can be kept in IndexedDB and the same
      folder re-read on a later visit without the user navigating to it again.
 
@@ -110,8 +110,7 @@
      drop zone rather than a replacement for it:
 
        - showDirectoryPicker() is Chromium-only. Firefox and Safari have no
-         equivalent, so those browsers keep the drop zone and lose nothing they
-         had before. `supportsFsAccess()` is the one check the UI needs.
+         equivalent, so those browsers restore the saved copy instead. `supportsFsAccess()` is the one check the UI needs.
        - The handle survives, but the PERMISSION usually does not: Chrome
          re-prompts on a new browser session, and requestPermission() has to be
          called from a user gesture. So a return visit is one click, not zero —
@@ -155,15 +154,19 @@
      a string can represent. Every call resolves rather than rejects: a browser with
      IndexedDB disabled or in a private window should quietly fall back to the drop
      zone, not throw on load. */
-  const DB_NAME = "doxx", STORE = "handles", KEY = "dataDir";
+  const DB_NAME = "doxx", STORE = "handles", KEY = "dataDir", FILE_STORE = "snapshots";
 
   function idb() {
     return new Promise(resolve => {
       if (!globalThis.indexedDB) { resolve(null); return; }
       let req;
-      try { req = indexedDB.open(DB_NAME, 1); } catch (e) { resolve(null); return; }
-      req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
-      req.onsuccess = () => resolve(req.result);
+      try { req = indexedDB.open(DB_NAME, 2); } catch (e) { resolve(null); return; }
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
+        if (!req.result.objectStoreNames.contains(FILE_STORE)) req.result.createObjectStore(FILE_STORE);
+      };
+      req.onsuccess = () => { req.result.onversionchange = () => req.result.close(); resolve(req.result); };
+      req.onblocked = () => resolve(null);
       req.onerror = () => resolve(null);
     });
   }
@@ -179,9 +182,9 @@
       try {
         const tx = db.transaction(STORE, "readwrite");
         tx.objectStore(STORE).put(handle, KEY);
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = () => resolve(false);
-      } catch (e) { resolve(false); }
+        tx.oncomplete = () => { db.close(); resolve(true); };
+        tx.onerror = tx.onabort = () => { db.close(); resolve(false); };
+      } catch (e) { db.close(); resolve(false); }
     });
   }
 
@@ -191,9 +194,9 @@
     return new Promise(resolve => {
       try {
         const req = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => resolve(null);
-      } catch (e) { resolve(null); }
+        req.onsuccess = () => { db.close(); resolve(req.result || null); };
+        req.onerror = () => { db.close(); resolve(null); };
+      } catch (e) { db.close(); resolve(null); }
     });
   }
 
@@ -204,12 +207,46 @@
       try {
         const tx = db.transaction(STORE, "readwrite");
         tx.objectStore(STORE).delete(KEY);
-        tx.oncomplete = tx.onerror = () => resolve();
-      } catch (e) { resolve(); }
+        tx.oncomplete = tx.onerror = tx.onabort = () => { db.close(); resolve(); };
+      } catch (e) { db.close(); resolve(); }
     });
   }
 
+  /* A snapshot is an atomic replacement, so absent files never survive a new import.
+     Only the JSON paths the app reads are copied, not unrelated books or artwork. */
+  const wantedFile = path => /\.json$/i.test(path) &&
+    (!path.includes("/") || ["bestiary/", "spells/", "fluff-bestiary/"].some(p => path.startsWith(p)));
+
+  async function snapshotOperation(mode, action) {
+    const db = await idb();
+    if (!db) return null;
+    return new Promise(resolve => {
+      let result;
+      try {
+        const tx = db.transaction(FILE_STORE, mode);
+        const request = action(tx.objectStore(FILE_STORE));
+        request.onsuccess = () => { result = request.result; };
+        tx.oncomplete = () => { db.close(); resolve({ value: result }); };
+        tx.onerror = tx.onabort = () => { db.close(); resolve(null); };
+      } catch (e) { db.close(); resolve(null); }
+    });
+  }
+  async function storeFileIndex(files) {
+    const copy = new Map([...files].filter(([path]) => wantedFile(path)));
+    const saved = await snapshotOperation("readwrite", store => store.put({ files: copy, savedAt: Date.now() }, "current"));
+    if (saved && globalThis.navigator && navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => {});
+    }
+    return !!saved;
+  }
+  async function loadFileIndex() {
+    const saved = await snapshotOperation("readonly", store => store.get("current"));
+    const snapshot = saved && saved.value;
+    return snapshot && snapshot.files instanceof Map && snapshot.files.has("bestiary/index.json") ? snapshot : null;
+  }
+  const forgetFileIndex = () => snapshotOperation("readwrite", store => store.delete("current"));
+
   return { normalizeRelPath, buildFileIndex, readJsonFile, pairsFromFileList, pairsFromDataTransfer,
            supportsFsAccess, pickDirectory, pairsFromDirectoryHandle, handlePermission,
-           storeHandle, loadHandle, forgetHandle };
+           storeHandle, loadHandle, forgetHandle, wantedFile, storeFileIndex, loadFileIndex, forgetFileIndex };
 });

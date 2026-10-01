@@ -120,6 +120,13 @@ async function main() {
       await L.handlePermission({}, true), "denied");
   }
 
+  section("saved folder scope");
+  assert("keeps bestiary and spell JSON", L.wantedFile("bestiary/test.json") && L.wantedFile("spells/index.json"));
+  assert("keeps optional catalogue and fluff JSON", L.wantedFile("books.json") && L.wantedFile("fluff-bestiary/test.json"));
+  assert("does not store artwork or unrelated book contents", !L.wantedFile("bestiary/image.png") && !L.wantedFile("book/test.json"));
+  assertEqual("disabled storage gracefully reports a failed save", await L.storeFileIndex(new Map()), false);
+  assertEqual("disabled storage does not invent a saved folder", await L.loadFileIndex(), null);
+
   report("localdata");
 }
 
