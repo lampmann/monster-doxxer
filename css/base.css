@@ -379,3 +379,9 @@ input.roll { width: 7rem; }
    look like one rather than reading as ordinary help text. */
 #ac-range-read, #dc-range-read, #hp-range-read { flex-basis: 100%; }
 .hint.bad { color: var(--danger); }
+
+.dropzone { border: 2px dashed var(--btn-border); border-radius: var(--radius); padding: .8rem;
+            text-align: center; cursor: pointer; }
+.dropzone.over { border-color: var(--link); background: var(--btn-bg); }
+.dropzone #data-pick { margin-left: .3rem; }
+#data-drop-err:not(:empty) { color: var(--danger); margin-top: .4rem; }

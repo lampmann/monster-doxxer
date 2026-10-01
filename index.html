@@ -21,6 +21,10 @@
 <div class="toolbar">
   <strong>Monster Doxxer</strong>
   <label class="theme-picker">Theme <select id="theme-select" aria-label="Theme"><option value="">Default</option></select></label>
+  <label class="theme-picker"><input type="checkbox" id="in-2024"> 2024 content</label>
+  <button type="button" id="data-change">Choose data folder</button>
+  <button type="button" id="data-forget" hidden>Forget data folder</button>
+  <span class="hint" id="data-status"></span>
   <span class="hint" id="corpus-status">loading…</span>
   <span style="float:right">
     <button id="btn-clear" title="forget every observation in this session">Clear observations</button>
@@ -178,7 +182,6 @@
 
     <div class="module">
       <h2>Sources</h2>
-      <label class="hint block"><input type="checkbox" id="in-2024"> 2024 content</label>
       <span class="hint block">Click once to <b style="color:var(--link)">include</b>, again to
         <b style="color:var(--danger)">exclude</b>, again to clear. Include when you know which
         books your DM owns; exclude to keep an adventure you're still playing from spoiling itself.</span>
@@ -222,6 +225,7 @@
 <script src="src/score.js"></script>
 <script src="src/discriminate.js"></script>
 <script src="src/sources.js"></script>
+<script src="src/localdata.js"></script>
 <script src="src/app.js"></script>
 </body>
 </html>

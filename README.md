@@ -6,7 +6,7 @@ bounced off it, how it moved, and that it did *something* the DM described but w
 Monster Doxxer takes those observations and ranks the D&D 5e bestiary by how well each
 monster explains them.
 
-The **2024 content** checkbox in Sources includes the revised core books and later content. It is off by default; your choice is saved across reloads. Source exclusions still apply. The **Theme** picker includes all 31 pmcrwf theme choices and remembers your selection.
+The **2024 content** checkbox in the top toolbar includes the revised core books and later content. It is off by default; your choice is saved across reloads. Source exclusions still apply. The **Theme** picker includes all 31 pmcrwf theme choices and remembers your selection.
 
 **Status: early, but usable, and the numbers are measured.** The normalisation pipeline, the
 evidence scorer, the symptom ontology and the browser UI all exist and are tested, and an
@@ -276,3 +276,5 @@ The normalisation pipeline in `src/normalize.js` is lifted from pmcrwf's `src/mo
 where it had already been beaten into shape against the real bestiary. It encodes a lot of quiet
 knowledge about the awkward shapes 5e.tools' JSON takes; re-deriving it would have meant
 rediscovering the same bugs.
+
+Your chosen or dropped data folder is saved locally in this browser and restored next session. **Choose data folder** refreshes or replaces that copy; **Forget data folder** removes it. In Chromium, a connected folder can also be reread directly when permission is available. Clearing browser site data removes the saved copy.
