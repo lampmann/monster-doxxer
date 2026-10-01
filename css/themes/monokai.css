@@ -1,0 +1,34 @@
+/* Monokai
+   Palette: https://monokai.pro/ */
+:root {
+  --color-scheme: dark;
+  --bg: #272822;
+  --fg: #f8f8f2;
+  --muted-fg: #a59f85;
+  --border: #75715e;
+  --border-soft: #49483e;
+  --border-hair: #3e3d32;
+  --code-bg: #3e3d32;
+  --link: #a6e22e;
+  --accent: var(--link);
+  --link-border: #a6e22e;
+  --danger: #f92672;
+  --danger-border: #f92672;
+  --btn-bg: #3e3d32;
+  --btn-fg: #f8f8f2;
+  --btn-border: #49483e;
+  --tooltip-bg: #f8f8f2;
+  --tooltip-fg: #272822;
+  --menu-bg: #3e3d32;
+  --menu-hover-bg: #49483e;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #34352d;
+  --active-bg: #49483e;
+  --focus-ring: #a6e22e;
+  --select: #66d9ef;
+  --select-fg: #272822;
+  --exclude: #f92672;
+  --exclude-fg: #272822;
+  --ok: #a6e22e;
+}

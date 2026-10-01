@@ -1,0 +1,34 @@
+/* Rosé Pine Dawn
+   Palette: https://rosepinetheme.com/palette/ */
+:root {
+  --color-scheme: light;
+  --bg: #faf4ed;
+  --fg: #575279;
+  --muted-fg: #797593;
+  --border: #cecacd;
+  --border-soft: #dfdad9;
+  --border-hair: #f2e9e1;
+  --code-bg: #fffaf3;
+  --link: #907aa9;
+  --accent: var(--link);
+  --link-border: #907aa9;
+  --danger: #b4637a;
+  --danger-border: #b4637a;
+  --btn-bg: #fffaf3;
+  --btn-fg: #575279;
+  --btn-border: #cecacd;
+  --tooltip-bg: #575279;
+  --tooltip-fg: #faf4ed;
+  --menu-bg: #fffaf3;
+  --menu-hover-bg: #f2e9e1;
+  --menu-shadow: rgba(0,0,0,.2);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.12);
+  --hover-bg: #f4ede8;
+  --active-bg: #f2e9e1;
+  --focus-ring: #907aa9;
+  --select: #286983;
+  --select-fg: #faf4ed;
+  --exclude: #b4637a;
+  --exclude-fg: #faf4ed;
+  --ok: #56949f;
+}

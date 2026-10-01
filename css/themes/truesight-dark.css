@@ -1,0 +1,40 @@
+/* Truesight Dark */
+:root {
+  --color-scheme: dark;
+  --bg: #16161A;
+  --panel-bg: #1D1D22;
+  --sidebar-bg: #131316;
+  --fg: #E8E6DF;
+  --muted-fg: #A7A294;
+  --border: #34322C;
+  --border-soft: #45423B;
+  --border-hair: #28272A;
+  --code-bg: #28272A;
+  --accent: #1AFFC6;
+  --link: #6FB3E0;
+  --visited-link: #B39BE0;
+  --link-border: #1AFFC6;
+  --danger: #F07F7B;
+  --danger-border: #F07F7B;
+  --select: #1AFFC6;
+  --select-fg: #16161A;
+  --exclude: #F07F7B;
+  --exclude-fg: #16161A;
+  --ok: #73D69D;
+  --todo: #E7B45B;
+  --placeholder: #C0A9E8;
+  --diff-added: #73D69D;
+  --diff-removed: #F07F7B;
+  --btn-bg: #28272A;
+  --btn-fg: #E8E6DF;
+  --btn-border: #45423B;
+  --tooltip-bg: #E8E6DF;
+  --tooltip-fg: #16161A;
+  --menu-bg: #1D1D22;
+  --menu-hover-bg: #28272A;
+  --menu-shadow: rgba(0, 0, 0, .55);
+  --module-shadow: 0 2px 12px rgba(0, 0, 0, .3);
+  --hover-bg: #28272A;
+  --active-bg: #34322C;
+  --focus-ring: #1AFFC6;
+}

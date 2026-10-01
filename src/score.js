@@ -1348,6 +1348,14 @@
     };
   }
 
+  /* Match pmcrwf's edition boundary, including newer sources known only by date. */
+  function is2024Monster(monster, dates) {
+    const source = String(monster.source || "").toUpperCase();
+    return monster.edition === "one" ||
+      ["XPHB", "XDMG", "XMM", "FRHOF", "FRAIF", "EFA"].includes(source) ||
+      String((dates || {})[source.toLowerCase()] || "") >= "2024-09-17";
+  }
+
   function rank(monsters, obs, rarity, opts) {
     const o = opts || {};
     const allowed = sourceFilter(o.sources);
@@ -1361,6 +1369,7 @@
        a candidate the evidence cannot distinguish. Like the source filter, it is a fact
        about the TABLE that the tool cannot know and the user can. */
     let pool = allowed ? monsters.filter(m => allowed(m.source)) : monsters;
+    if (o.include2024 === false) pool = pool.filter(m => !is2024Monster(m, o.sourceDates));
     if (o.hideNamed) pool = pool.filter(m => !m.isNamed);
     let out = pool.map(m => scoreMonster(m, obs, rarity, o));
 
@@ -1449,7 +1458,7 @@
   }
 
   return { TUNING, NUMERIC, DMG_STATES, DMG_COST, FACETS, FACET_KEYS, featureKey,
-           buildRarity, buildNumerics, buildLegacy, scoreNumerics, gaussian, sourceFilter,
+           buildRarity, buildNumerics, buildLegacy, scoreNumerics, gaussian, sourceFilter, is2024Monster,
            candidateFeatureSet, scoreMonster, rank, hasEvidence, confidence,
            COMBAT, scoreCombat, parseDamageField, VOLATILE_FACETS };
 });

@@ -1,0 +1,42 @@
+/* Grimoire Light - an original pmcrwf theme.
+   A spellbook page: warm vellum cards on a darker desk, sepia ink, oxblood for links and focus, and
+   book serif with small-capital headings. Selected / excluded / valid keep their blue / red / green,
+   muted to sit on vellum. */
+:root {
+  --color-scheme: light;
+  --font-body: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --radius: 3px;
+  --bg: #fbf6ea;
+  --fg: #2b2118;
+  --muted-fg: #6e5d4b;
+  --border: #8c7355;
+  --border-soft: #b9a383;
+  --border-hair: #e6dac2;
+  --code-bg: #f1e7d3;
+  --link: #7a2e22;
+  --accent: var(--link);
+  --link-border: #7a2e22;
+  --danger: #a3261b;
+  --danger-border: #a3261b;
+  --btn-bg: #fdf9f0;
+  --btn-fg: #2b2118;
+  --btn-border: #b9a383;
+  --tooltip-bg: #2b2118;
+  --tooltip-fg: #fbf6ea;
+  --menu-bg: #fdf9f0;
+  --menu-hover-bg: #f1e5cc;
+  --menu-shadow: rgba(60, 40, 20, .25);
+  --module-shadow: 0 1px 2px rgba(80, 55, 25, .12), 0 4px 14px rgba(80, 55, 25, .14);
+  --hover-bg: #f3e8d2;
+  --active-bg: #e8d9bb;
+  --focus-ring: #7a2e22;
+  --select: #2f5d8a;
+  --select-fg: #fdf9f0;
+  --exclude: #a3261b;
+  --exclude-fg: #fdf9f0;
+  --ok: #4a7a2c;
+}
+body { background: #eee3cc; }
+.module { background: var(--bg); box-shadow: var(--module-shadow), inset 0 0 0 3px var(--bg), inset 0 0 0 4px var(--border-hair); }
+h2, legend, .modal-title { font-variant: small-caps; letter-spacing: .04em; }
+.toolbar strong { font-variant: small-caps; letter-spacing: .08em; font-size: 1.1rem; color: var(--link); }

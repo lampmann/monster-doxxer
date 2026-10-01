@@ -1,0 +1,34 @@
+/* Tomorrow Night
+   Palette: https://github.com/chriskempson/tomorrow-theme */
+:root {
+  --color-scheme: dark;
+  --bg: #1d1f21;
+  --fg: #c5c8c6;
+  --muted-fg: #969896;
+  --border: #4d5057;
+  --border-soft: #373b41;
+  --border-hair: #282a2e;
+  --code-bg: #282a2e;
+  --link: #b294bb;
+  --accent: var(--link);
+  --link-border: #b294bb;
+  --danger: #cc6666;
+  --danger-border: #cc6666;
+  --btn-bg: #282a2e;
+  --btn-fg: #c5c8c6;
+  --btn-border: #373b41;
+  --tooltip-bg: #c5c8c6;
+  --tooltip-fg: #1d1f21;
+  --menu-bg: #282a2e;
+  --menu-hover-bg: #373b41;
+  --menu-shadow: rgba(0,0,0,.5);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.5);
+  --hover-bg: #26282c;
+  --active-bg: #373b41;
+  --focus-ring: #b294bb;
+  --select: #81a2be;
+  --select-fg: #1d1f21;
+  --exclude: #cc6666;
+  --exclude-fg: #1d1f21;
+  --ok: #b5bd68;
+}

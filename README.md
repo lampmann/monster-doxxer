@@ -4,6 +4,8 @@ Have you ever had a Redditor GM who despises metagaming, and actively obfuscates
 
 **PLEASE DM YOUR FEEDBACK AND FEATURE IDEAS TO @lampmann ON DISCORD!!!**
 
+The **2024 content** checkbox in Sources includes the revised core books and later content. It is off by default; your choice is saved across reloads. Source exclusions still apply. The **Theme** picker includes all 31 pmcrwf theme choices and remembers your selection.
+
 ## How to use
 
 **Windows**

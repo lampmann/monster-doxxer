@@ -4,12 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>monster doxxer</title>
+<link rel="icon"type="image/png" href="icons/thumbnail.png">
+<link rel="apple-touch-icon" href="icons/thumbnail.png">
+<meta property="og:title" content="monster-doxxer">
+<meta property="og:description" content="Identify D&amp;D monsters from their appearance, attacks, and traits.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://lampmann.github.io/monster-doxxer/icons/thumbnail.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://lampmann.github.io/monster-doxxer/icons/thumbnail.png">
 <link rel="stylesheet" href="css/base.css">
+<link id="theme-css" rel="stylesheet">
+<script src="src/themes.js" defer></script>
 </head>
 <body>
 
 <div class="toolbar">
   <strong>monster-doxxer</strong>
+  <label class="theme-picker">Theme <select id="theme-select" aria-label="Theme"><option value="">Default</option></select></label>
   <span class="hint" id="corpus-status">loading…</span>
   <span style="float:right">
     <button id="btn-clear" title="clear all observations in this tab">Clear observations</button>
@@ -137,6 +148,7 @@
 
     <div class="module">
       <h2>Sources</h2>
+      <label class="hint block"><input type="checkbox" id="in-2024"> 2024 content</label>
       <span class="hint block">Click once to <b style="color:var(--link)">include</b>, again to
         <b style="color:var(--danger)">exclude</b>, again to clear.</span>
       <label class="hint block" style="margin-bottom:.4rem">

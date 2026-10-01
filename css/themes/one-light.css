@@ -1,0 +1,34 @@
+/* One Light
+   Palette: https://github.com/atom/atom/tree/master/packages/one-light-syntax */
+:root {
+  --color-scheme: light;
+  --bg: #fafafa;
+  --fg: #383a42;
+  --muted-fg: #696c77;
+  --border: #a0a1a7;
+  --border-soft: #d4d4d4;
+  --border-hair: #e5e5e6;
+  --code-bg: #f0f0f1;
+  --link: #a626a4;
+  --accent: var(--link);
+  --link-border: #a626a4;
+  --danger: #e45649;
+  --danger-border: #e45649;
+  --btn-bg: #f0f0f1;
+  --btn-fg: #383a42;
+  --btn-border: #a0a1a7;
+  --tooltip-bg: #383a42;
+  --tooltip-fg: #fafafa;
+  --menu-bg: #f0f0f1;
+  --menu-hover-bg: #e5e5e6;
+  --menu-shadow: rgba(0,0,0,.2);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.12);
+  --hover-bg: #eaeaeb;
+  --active-bg: #e5e5e6;
+  --focus-ring: #a626a4;
+  --select: #4078f2;
+  --select-fg: #fafafa;
+  --exclude: #e45649;
+  --exclude-fg: #fafafa;
+  --ok: #50a14f;
+}

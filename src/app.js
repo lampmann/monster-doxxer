@@ -106,6 +106,7 @@
        are in — so shared across tabs like the book filter, and off by default because a
        named NPC really can be what you fought. */
     hideNamed: false,
+    include2024: false, sourceDates: {},
     ranked: [], selected: null,
     dataFiles: null,          // Map<path, File> once a folder is dropped/picked; see loadFromFiles()
   };
@@ -386,7 +387,8 @@
     const catalogue = window.buildCatalogue(books, adventures);
     S.srcRows = window.sourceRows(S.monsters, catalogue);
     // Release order, for the tie-break. Optional data, so this degrades rather than fails.
-    S.legacy = window.buildLegacy(S.monsters, window.sourceDates(catalogue));
+    S.sourceDates = window.sourceDates(catalogue);
+    S.legacy = window.buildLegacy(S.monsters, S.sourceDates);
 
     /* F10's index. Fluff is optional too: without it the description documents still carry
        name, size, type and trait names, which is thin but not nothing. */
@@ -454,7 +456,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         tabs: S.tabs, activeId: S.activeId, sources: S.sources, party: S.party,
-        hideNamed: S.hideNamed,
+        hideNamed: S.hideNamed, include2024: S.include2024,
       }));
     } catch (e) { /* private browsing, quota — not worth interrupting a fight over */ }
   }
@@ -476,9 +478,11 @@
     if (d) {
       S.sources = d.sources || {};
       S.hideNamed = !!d.hideNamed;
+      S.include2024 = !!d.include2024;
       if (d.party) S.party = Object.assign({ level: null, size: 4 }, d.party);
     }
     $("in-hide-named").checked = S.hideNamed;
+    $("in-2024").checked = S.include2024;
     $("in-level").value = S.party.level == null ? "" : S.party.level;
     $("in-party").value = S.party.size == null ? "" : S.party.size;
     loadActive();
@@ -1528,13 +1532,14 @@
       appearanceScores, nameScores, crPlausibility: crScores,
       // F3's fourth tier: which symptoms a DM adds and removes freely, from the ontology.
       volatileSymptoms: S.ontology && S.ontology.volatileIds,
-      hideNamed: S.hideNamed,
+      hideNamed: S.hideNamed, include2024: S.include2024,
+      sourceDates: S.sourceDates,
       collapseByName: true, limit: WINDOW, keepMonster: true,
     });
     S.ranked = ranked;
 
     if (!ranked.length) {
-      box.innerHTML = `<span class="error">Every book is excluded, so there is nothing left to rank.</span>`;
+      box.innerHTML = `<span class="error">No monsters match the current source and content settings.</span>`;
       renderTabs();
       return;
     }
@@ -2033,6 +2038,12 @@
     if (dmg) {
       S.obs.damage[dmg.dataset.dmg] = dmg.value;
       persist(); renderDamage(); renderResults(); renderSuggestions();
+      return;
+    }
+
+    if (e.target.id === "in-2024") {
+      S.include2024 = e.target.checked;
+      persist(); renderResults(); renderSuggestions();
       return;
     }
 

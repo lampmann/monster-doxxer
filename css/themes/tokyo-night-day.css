@@ -1,0 +1,34 @@
+/* Tokyo Night Day
+   Palette: https://github.com/folke/tokyonight.nvim */
+:root {
+  --color-scheme: light;
+  --bg: #e1e2e7;
+  --fg: #3760bf;
+  --muted-fg: #6172b0;
+  --border: #a8aecb;
+  --border-soft: #c4c8da;
+  --border-hair: #d0d5e3;
+  --code-bg: #d5d6db;
+  --link: #9854f1;
+  --accent: var(--link);
+  --link-border: #9854f1;
+  --danger: #f52a65;
+  --danger-border: #f52a65;
+  --btn-bg: #d5d6db;
+  --btn-fg: #3760bf;
+  --btn-border: #a8aecb;
+  --tooltip-bg: #3760bf;
+  --tooltip-fg: #e1e2e7;
+  --menu-bg: #d5d6db;
+  --menu-hover-bg: #c4c8da;
+  --menu-shadow: rgba(0,0,0,.2);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.12);
+  --hover-bg: #d0d5e3;
+  --active-bg: #c4c8da;
+  --focus-ring: #9854f1;
+  --select: #2e7de9;
+  --select-fg: #e1e2e7;
+  --exclude: #f52a65;
+  --exclude-fg: #e1e2e7;
+  --ok: #587539;
+}

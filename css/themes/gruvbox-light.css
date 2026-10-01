@@ -1,0 +1,34 @@
+/* Gruvbox Light
+   Palette: https://github.com/morhetz/gruvbox */
+:root {
+  --color-scheme: light;
+  --bg: #fbf1c7;
+  --fg: #3c3836;
+  --muted-fg: #7c6f64;
+  --border: #bdae93;
+  --border-soft: #d5c4a1;
+  --border-hair: #ebdbb2;
+  --code-bg: #f2e5bc;
+  --link: #af3a03;
+  --accent: var(--link);
+  --link-border: #af3a03;
+  --danger: #9d0006;
+  --danger-border: #9d0006;
+  --btn-bg: #f2e5bc;
+  --btn-fg: #3c3836;
+  --btn-border: #bdae93;
+  --tooltip-bg: #3c3836;
+  --tooltip-fg: #fbf1c7;
+  --menu-bg: #f2e5bc;
+  --menu-hover-bg: #d5c4a1;
+  --menu-shadow: rgba(0,0,0,.2);
+  --module-shadow: 0 3px 14px rgba(0,0,0,.12);
+  --hover-bg: #ebdbb2;
+  --active-bg: #d5c4a1;
+  --focus-ring: #af3a03;
+  --select: #076678;
+  --select-fg: #fbf1c7;
+  --exclude: #9d0006;
+  --exclude-fg: #fbf1c7;
+  --ok: #79740e;
+}
